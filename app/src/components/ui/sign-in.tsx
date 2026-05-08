@@ -34,6 +34,7 @@ export interface Testimonial {
 }
 
 interface SignInPageProps {
+  topLeftContent?: React.ReactNode;
   title?: React.ReactNode;
   description?: React.ReactNode;
   heroImageSrc?: string;
@@ -101,6 +102,7 @@ const TestimonialCard = ({ testimonial }: { testimonial: Testimonial }) => (
 );
 
 export const SignInPage: React.FC<SignInPageProps> = ({
+  topLeftContent,
   title = <span className="font-light tracking-tighter text-white">Welcome</span>,
   description = "Access your account and continue your journey with us",
   heroImageSrc,
@@ -119,10 +121,11 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <div className="flex min-h-[calc(100dvh-3.5rem)] w-full flex-col font-sans md:flex-row">
+    <div className="flex min-h-screen w-full flex-col font-sans md:flex-row">
       <section className="flex flex-1 items-center justify-center p-6 sm:p-8">
         <div className="w-full max-w-md">
           <div className="flex flex-col gap-6">
+            {topLeftContent}
             <h1 className="text-4xl font-semibold leading-tight text-white md:text-5xl">
               {title}
             </h1>

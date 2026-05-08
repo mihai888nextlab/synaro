@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Cloud, Lock, Server, Zap } from "lucide-react";
+import type { GetServerSideProps } from "next";
 
 import { Features } from "@/components/ui/features-8";
 import { MinimalFooter } from "@/components/ui/minimal-footer";
@@ -8,6 +9,7 @@ import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { HeroGeometric } from "@/components/ui/shape-landing-hero";
 import { ContainerScroll } from "@/components/ui/container-scroll-animation";
 import { SiteHeader } from "@/components/ui/site-header";
+import { redirectIfAuthed } from "@/lib/auth-redirect";
 
 function HeroScrollDemo() {
   return (
@@ -26,7 +28,7 @@ function HeroScrollDemo() {
         }
       >
         <Image
-          src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1600&q=80"
+          src="/hero-section-photo.png"
           alt="Cloud infrastructure dashboard"
           height={720}
           width={1400}
@@ -184,3 +186,6 @@ export default function Home() {
     </main>
   );
 }
+
+export const getServerSideProps: GetServerSideProps = async (ctx) =>
+  redirectIfAuthed(ctx, "/dashboard");

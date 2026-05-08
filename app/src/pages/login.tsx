@@ -1,9 +1,12 @@
 import type { FormEvent } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { signIn } from "next-auth/react";
+import type { GetServerSideProps } from "next";
 
 import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { SignInPage, type Testimonial } from "@/components/ui/sign-in";
+import { redirectIfAuthed } from "@/lib/auth-redirect";
 
 const sampleTestimonials: Testimonial[] = [
   {
@@ -29,6 +32,18 @@ const sampleTestimonials: Testimonial[] = [
 export default function LoginPage() {
   const handleSignIn = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const email = String(formData.get("email") ?? "");
+    const password = String(formData.get("password") ?? "");
+    const callbackUrl =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/dashboard`
+        : "/dashboard";
+    void signIn("credentials", {
+      email,
+      password,
+      callbackUrl,
+    });
   };
 
   return (
@@ -57,7 +72,13 @@ export default function LoginPage() {
           footerActionLabel="Create account"
           footerActionHref="/signup"
           onSignIn={handleSignIn}
-          onGoogleSignIn={() => {}}
+          onGoogleSignIn={() => {
+            const callbackUrl =
+              typeof window !== "undefined"
+                ? `${window.location.origin}/dashboard`
+                : "/dashboard";
+            void signIn("google", { callbackUrl });
+          }}
           onResetPassword={() => {}}
           onCreateAccount={() => {}}
         />
@@ -65,3 +86,6 @@ export default function LoginPage() {
     </main>
   );
 }
+
+export const getServerSideProps: GetServerSideProps = async (ctx) =>
+  redirectIfAuthed(ctx, "/dashboard");

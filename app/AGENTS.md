@@ -33,12 +33,18 @@ Synaro uses a premium dark B2B SaaS style:
   - tablet (`640-1023`)
   - desktop (`>=1024`)  
    If any breakpoint is broken or visually inconsistent, fix before finishing.
-3. **Auth flow parity**
+3. **Light + dark mode support is mandatory**
+  Any new UI you build must look correct in **both** themes:
+  - colors/surfaces/borders must adapt (no hard-coded `bg-black text-white` for dashboard UI)
+  - hover/focus/active states must remain readable in both themes
+  - prefer design tokens (`bg-background`, `bg-card`, `border-border`, `text-muted-foreground`)
+  The theme is controlled in `/settings/preferences` and persisted per user/browser.
+4. **Auth flow parity**
   Keep button styles, input styles, and text tone/structure consistent across:
   - login
   - signup
   - any future auth pages
-4. **Do not introduce random visual styles**
+5. **Do not introduce random visual styles**
   Reuse established classes, spacing scales, and interaction patterns from existing components.
 
 ## Layout System
@@ -67,13 +73,35 @@ Example:
 
 Prefer these patterns (already used across app):
 
-- Page root: `bg-black text-white`
-- Elevated surfaces: `bg-zinc-950` or `bg-zinc-950/90`
-- Subtle outlines: `border-white/10`, `border-white/15`, `border-white/20`
-- Muted content: `text-zinc-400` / `text-zinc-500`
-- Primary CTA: white button with black text
+- Prefer token-based surfaces so light/dark mode works:
+  - page root: `bg-background text-foreground`
+  - elevated surfaces: `bg-card` / `bg-card/80`
+  - subtle outlines: `border-border/70`
+  - muted content: `text-muted-foreground` / `text-muted-foreground/70`
+  - subtle fills: `bg-muted`
 
 Avoid introducing bright custom colors for core UI chrome unless it is accent-only.
+
+## Light Theme Palette (Required)
+
+Synaro light mode uses a strict 5-color palette:
+
+- `#ffffff` (pure white): **cards / popovers / highest-elevation surfaces**
+- `#fcfbfa` (paper): **page background**
+- `#f8f7f5` (soft): **muted surfaces** (subtle rows, secondary panels)
+- `#f5f4f0` (warm): **accent surface** (hovered / highlighted surface backgrounds)
+- `#f1f0eb` (line): **borders / inputs**
+
+Mapping rule of thumb:
+
+- Background-first: page uses `bg-background` (paper) and content sits on `bg-card` (white).
+- Use `bg-muted` for low-contrast containers; use `bg-accent` for interactive hover states.
+- Borders should be calm: `border-border` (line color), not gray/black.
+
+## Theme Transition (Required)
+
+When switching themes, the UI must transition **smoothly and globally** so components change together.
+Use a short color transition (~300–450ms) and respect reduced-motion preferences.
 
 ## Typography and Copy Rules
 
@@ -97,6 +125,22 @@ description="Create your Synaro workspace and start managing your cloud infrastr
 - Secondary button pattern:
   - `rounded-full border border-white/20 ... text-white hover:bg-white/10`
 - Keep radius, weight, and paddings consistent by context.
+
+### Square / Icon Buttons (Squircle Rule)
+
+Any “square” icon button (header icons, toolbar actions, compact controls) must use Synaro’s
+**squircle** treatment, matching the sidebar brand tile:
+
+- shape: `rounded-xl`
+- surface: `bg-card`
+- outline: `border border-border/70`
+- hover: `hover:bg-muted`
+
+Example:
+
+```tsx
+<button className="h-9 w-9 rounded-xl border border-border/70 bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground" />
+```
 
 ### Inputs
 

@@ -10,7 +10,7 @@ services:
       POSTGRES_USER: synaro_user
       POSTGRES_PASSWORD: synaro_local_password
     ports:
-      - '5432:5432'
+      - '5433:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -26,7 +26,7 @@ services:
     container_name: synaro-project-service
     restart: unless-stopped
     ports:
-      - '3001:3001'
+      - '3002:3001'
     environment:
       DATABASE_URL: postgresql://synaro_user:synaro_local_password@postgresql:5432/synaro
       NODE_ENV: development

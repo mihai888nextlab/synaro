@@ -1,9 +1,12 @@
 import type { FormEvent } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { signIn } from "next-auth/react";
+import type { GetServerSideProps } from "next";
 
 import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { SignInPage, type Testimonial } from "@/components/ui/sign-in";
+import { redirectIfAuthed } from "@/lib/auth-redirect";
 
 const sampleTestimonials: Testimonial[] = [
   {
@@ -29,6 +32,35 @@ const sampleTestimonials: Testimonial[] = [
 export default function SignupPage() {
   const handleSignUp = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const payload = {
+      fullName: String(formData.get("fullName") ?? ""),
+      email: String(formData.get("email") ?? ""),
+      password: String(formData.get("password") ?? ""),
+      confirmPassword: String(formData.get("confirmPassword") ?? ""),
+    };
+
+    void (async () => {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        return;
+      }
+
+      const callbackUrl =
+        typeof window !== "undefined"
+          ? `${window.location.origin}/dashboard`
+          : "/dashboard";
+      await signIn("credentials", {
+        email: payload.email,
+        password: payload.password,
+        callbackUrl,
+      });
+    })();
   };
 
   return (
@@ -58,7 +90,13 @@ export default function SignupPage() {
           footerActionLabel="Sign in"
           footerActionHref="/login"
           onSignIn={handleSignUp}
-          onGoogleSignIn={() => {}}
+          onGoogleSignIn={() => {
+            const callbackUrl =
+              typeof window !== "undefined"
+                ? `${window.location.origin}/dashboard`
+                : "/dashboard";
+            void signIn("google", { callbackUrl });
+          }}
           onResetPassword={() => {}}
           onCreateAccount={() => {}}
         />
@@ -66,3 +104,6 @@ export default function SignupPage() {
     </main>
   );
 }
+
+export const getServerSideProps: GetServerSideProps = async (ctx) =>
+  redirectIfAuthed(ctx, "/dashboard");

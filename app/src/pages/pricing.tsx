@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { CheckCircle2, XCircle } from "lucide-react";
+import type { GetServerSideProps } from "next";
 
 import { MinimalFooter } from "@/components/ui/minimal-footer";
 import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { SiteHeader } from "@/components/ui/site-header";
+import { redirectIfAuthed } from "@/lib/auth-redirect";
 
 type Plan = {
   name: string;
@@ -162,3 +164,6 @@ export default function PricingPage() {
     </main>
   );
 }
+
+export const getServerSideProps: GetServerSideProps = async (ctx) =>
+  redirectIfAuthed(ctx, "/dashboard");

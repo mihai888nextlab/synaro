@@ -1,6 +1,3 @@
--- CreateEnum
-CREATE TYPE "EnvironmentStatus" AS ENUM ('INACTIVE', 'PROVISIONING', 'RUNNING', 'STOPPED', 'ERROR');
-
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
@@ -18,7 +15,7 @@ CREATE TABLE "Project" (
     "name" TEXT NOT NULL,
     "description" TEXT,
     "repositoryLocation" TEXT,
-    "environmentStatus" "EnvironmentStatus" NOT NULL DEFAULT 'INACTIVE',
+    "environmentStatus" TEXT NOT NULL DEFAULT 'INACTIVE',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "userId" TEXT NOT NULL,

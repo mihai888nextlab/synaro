@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Execution {
+  id          String          @id @default(uuid())
+  projectId   String
+  containerId String?
+  status      ExecutionStatus @default(STOPPED)
+  port        Int?
+  startedAt   DateTime?
+  stoppedAt   DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([projectId])
+}
+
+enum ExecutionStatus {
+  STOPPED
+  STARTING
+  RUNNING
+  ERROR
+}

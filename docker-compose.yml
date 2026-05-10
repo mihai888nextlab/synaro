@@ -14,7 +14,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U synaro_user -d synaro']
+      test: [ 'CMD-SHELL', 'pg_isready -U synaro_user -d synaro' ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -31,7 +31,7 @@ services:
       DATABASE_URL: postgresql://synaro_user:synaro_local_password@postgresql:5432/synaro
       NODE_ENV: development
       PORT: 3001
-      LOG_LEVEL: debug
+      LOG_LEVEL: info
       ALLOWED_ORIGINS: http://localhost:3000
     volumes:
       - ./services/project-service/src:/app/src
@@ -40,5 +40,52 @@ services:
       postgresql:
         condition: service_healthy
 
+  environment-service:
+    build:
+      context: ./services/environment-service
+      dockerfile: Dockerfile.dev
+    container_name: synaro-environment-service
+    restart: unless-stopped
+    ports:
+      - '3002:3002'
+    environment:
+      DATABASE_URL: postgresql://synaro_user:synaro_local_password@postgresql:5432/synaro
+      NODE_ENV: development
+      PORT: 3002
+      LOG_LEVEL: info
+      ALLOWED_ORIGINS: http://localhost:3000
+    volumes:
+      - ./services/environment-service/src:/app/src
+      - ./services/environment-service/prisma:/app/prisma
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
+  ai-orchestration-service:
+    build:
+      context: ./services/ai-orchestration-service
+      dockerfile: Dockerfile.dev
+    container_name: synaro-ai-orchestration-service
+    restart: unless-stopped
+    ports:
+      - '3003:3003'
+    environment:
+      DATABASE_URL: postgresql://synaro_user:synaro_local_password@postgresql:5432/synaro
+      NODE_ENV: development
+      PORT: 3003
+      LOG_LEVEL: info
+      ALLOWED_ORIGINS: http://localhost:3000
+      KIMI_API_KEY: ${KIMI_API_KEY}
+      PROJECTS_PATH: /projects
+    volumes:
+      - ./services/ai-orchestration-service/src:/app/src
+      - ./services/ai-orchestration-service/prisma:/app/prisma
+      - projects_data:/projects
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
 volumes:
   postgres_data:
+  projects_data:

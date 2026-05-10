@@ -17,23 +17,15 @@ model User {
 }
 
 model Project {
-  id                 String            @id @default(uuid())
+  id                 String   @id @default(uuid())
   name               String
   description        String?
   repositoryLocation String?
-  environmentStatus  EnvironmentStatus @default(INACTIVE)
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  environmentStatus  String   @default("INACTIVE")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
   userId             String
-  user               User              @relation(fields: [userId], references: [id])
+  user               User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
-}
-
-enum EnvironmentStatus {
-  INACTIVE
-  PROVISIONING
-  RUNNING
-  STOPPED
-  ERROR
 }

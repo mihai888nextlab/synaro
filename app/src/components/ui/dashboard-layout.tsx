@@ -15,7 +15,12 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { humanizeProjectSlug } from "@/lib/project-slug";
+import { cn } from "@/lib/utils";
 
+type BreadcrumbSegment = { label: string; href?: string };
+
+/** Static dashboard route titles for breadcrumbs (dynamic project routes resolved separately). */
 const titles: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/projects": "Projects",
@@ -30,114 +35,146 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const { collapsed, setCollapsed } = usePersistentSidebarCollapse();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const pathTitles = useMemo(() => {
+  const breadcrumbs = useMemo((): BreadcrumbSegment[] => {
     const path = router.pathname;
-    if (path === "/dashboard") return ["Home"];
-    if (path === "/projects" || path === "/logs") return ["Home", titles[path] ?? "Dashboard"];
+    const q = router.query;
+
+    if (path === "/dashboard") {
+      return [{ label: "Home" }];
+    }
+
+    if (path === "/projects") {
+      return [{ label: "Home", href: "/dashboard" }, { label: "Projects" }];
+    }
+
+    if (path === "/logs") {
+      return [{ label: "Home", href: "/dashboard" }, { label: "Logs" }];
+    }
+
+    if (path === "/projects/[projectSlug]/analytics") {
+      const raw = q.projectSlug;
+      const slug = typeof raw === "string" ? raw : Array.isArray(raw) ? (raw[0] ?? "") : "";
+      return [
+        { label: "Home", href: "/dashboard" },
+        { label: "Projects", href: "/projects" },
+        { label: humanizeProjectSlug(slug) },
+        { label: "Analytics" },
+      ];
+    }
+
     if (path.startsWith("/projects/")) {
       const leaf = titles[path] ?? "Project";
-      return ["Home", "Projects", leaf];
+      return [{ label: "Home", href: "/dashboard" }, { label: "Projects", href: "/projects" }, { label: leaf }];
     }
-    if (path === "/settings") return ["Home", "Settings"];
+
+    if (path === "/settings") {
+      return [{ label: "Home", href: "/dashboard" }, { label: "Settings" }];
+    }
+
     if (path.startsWith("/settings/")) {
       const leaf = titles[path] ?? "Preferences";
-      return ["Home", "Settings", leaf];
+      return [
+        { label: "Home", href: "/dashboard" },
+        { label: "Settings", href: "/settings" },
+        { label: leaf },
+      ];
     }
-    return ["Home", titles[path] ?? "Dashboard"];
-  }, [router.pathname]);
-  const isHome = router.pathname === "/dashboard";
+
+    return [{ label: "Home", href: "/dashboard" }, { label: titles[path] ?? "Page" }];
+  }, [router.pathname, router.query]);
+
+  const isHome = breadcrumbs.length === 1 && breadcrumbs[0]?.label === "Home";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="flex min-h-screen">
-        <div className="hidden lg:block">
-          <DashboardSidebar
-            isCollapsed={collapsed}
-            onToggleCollapse={() => setCollapsed((v) => !v)}
-          />
-        </div>
+      {/* Fixed to the viewport on lg+ so long pages do not scroll the rail away (sticky breaks under some overflow ancestors). */}
+      <div className="fixed left-0 top-0 z-30 hidden h-dvh lg:block">
+        <DashboardSidebar
+          isCollapsed={collapsed}
+          onToggleCollapse={() => setCollapsed((v) => !v)}
+        />
+      </div>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-40 border-b border-border/70 bg-background/75 backdrop-blur-xl">
-            <div className="flex h-14 items-center justify-between px-4 sm:px-6">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setMobileOpen(true)}
-                  className="inline-flex size-9 items-center justify-center rounded-md border border-border/70 text-muted-foreground transition hover:bg-muted lg:hidden"
-                  aria-label="Open sidebar"
-                >
-                  <Menu className="size-4" />
-                </button>
-                <Breadcrumb>
-                  <BreadcrumbList className="text-muted-foreground">
-                    {isHome ? (
+      <div
+        className={cn(
+          "flex min-h-screen w-full min-w-0 flex-col transition-[padding-left] duration-300 ease-in-out motion-reduce:transition-none",
+          collapsed ? "lg:pl-[72px]" : "lg:pl-[260px]",
+        )}
+      >
+        <header className="sticky top-0 z-40 border-b border-border/70 bg-background/75 backdrop-blur-xl">
+          <div className="flex h-14 items-center justify-between px-4 sm:px-6">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setMobileOpen(true)}
+                className="inline-flex size-9 items-center justify-center rounded-md border border-border/70 text-muted-foreground transition hover:bg-muted lg:hidden"
+                aria-label="Open sidebar"
+              >
+                <Menu className="size-4" />
+              </button>
+              <Breadcrumb>
+                <BreadcrumbList className="text-muted-foreground">
+                  {isHome ? (
+                    <BreadcrumbItem>
+                      <BreadcrumbPage className="flex items-center gap-2 font-medium text-foreground">
+                        <HomeIcon className="size-4" />
+                        <span>Home</span>
+                      </BreadcrumbPage>
+                    </BreadcrumbItem>
+                  ) : (
+                    <>
                       <BreadcrumbItem>
-                        <BreadcrumbPage className="flex items-center gap-2 font-medium text-foreground">
-                          <HomeIcon className="size-4" />
-                          <span>Home</span>
-                        </BreadcrumbPage>
+                        <BreadcrumbLink
+                          asChild
+                          className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
+                        >
+                          <Link href="/dashboard">
+                            <HomeIcon className="size-4" />
+                            <span className="hidden sm:inline">Home</span>
+                          </Link>
+                        </BreadcrumbLink>
                       </BreadcrumbItem>
-                    ) : (
-                      <>
-                        <BreadcrumbItem>
-                          <BreadcrumbLink
-                            asChild
-                            className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
-                          >
-                            <Link href="/dashboard">
-                              <HomeIcon className="size-4" />
-                              <span className="hidden sm:inline">Home</span>
-                            </Link>
-                          </BreadcrumbLink>
-                        </BreadcrumbItem>
-                        {pathTitles.slice(1).map((crumb, idx) => {
-                          const isLast = idx === pathTitles.slice(1).length - 1;
-                          const href =
-                            crumb === "Settings"
-                              ? "/settings"
-                              : crumb === "Preferences"
-                                ? "/settings/preferences"
-                                : undefined;
+                      {breadcrumbs.slice(1).map((crumb, idx) => {
+                        const tail = breadcrumbs.slice(1);
+                        const isLast = idx === tail.length - 1;
 
-                          return (
-                            <Fragment key={`${crumb}-${idx}`}>
-                              <BreadcrumbSeparator className="text-muted-foreground/60">
-                                /
-                              </BreadcrumbSeparator>
-                              <BreadcrumbItem>
-                                {isLast || !href ? (
-                                  <BreadcrumbPage className="font-medium text-foreground">
-                                    {crumb}
-                                  </BreadcrumbPage>
-                                ) : (
-                                  <BreadcrumbLink
-                                    asChild
-                                    className="text-muted-foreground hover:text-foreground"
-                                  >
-                                    <Link href={href}>{crumb}</Link>
-                                  </BreadcrumbLink>
-                                )}
-                              </BreadcrumbItem>
-                            </Fragment>
-                          );
-                        })}
-                      </>
-                    )}
-                  </BreadcrumbList>
-                </Breadcrumb>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <DashboardNotifications />
-              </div>
+                        return (
+                          <Fragment key={`${crumb.label}-${idx}`}>
+                            <BreadcrumbSeparator className="text-muted-foreground/60">
+                              /
+                            </BreadcrumbSeparator>
+                            <BreadcrumbItem>
+                              {!isLast && crumb.href ? (
+                                <BreadcrumbLink
+                                  asChild
+                                  className="text-muted-foreground hover:text-foreground"
+                                >
+                                  <Link href={crumb.href}>{crumb.label}</Link>
+                                </BreadcrumbLink>
+                              ) : (
+                                <BreadcrumbPage className="font-medium text-foreground">
+                                  {crumb.label}
+                                </BreadcrumbPage>
+                              )}
+                            </BreadcrumbItem>
+                          </Fragment>
+                        );
+                      })}
+                    </>
+                  )}
+                </BreadcrumbList>
+              </Breadcrumb>
             </div>
-          </header>
 
-          <main className="min-w-0 flex-1 px-4 py-6 sm:px-6">
-            <div className="w-full">{children}</div>
-          </main>
-        </div>
+            <div className="flex items-center gap-2">
+              <DashboardNotifications />
+            </div>
+          </div>
+        </header>
+
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col px-4 py-6 sm:px-6">
+          <div className="flex min-h-0 w-full flex-1 flex-col">{children}</div>
+        </main>
       </div>
 
       {mobileOpen && (

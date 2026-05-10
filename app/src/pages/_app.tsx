@@ -28,8 +28,10 @@ export default function App({ Component, pageProps }: AppPropsWithSession) {
   );
 
   return (
-    <ThemeProvider>
-      <SessionProvider session={pageProps.session}>{content}</SessionProvider>
-    </ThemeProvider>
+    <div className="min-h-dvh bg-background antialiased">
+      <ThemeProvider>
+        <SessionProvider session={pageProps.session}>{content}</SessionProvider>
+      </ThemeProvider>
+    </div>
   );
 }

@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { Input } from "@/components/ui/input";
 import { AnimatedAIChat } from "@/components/ui/animated-ai-chat";
+import { ProjectIframePreview } from "@/components/ui/project-iframe-preview";
 import { Tree, TreeItem, TreeItemLabel } from "@/components/ui/tree";
 
 type TabKey = "tree" | "chat";
@@ -89,7 +90,7 @@ function TreePanel() {
 
   const tree = useTree<Item>({
     initialState: {
-      expandedItems: ["engineering", "frontend", "design-system"],
+      expandedItems: ["root", "app", "src", "prisma"],
     },
     indent,
     rootItemId: "root",
@@ -115,8 +116,8 @@ function TreePanel() {
   }, [selectedId, visibleItems]);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center justify-between gap-3 px-3 py-2.5">
         <div className="min-w-0">
           <p className="text-sm font-medium text-foreground">Project files</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
@@ -134,9 +135,9 @@ function TreePanel() {
         </div>
       </div>
 
-      <div className="grid flex-1 grid-cols-1 gap-4 p-4 lg:grid-cols-[360px_1fr]">
-        <div className="min-h-0 overflow-hidden rounded-2xl border border-border/70 bg-background/40">
-          <div className="flex items-center justify-between border-b border-border/70 px-3 py-2">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 lg:grid-cols-[360px_1fr] lg:gap-3">
+        <div className="min-h-0 overflow-hidden rounded-2xl bg-background/40">
+          <div className="flex items-center justify-between px-3 py-2">
             <p className="text-xs font-medium text-muted-foreground">Explorer</p>
             <p className="text-xs text-muted-foreground">{visibleItems.length} items</p>
           </div>
@@ -177,8 +178,8 @@ function TreePanel() {
           </div>
         </div>
 
-        <div className="min-h-0 overflow-hidden rounded-2xl border border-border/70 bg-background/40">
-          <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
+        <div className="min-h-0 overflow-hidden rounded-2xl bg-background/40">
+          <div className="flex items-center justify-between px-3 py-2.5">
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">
                 {selectedItem ? selectedItem.getItemName() : "Select a file"}
@@ -190,18 +191,18 @@ function TreePanel() {
               </p>
             </div>
             <div className="hidden sm:block">
-              <span className="rounded-full border border-border/70 bg-muted px-3 py-1 text-xs text-muted-foreground">
+              <span className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
                 Placeholder
               </span>
             </div>
           </div>
 
-          <div className="grid h-full grid-rows-[auto_1fr] gap-4 p-4">
+          <div className="grid h-full grid-rows-[auto_1fr] gap-3 p-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {["Commits", "Last build", "Open PRs"].map((label) => (
                 <div
                   key={label}
-                  className="rounded-2xl border border-border/70 bg-card/70 p-3"
+                  className="rounded-2xl bg-card/70 p-3"
                 >
                   <p className="text-xs text-muted-foreground">{label}</p>
                   <div className="mt-2 h-6 w-16 rounded-lg bg-muted" />
@@ -209,7 +210,7 @@ function TreePanel() {
               ))}
             </div>
 
-            <div className="min-h-0 overflow-auto rounded-2xl border border-border/70 bg-card/70 p-4">
+            <div className="min-h-0 overflow-auto rounded-2xl bg-card/70 p-3">
               <p className="text-xs font-medium text-muted-foreground">Preview</p>
               <div className="mt-3 space-y-2">
                 <div className="h-4 w-3/4 rounded-lg bg-muted" />
@@ -231,56 +232,58 @@ export default function SampleProjectUIPage() {
   const [tab, setTab] = React.useState<TabKey>("tree");
 
   return (
-    <div className="relative">
+    <div className="relative flex min-h-0 flex-1 flex-col">
       <PageBackgroundPattern variant="section" className="pointer-events-none absolute inset-0 z-0 opacity-60" />
 
-      <div className="relative z-10">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground">Projects</p>
-            <h1 className="mt-1 text-lg font-semibold tracking-tight text-foreground">
-              Sample project UI
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setTab("tree")}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition",
-                tab === "tree"
-                  ? "border-border bg-muted text-foreground"
-                  : "border-border/70 bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-            >
-              <FolderTree className="size-4" />
-              File tree
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("chat")}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition",
-                tab === "chat"
-                  ? "border-border bg-muted text-foreground"
-                  : "border-border/70 bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-            >
-              <MessageSquareText className="size-4" />
-              AI chat
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-6 min-h-[640px]">
-          {tab === "tree" ? (
-            <TreePanel />
-          ) : (
-            <div className="flex min-h-[640px] items-center justify-center">
-              <AnimatedAIChat className="w-full" />
-            </div>
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+        <div
+          className={cn(
+            "grid min-h-0 flex-1 gap-0",
+            "grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)]",
+            "xl:grid-cols-[minmax(0,1fr)_minmax(280px,38%)] xl:grid-rows-1",
           )}
+        >
+          <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-background/40">
+            <div className="flex shrink-0 items-center gap-2 px-3 py-2.5 sm:px-4">
+              <button
+                type="button"
+                onClick={() => setTab("tree")}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition",
+                  tab === "tree"
+                    ? "bg-muted text-foreground"
+                    : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <FolderTree className="size-4" />
+                File tree
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab("chat")}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition",
+                  tab === "chat"
+                    ? "bg-muted text-foreground"
+                    : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <MessageSquareText className="size-4" />
+                AI chat
+              </button>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col">
+              {tab === "tree" ? (
+                <TreePanel />
+              ) : (
+                <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
+                  <AnimatedAIChat className="w-full max-w-3xl" />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <ProjectIframePreview className="h-full min-h-[40vh] xl:min-h-0" title="Preview" />
         </div>
       </div>
     </div>

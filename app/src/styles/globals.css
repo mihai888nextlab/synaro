@@ -29,6 +29,9 @@
 
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
+
+  /* Matches chart snippet reference: chartConfig uses `var(--color-cyan-600)` */
+  --color-cyan-600: #0891b2;
 }
 
 @theme inline {
@@ -51,8 +54,11 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Applied via next/font on the app root in _app.tsx (falls back here if unset) */
+  --font-sans:
+    var(--font-app-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
 html.dark,
@@ -84,12 +90,14 @@ html[data-theme="dark"] {
 
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
+
+  --color-cyan-600: #22d3ee;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
 }
 
 /* Prevent lab-style pages from horizontal overflow */

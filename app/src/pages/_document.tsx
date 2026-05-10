@@ -1,8 +1,10 @@
 import { Html, Head, Main, NextScript } from "next/document";
 
+import { appFont } from "@/lib/app-font";
+
 export default function Document() {
   return (
-    <Html lang="en">
+    <Html lang="en" className={`${appFont.variable} ${appFont.className}`}>
       <Head>
         <script
           dangerouslySetInnerHTML={{

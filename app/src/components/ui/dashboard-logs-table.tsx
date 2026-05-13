@@ -109,17 +109,17 @@ function StatusPill({ status }: { status: DashboardLogRow["status"] }) {
     done: {
       label: "done",
       className:
-        "border-emerald-500/45 bg-emerald-500/[0.06] text-emerald-600 dark:border-emerald-500/40 dark:text-emerald-400",
+        "border-emerald-200/90 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/[0.06] dark:text-emerald-400",
     },
     running: {
       label: "running",
       className:
-        "border-sky-500/45 bg-sky-500/[0.08] text-sky-700 dark:border-sky-500/40 dark:text-sky-300",
+        "border-sky-200/90 bg-sky-50 text-sky-800 dark:border-sky-500/40 dark:bg-sky-500/[0.08] dark:text-sky-300",
     },
     stopped: {
       label: "stopped",
       className:
-        "border-border bg-muted/40 text-muted-foreground dark:border-border/80 dark:bg-muted/25",
+        "border-border/50 bg-muted/60 text-muted-foreground dark:border-border/80 dark:bg-muted/25",
     },
   } as const;
 

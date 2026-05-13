@@ -39,7 +39,7 @@ export function DashboardKpiStrip({
           <p
             className={cn(
               "mt-auto pt-5 text-xs leading-relaxed text-muted-foreground sm:pt-6",
-              item.footPositive && "text-emerald-600 dark:text-emerald-400",
+              item.footPositive && "text-emerald-700 dark:text-emerald-400",
             )}
           >
             {item.foot}

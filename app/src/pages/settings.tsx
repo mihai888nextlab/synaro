@@ -14,7 +14,13 @@ export default function SettingsPage() {
           Placeholder settings. This will become workspace, security, and billing.
         </p>
 
-        <div className="mt-6">
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link
+            href="/settings/profile"
+            className="inline-flex items-center rounded-full border border-border/70 bg-card/70 px-4 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          >
+            Profile
+          </Link>
           <Link
             href="/settings/preferences"
             className="inline-flex items-center rounded-full border border-border/70 bg-card/70 px-4 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"

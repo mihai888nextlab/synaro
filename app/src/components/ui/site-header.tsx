@@ -5,6 +5,8 @@ import Link from "next/link";
 import { ChevronDown, Cloud, Menu, ShieldCheck, Waypoints, X } from "lucide-react";
 import { useState } from "react";
 
+import { SynaroLogo } from "@/components/ui/synaro-logo";
+
 type DropdownCard = {
   title: string;
   image: string;
@@ -101,8 +103,12 @@ export function SiteHeader() {
     <header className="sticky top-0 z-50 border-b border-white/10 bg-black/85 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
         <div className="flex items-center gap-6 lg:gap-10">
-          <Link href="/" className="text-lg font-semibold text-white">
-            Synaro
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-white transition-opacity hover:opacity-90"
+          >
+            <SynaroLogo className="h-7 w-auto shrink-0 text-white" />
+            <span className="text-lg font-semibold tracking-tight">Synaro</span>
           </Link>
 
           <nav className="hidden items-center gap-5 lg:flex">
@@ -204,6 +210,14 @@ export function SiteHeader() {
       {mobileOpen && (
         <div className="border-t border-white/10 bg-black/98 lg:hidden">
           <div className="max-h-[calc(100dvh-3.5rem)] overflow-y-auto px-4 pb-6 pt-3">
+            <Link
+              href="/"
+              onClick={() => setMobileOpen(false)}
+              className="mb-4 inline-flex items-center gap-2 text-white transition-opacity hover:opacity-90"
+            >
+              <SynaroLogo className="h-7 w-auto shrink-0 text-white" />
+              <span className="text-lg font-semibold tracking-tight">Synaro</span>
+            </Link>
             <div className="rounded-2xl border border-white/10 bg-[#0c0c0d] p-3">
               <div className="flex flex-col">
                 {dropdowns.map((menu) => {

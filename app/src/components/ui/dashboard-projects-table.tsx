@@ -57,9 +57,11 @@ function StatusBadge({ status }: { status: DashboardProjectRow["status"] }) {
 
   const styles = {
     healthy:
-      "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
-    degraded: "bg-amber-500/10 text-amber-800 dark:text-amber-400 border-amber-500/25",
-    paused: "bg-muted text-muted-foreground border-border/60",
+      "border-emerald-200/90 bg-emerald-50 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400",
+    degraded:
+      "border-amber-200/90 bg-amber-50 text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-400",
+    paused:
+      "border-border/50 bg-muted/70 text-muted-foreground dark:border-border/60 dark:bg-muted dark:text-muted-foreground",
   } as const;
 
   return (

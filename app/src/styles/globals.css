@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Synaro ThemeProvider sets `html.dark` + `data-theme`; Tailwind defaults `dark:` to OS `prefers-color-scheme`. */
+@custom-variant dark (&:where(.dark, .dark *, [data-theme=dark], [data-theme=dark] *));
+
 :root {
   /* Light palette (Synaro) */
   --background: #fcfbfa;

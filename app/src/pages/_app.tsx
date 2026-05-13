@@ -5,6 +5,7 @@ import { SessionProvider } from "next-auth/react";
 import type { Session } from "next-auth";
 
 import { DashboardLayout } from "@/components/ui/dashboard-layout";
+import { GlobalSearch } from "@/components/ui/global-search";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 
 type AppPropsWithSession = AppProps<{ session?: Session }>;
@@ -30,7 +31,10 @@ export default function App({ Component, pageProps }: AppPropsWithSession) {
   return (
     <div className="min-h-dvh bg-background antialiased">
       <ThemeProvider>
-        <SessionProvider session={pageProps.session}>{content}</SessionProvider>
+        <SessionProvider basePath="/api/auth" session={pageProps.session}>
+          {content}
+          <GlobalSearch />
+        </SessionProvider>
       </ThemeProvider>
     </div>
   );

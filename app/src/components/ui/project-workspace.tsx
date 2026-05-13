@@ -1,16 +1,15 @@
-import type { GetServerSideProps } from "next";
 import * as React from "react";
 import { FileIcon, FolderIcon, FolderOpenIcon, MessageSquareText, FolderTree } from "lucide-react";
 import { hotkeysCoreFeature, syncDataLoaderFeature } from "@headless-tree/core";
 import { useTree } from "@headless-tree/react";
 
-import { requireAuth } from "@/lib/auth-redirect";
-import { cn } from "@/lib/utils";
-import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
-import { Input } from "@/components/ui/input";
 import { AnimatedAIChat } from "@/components/ui/animated-ai-chat";
+import { Input } from "@/components/ui/input";
+import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { ProjectIframePreview } from "@/components/ui/project-iframe-preview";
 import { Tree, TreeItem, TreeItemLabel } from "@/components/ui/tree";
+import { humanizeProjectSlug } from "@/lib/project-slug";
+import { cn } from "@/lib/utils";
 
 type TabKey = "tree" | "chat";
 
@@ -22,7 +21,6 @@ interface Item {
 const items: Record<string, Item> = {
   root: { name: "synaro", children: ["app", "packages", "docs", "config"] },
 
-  // App (Next.js)
   app: { name: "app", children: ["src", "public", "prisma", "package-json", "next-config"] },
   "package-json": { name: "package.json" },
   "next-config": { name: "next.config.ts" },
@@ -33,7 +31,6 @@ const items: Record<string, Item> = {
   schema: { name: "schema.prisma" },
   seed: { name: "seed.ts" },
 
-  // src
   src: { name: "src", children: ["pages", "components", "lib", "styles"] },
   pages: { name: "pages", children: ["dashboard-page", "projects-page", "api"] },
   "dashboard-page": { name: "dashboard.tsx" },
@@ -61,7 +58,6 @@ const items: Record<string, Item> = {
   styles: { name: "styles", children: ["globals"] },
   globals: { name: "globals.css" },
 
-  // Monorepo-ish placeholders
   packages: { name: "packages", children: ["project-service", "shared"] },
   "project-service": { name: "project-service", children: ["dockerfile", "service-src"] },
   dockerfile: { name: "Dockerfile" },
@@ -117,29 +113,22 @@ function TreePanel() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">Project files</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Example tree UI for the Projects page.
-          </p>
-        </div>
-        <div className="w-[240px] max-w-[50vw]">
-          <Input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search…"
-            className="h-9"
-          />
-        </div>
-      </div>
-
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 lg:grid-cols-[360px_1fr] lg:gap-3">
         <div className="min-h-0 overflow-hidden rounded-2xl bg-background/40">
-          <div className="flex items-center justify-between px-3 py-2">
+          <div className="flex items-center justify-between gap-2 px-3 py-2">
             <p className="text-xs font-medium text-muted-foreground">Explorer</p>
-            <p className="text-xs text-muted-foreground">{visibleItems.length} items</p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-muted-foreground">{visibleItems.length} items</p>
+              <div className="w-[120px] sm:w-[140px]">
+                <Input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search"
+                  className="h-7 rounded-lg px-2 text-xs"
+                />
+              </div>
+            </div>
           </div>
           <div className="min-h-0 overflow-auto p-3">
             <Tree
@@ -200,10 +189,7 @@ function TreePanel() {
           <div className="grid h-full grid-rows-[auto_1fr] gap-3 p-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {["Commits", "Last build", "Open PRs"].map((label) => (
-                <div
-                  key={label}
-                  className="rounded-2xl bg-card/70 p-3"
-                >
+                <div key={label} className="rounded-2xl bg-card/70 p-3">
                   <p className="text-xs text-muted-foreground">{label}</p>
                   <div className="mt-2 h-6 w-16 rounded-lg bg-muted" />
                 </div>
@@ -228,8 +214,17 @@ function TreePanel() {
   );
 }
 
-export default function SampleProjectUIPage() {
+export type ProjectWorkspaceProps = {
+  /** Route segment from `/projects/[projectSlug]`; used for in-page context. */
+  projectSlug?: string;
+};
+
+/**
+ * Full-width project workspace (file tree, AI chat, iframe preview) — same layout as the former sample page.
+ */
+export function ProjectWorkspace({ projectSlug }: ProjectWorkspaceProps) {
   const [tab, setTab] = React.useState<TabKey>("tree");
+  const projectLabel = projectSlug ? humanizeProjectSlug(projectSlug) : null;
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -244,7 +239,7 @@ export default function SampleProjectUIPage() {
           )}
         >
           <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-background/40">
-            <div className="flex shrink-0 items-center gap-2 px-3 py-2.5 sm:px-4">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 px-3 py-2.5 sm:px-4">
               <button
                 type="button"
                 onClick={() => setTab("tree")}
@@ -271,6 +266,14 @@ export default function SampleProjectUIPage() {
                 <MessageSquareText className="size-4" />
                 AI chat
               </button>
+              {projectLabel ? (
+                <span
+                  className="ms-auto max-w-[min(100%,14rem)] truncate text-xs text-muted-foreground sm:max-w-xs"
+                  title={projectLabel}
+                >
+                  {projectLabel}
+                </span>
+              ) : null}
             </div>
             <div className="flex min-h-0 flex-1 flex-col">
               {tab === "tree" ? (
@@ -289,6 +292,3 @@ export default function SampleProjectUIPage() {
     </div>
   );
 }
-
-export const getServerSideProps: GetServerSideProps = async (ctx) => requireAuth(ctx);
-

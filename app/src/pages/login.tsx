@@ -72,13 +72,6 @@ export default function LoginPage() {
           footerActionLabel="Create account"
           footerActionHref="/signup"
           onSignIn={handleSignIn}
-          onGoogleSignIn={() => {
-            const callbackUrl =
-              typeof window !== "undefined"
-                ? `${window.location.origin}/dashboard`
-                : "/dashboard";
-            void signIn("google", { callbackUrl });
-          }}
           onResetPassword={() => {}}
           onCreateAccount={() => {}}
         />

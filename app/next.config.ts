@@ -1,7 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
   reactStrictMode: true,
   images: {
     remotePatterns: [
@@ -20,5 +19,10 @@ const nextConfig: NextConfig = {
     ],
   },
 };
+
+/* next-auth/react inlines NEXTAUTH_URL on the client; expose it without setting an empty string (would break parsing). */
+if (process.env.NEXTAUTH_URL) {
+  nextConfig.env = { NEXTAUTH_URL: process.env.NEXTAUTH_URL };
+}
 
 export default nextConfig;

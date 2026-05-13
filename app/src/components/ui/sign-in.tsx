@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { getProviders, signIn } from "next-auth/react";
 
 const GoogleIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" className="size-5" viewBox="0 0 48 48">
@@ -46,7 +47,8 @@ interface SignInPageProps {
   footerActionHref?: string;
   resetPasswordHref?: string;
   onSignIn?: (event: React.FormEvent<HTMLFormElement>) => void;
-  onGoogleSignIn?: () => void;
+  /** Post-auth destination (path on this origin), e.g. `/dashboard` */
+  oauthCallbackUrl?: string;
   onResetPassword?: () => void;
   onCreateAccount?: () => void;
 }
@@ -114,11 +116,34 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   footerActionHref,
   resetPasswordHref,
   onSignIn,
-  onGoogleSignIn,
+  oauthCallbackUrl = "/dashboard",
   onResetPassword,
   onCreateAccount,
 }) => {
   const [showPassword, setShowPassword] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
+
+  const handleGoogleClick = async () => {
+    setGoogleError(null);
+    setGoogleBusy(true);
+    try {
+      const providers = await getProviders();
+      if (!providers?.google) {
+        setGoogleError(
+          "Google sign-in is not available. Check GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET and restart the dev server.",
+        );
+        return;
+      }
+
+      /* OAuth always triggers a full-page redirect from next-auth’s client. */
+      await signIn("google", { callbackUrl: oauthCallbackUrl });
+    } catch (e) {
+      setGoogleError(e instanceof Error ? e.message : "Google sign-in failed.");
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
 
   return (
     <div className="flex min-h-screen w-full flex-col font-sans md:flex-row">
@@ -222,12 +247,19 @@ export const SignInPage: React.FC<SignInPageProps> = ({
             </div>
 
             <button
-              onClick={onGoogleSignIn}
-              className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/15 py-4 text-zinc-100 transition-colors hover:bg-zinc-900"
+              type="button"
+              disabled={googleBusy}
+              onClick={() => void handleGoogleClick()}
+              className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/15 py-4 text-zinc-100 transition-colors hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <GoogleIcon />
-              Continue with Google
+              {googleBusy ? "Redirecting…" : "Continue with Google"}
             </button>
+            {googleError ? (
+              <p className="text-center text-sm text-red-400/90" role="alert">
+                {googleError}
+              </p>
+            ) : null}
 
             <p className="text-center text-sm text-zinc-500">
               {footerPrompt}{" "}

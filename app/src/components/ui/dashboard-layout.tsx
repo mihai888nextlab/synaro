@@ -3,8 +3,9 @@
 import { Fragment, ReactNode, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
-import { HomeIcon, Menu, X } from "lucide-react";
+import { CircleHelp, HomeIcon, Menu, X } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { DashboardSidebar, usePersistentSidebarCollapse } from "@/components/ui/dashboard-sidebar";
 import { DashboardNotifications } from "@/components/ui/dashboard-notifications";
 import {
@@ -24,10 +25,10 @@ type BreadcrumbSegment = { label: string; href?: string };
 const titles: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/projects": "Projects",
-  "/projects/sample-project-ui": "Sample project UI",
   "/logs": "Logs",
   "/settings": "Settings",
   "/settings/preferences": "Preferences",
+  "/settings/profile": "Profile",
 };
 
 export function DashboardLayout({ children }: { children: ReactNode }) {
@@ -57,8 +58,18 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
       return [
         { label: "Home", href: "/dashboard" },
         { label: "Projects", href: "/projects" },
-        { label: humanizeProjectSlug(slug) },
+        { label: humanizeProjectSlug(slug), href: `/projects/${encodeURIComponent(slug)}` },
         { label: "Analytics" },
+      ];
+    }
+
+    if (path === "/projects/[projectSlug]") {
+      const raw = q.projectSlug;
+      const slug = typeof raw === "string" ? raw : Array.isArray(raw) ? (raw[0] ?? "") : "";
+      return [
+        { label: "Home", href: "/dashboard" },
+        { label: "Projects", href: "/projects" },
+        { label: humanizeProjectSlug(slug) },
       ];
     }
 
@@ -168,6 +179,16 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
             <div className="flex items-center gap-2">
               <DashboardNotifications />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 rounded-xl border-border/70 bg-card text-muted-foreground shadow-sm shadow-black/5 hover:bg-muted hover:text-foreground"
+                aria-label="Open help"
+                title="Help"
+              >
+                <CircleHelp className="size-4" />
+              </Button>
             </div>
           </div>
         </header>

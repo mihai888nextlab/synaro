@@ -12,10 +12,12 @@ import {
   PanelLeftOpen,
   LogOut,
   User,
+  CircleUser,
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 
 import { SynaroLogo } from "@/components/ui/synaro-logo";
+import { cn } from "@/lib/utils";
 
 type NavItem = {
   label: string;
@@ -162,12 +164,15 @@ export function DashboardSidebar({
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
-              className={[
-                "flex items-center rounded-xl border border-border/70 bg-card/70 text-left transition hover:bg-muted",
+              className={cn(
+                "flex items-center rounded-xl border bg-card/70 text-left transition hover:bg-muted",
+                isCollapsed && menuOpen
+                  ? "border-primary/50 ring-2 ring-primary/25"
+                  : "border-border/70",
                 isCollapsed
                   ? "mx-auto h-10 w-10 justify-center gap-0 px-0"
                   : "w-full gap-3 px-3 py-2",
-              ].join(" ")}
+              )}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
             >
@@ -202,28 +207,52 @@ export function DashboardSidebar({
               </div>
             </button>
 
-            {menuOpen && !isCollapsed && status !== "loading" && (
+            {menuOpen && status !== "loading" && (
               <div
                 role="menu"
-                className="absolute bottom-[calc(100%+8px)] left-0 w-full rounded-xl border border-border/70 bg-popover p-1 shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
+                className={cn(
+                  "absolute bottom-[calc(100%+8px)] left-0 z-50 rounded-xl border border-border/70 bg-popover p-1 shadow-[0_20px_60px_rgba(0,0,0,0.28)]",
+                  /* Same placement as expanded; when collapsed the rail is narrow, so cap width so labels stay readable. */
+                  isCollapsed
+                    ? "min-w-[220px] w-max max-w-[min(280px,calc(100vw-2rem))]"
+                    : "w-full",
+                )}
               >
                 {status === "authenticated" ? (
-                  <button
-                    type="button"
-                    onClick={() => void signOut({ callbackUrl: "/" })}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                    role="menuitem"
-                  >
-                    <LogOut className="size-4 text-muted-foreground" />
-                    Log out
-                  </button>
+                  <>
+                    <Link
+                      href="/settings/profile"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onNavigate?.();
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                      role="menuitem"
+                    >
+                      <CircleUser className="size-4 shrink-0 text-muted-foreground" />
+                      Profile
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => void signOut({ callbackUrl: "/" })}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                      role="menuitem"
+                    >
+                      <LogOut className="size-4 shrink-0 text-muted-foreground" />
+                      Log out
+                    </button>
+                  </>
                 ) : (
                   <Link
                     href="/login"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onNavigate?.();
+                    }}
                     className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
                     role="menuitem"
                   >
-                    <LogOut className="size-4 text-muted-foreground" />
+                    <LogOut className="size-4 shrink-0 text-muted-foreground" />
                     Sign in
                   </Link>
                 )}

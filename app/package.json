@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@headless-tree/core": "^1.6.3",
@@ -23,7 +24,7 @@
     "cmdk": "^1.1.1",
     "framer-motion": "^12.23.24",
     "lucide-react": "^0.511.0",
-    "next": "16.2.4",
+    "next": "^16.2.6",
     "next-auth": "^4.24.14",
     "prisma": "^5.10.0",
     "react": "19.2.4",

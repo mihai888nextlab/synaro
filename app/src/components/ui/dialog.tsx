@@ -20,7 +20,8 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-[9998] bg-background/30",
+      /* Scrim: stronger than page bg so panels (card/popover) read clearly on top in light and dark. */
+      "fixed inset-0 z-[9998] bg-black/50",
       "data-[state=open]:animate-in data-[state=closed]:animate-out",
       "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className,

@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   postgresql:
     image: postgres:16-alpine
@@ -13,8 +11,28 @@ services:
       - '5433:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./scripts/postgres-init-project-service-db.sh:/docker-entrypoint-initdb.d/01-synaro-project-service-db.sh
     healthcheck:
       test: [ 'CMD-SHELL', 'pg_isready -U synaro_user -d synaro' ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Isolated DB for environment-service (Prisma enums + migrations must not clash with the app schema on `synaro`.)
+  postgresql-env:
+    image: postgres:16-alpine
+    container_name: synaro-postgres-env
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: synaro_env
+      POSTGRES_USER: synaro_env_user
+      POSTGRES_PASSWORD: synaro_env_local_password
+    ports:
+      - '5434:5432'
+    volumes:
+      - postgres_env_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ 'CMD-SHELL', 'pg_isready -U synaro_env_user -d synaro_env' ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,7 +46,7 @@ services:
     ports:
       - '3002:3001'
     environment:
-      DATABASE_URL: postgresql://synaro_user:synaro_local_password@postgresql:5432/synaro
+      DATABASE_URL: postgresql://synaro_user:synaro_local_password@postgresql:5432/synaro_project_service
       NODE_ENV: development
       PORT: 3001
       LOG_LEVEL: info
@@ -47,9 +65,9 @@ services:
     container_name: synaro-environment-service
     restart: unless-stopped
     ports:
-      - '3002:3002'
+      - '3004:3002'
     environment:
-      DATABASE_URL: postgresql://synaro_user:synaro_local_password@postgresql:5432/synaro
+      DATABASE_URL: postgresql://synaro_env_user:synaro_env_local_password@postgresql-env:5432/synaro_env
       NODE_ENV: development
       PORT: 3002
       LOG_LEVEL: info
@@ -59,7 +77,7 @@ services:
       - ./services/environment-service/prisma:/app/prisma
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
-      postgresql:
+      postgresql-env:
         condition: service_healthy
 
   ai-orchestration-service:
@@ -88,4 +106,5 @@ services:
 
 volumes:
   postgres_data:
+  postgres_env_data:
   projects_data:

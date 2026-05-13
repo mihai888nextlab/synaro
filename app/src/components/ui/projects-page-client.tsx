@@ -1,9 +1,13 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/router";
 import { Github, Upload, X } from "lucide-react";
 
-import { SynaroProjectsCardsGrid } from "@/components/ui/project-cards-grid";
+import {
+  SynaroProjectsCardsGrid,
+  type SynaroProjectCardModel,
+} from "@/components/ui/project-cards-grid";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,32 +17,57 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { PROJECT_DOCKER_IMAGE_OPTIONS } from "@/lib/project-docker-images";
 import { cn } from "@/lib/utils";
 
 type TabKey = "create" | "import";
 
-const DOCKER_IMAGE_OPTIONS = [
-  { value: "automatic", label: "Automatic (recommended)" },
-  { value: "node:22-bookworm-slim", label: "Node.js 22 (Debian slim)" },
-  { value: "python:3.12-slim", label: "Python 3.12 (slim)" },
-  { value: "golang:1.23-bookworm", label: "Go 1.23 (Debian)" },
-  { value: "nginx:1.27-alpine", label: "Nginx (Alpine)" },
-  { value: "ubuntu:24.04", label: "Ubuntu 24.04 (generic)" },
-] as const;
-
-export function ProjectsPageClient() {
+export function ProjectsPageClient({ initialProjects }: { initialProjects: SynaroProjectCardModel[] }) {
+  const router = useRouter();
+  const [projects, setProjects] = React.useState<SynaroProjectCardModel[]>(initialProjects);
   const [open, setOpen] = React.useState(false);
   const [tab, setTab] = React.useState<TabKey>("create");
 
   const [title, setTitle] = React.useState("");
   const [description, setDescription] = React.useState("");
-  const [dockerImage, setDockerImage] = React.useState<string>(DOCKER_IMAGE_OPTIONS[0].value);
+  const [dockerImage, setDockerImage] = React.useState<string>(PROJECT_DOCKER_IMAGE_OPTIONS[0].value);
 
   const [importFiles, setImportFiles] = React.useState<File[]>([]);
   const [githubUrl, setGithubUrl] = React.useState("");
   const [dragActive, setDragActive] = React.useState(false);
 
+  const [submitting, setSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
+  /** Shown after a successful create when the Docker / environment-service step did not complete. */
+  const [postCreateNotice, setPostCreateNotice] = React.useState<string | null>(null);
+  const [dockerBusyId, setDockerBusyId] = React.useState<string | null>(null);
+
   const folderInputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    setProjects(initialProjects);
+  }, [initialProjects]);
+
+  /** Refresh Docker/runtime pills from environment-service (falls back to DB if unreachable). */
+  React.useEffect(() => {
+    let cancelled = false;
+    async function refresh() {
+      try {
+        const res = await fetch("/api/projects");
+        if (!res.ok || cancelled) return;
+        const body = (await res.json()) as { projects?: SynaroProjectCardModel[] };
+        if (body.projects && !cancelled) setProjects(body.projects);
+      } catch {
+        /* ignore */
+      }
+    }
+    void refresh();
+    const id = window.setInterval(refresh, 18000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
 
   React.useEffect(() => {
     const el = folderInputRef.current;
@@ -50,10 +79,11 @@ export function ProjectsPageClient() {
   function resetForms() {
     setTitle("");
     setDescription("");
-    setDockerImage(DOCKER_IMAGE_OPTIONS[0].value);
+    setDockerImage(PROJECT_DOCKER_IMAGE_OPTIONS[0].value);
     setImportFiles([]);
     setGithubUrl("");
     setTab("create");
+    setSubmitError(null);
   }
 
   function handleOpenChange(next: boolean) {
@@ -61,9 +91,88 @@ export function ProjectsPageClient() {
     if (!next) resetForms();
   }
 
-  function handleCreateSubmit(e: React.FormEvent) {
+  async function handleCreateSubmit(e: React.FormEvent) {
     e.preventDefault();
-    handleOpenChange(false);
+    setSubmitting(true);
+    setSubmitError(null);
+    setPostCreateNotice(null);
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: title,
+          description: description.trim() || undefined,
+          dockerImage,
+        }),
+      });
+
+      const raw = await res.text();
+      let data: {
+        error?: string;
+        detail?: string;
+        hint?: string;
+        project?: SynaroProjectCardModel;
+        environmentWarning?: string;
+      } = {};
+      if (raw) {
+        try {
+          data = JSON.parse(raw) as typeof data;
+        } catch {
+          setSubmitError(`Unexpected response (${res.status}). Try again.`);
+          return;
+        }
+      }
+
+      // Older API: environment step failed with 502 but project was saved
+      if (res.status === 502 && data.project) {
+        setProjects((prev) => {
+          const rest = prev.filter((p) => p.id !== data.project!.id);
+          return [data.project!, ...rest];
+        });
+        setPostCreateNotice(
+          data.detail ?? data.error ?? "Project was saved; the dev container could not be started.",
+        );
+        handleOpenChange(false);
+        return;
+      }
+
+      if (!res.ok) {
+        const parts = [data.error, data.detail, data.hint].filter(
+          (s): s is string => typeof s === "string" && s.length > 0,
+        );
+        setSubmitError(parts.join(" — ") || `Request failed (${res.status})`);
+        return;
+      }
+
+      if (!data.project) {
+        setSubmitError("Unexpected response from server.");
+        return;
+      }
+
+      setProjects((prev) => {
+        const rest = prev.filter((p) => p.id !== data.project!.id);
+        return [data.project!, ...rest];
+      });
+
+      if (data.environmentWarning) {
+        setPostCreateNotice(data.environmentWarning);
+        handleOpenChange(false);
+        return;
+      }
+
+      handleOpenChange(false);
+      await router.push(`/projects/${encodeURIComponent(data.project.slug)}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSubmitError(
+        /failed to fetch|fetch failed|networkerror/i.test(msg)
+          ? "Could not reach the app (network error). Check that Next.js is running and try again."
+          : msg || "Something went wrong — try again.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function handleFolderInputChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -80,16 +189,73 @@ export function ProjectsPageClient() {
     if (files.length) setImportFiles(files);
   }
 
+  const handleDockerClick = React.useCallback(async (projectId: string, action: "start" | "stop") => {
+    setDockerBusyId(projectId);
+    setSubmitError(null);
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/docker`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const raw = await res.text();
+      let data: { error?: string; project?: SynaroProjectCardModel } = {};
+      if (raw) {
+        try {
+          data = JSON.parse(raw) as typeof data;
+        } catch {
+          setSubmitError("Invalid response from server.");
+          return;
+        }
+      }
+      if (!res.ok) {
+        setSubmitError(data.error ?? `Docker action failed (${res.status})`);
+        return;
+      }
+      if (data.project) {
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? data.project! : p)));
+      }
+    } catch {
+      setSubmitError("Could not reach the app to update Docker.");
+    } finally {
+      setDockerBusyId(null);
+    }
+  }, []);
+
   return (
     <div className="relative w-full flex-1">
       <div className="mx-auto w-full max-w-7xl">
         <h1 className="sr-only">Projects</h1>
 
+        {postCreateNotice ? (
+          <p
+            role="status"
+            className="mb-4 rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-foreground dark:border-amber-500/25 dark:bg-amber-950/40"
+          >
+            <span className="font-medium">Project created.</span> {postCreateNotice}
+          </p>
+        ) : null}
+
+        {submitError && !open ? (
+          <p
+            role="alert"
+            className="mb-4 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          >
+            {submitError}
+          </p>
+        ) : null}
+
         <SynaroProjectsCardsGrid
+          projects={projects}
           showNewProject
           newProjectHref="/projects"
+          dockerInteractive
+          dockerBusyId={dockerBusyId}
+          onDockerClick={handleDockerClick}
           onNewProjectClick={() => {
             setTab("create");
+            setSubmitError(null);
+            setPostCreateNotice(null);
             handleOpenChange(true);
           }}
         />
@@ -97,7 +263,7 @@ export function ProjectsPageClient() {
         <Dialog open={open} onOpenChange={handleOpenChange}>
           <DialogContent
             className={cn(
-              "max-h-[min(90vh,720px)] w-[min(100%,28rem)] max-w-none overflow-y-auto rounded-2xl border-border/70 bg-card p-0 shadow-[0_24px_80px_rgba(0,0,0,0.22)]",
+              "max-h-[min(90vh,720px)] w-[min(100%,28rem)] max-w-none overflow-y-auto rounded-2xl border-2 border-border bg-card p-0 shadow-2xl",
             )}
           >
             <div className="flex flex-col gap-0 border-b border-border/70 px-4 pb-3 pt-4 sm:px-5">
@@ -161,8 +327,17 @@ export function ProjectsPageClient() {
 
             {tab === "create" ? (
               <form onSubmit={handleCreateSubmit} className="flex flex-col gap-4 px-4 py-4 sm:px-5 sm:py-5">
+                {submitError ? (
+                  <p role="alert" className="text-sm text-destructive">
+                    {submitError}
+                  </p>
+                ) : null}
+
                 <div className="flex flex-col gap-2">
-                  <label htmlFor="project-title" className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">
+                  <label
+                    htmlFor="project-title"
+                    className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80"
+                  >
                     Project name
                   </label>
                   <Input
@@ -172,11 +347,15 @@ export function ProjectsPageClient() {
                     placeholder="e.g. Customer portal"
                     required
                     autoComplete="off"
+                    disabled={submitting}
                   />
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <label htmlFor="project-description" className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">
+                  <label
+                    htmlFor="project-description"
+                    className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80"
+                  >
                     Description
                   </label>
                   <textarea
@@ -185,6 +364,7 @@ export function ProjectsPageClient() {
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="What does this project do?"
                     rows={4}
+                    disabled={submitting}
                     className={cn(
                       "min-h-[96px] w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm shadow-black/5 transition-shadow placeholder:text-muted-foreground/70 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/20",
                     )}
@@ -192,19 +372,23 @@ export function ProjectsPageClient() {
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <label htmlFor="docker-image" className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">
+                  <label
+                    htmlFor="docker-image"
+                    className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80"
+                  >
                     Runtime image
                   </label>
                   <select
                     id="docker-image"
                     value={dockerImage}
                     onChange={(e) => setDockerImage(e.target.value)}
+                    disabled={submitting}
                     className={cn(
                       "flex h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm shadow-black/5",
                       "focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/20",
                     )}
                   >
-                    {DOCKER_IMAGE_OPTIONS.map((opt) => (
+                    {PROJECT_DOCKER_IMAGE_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
                         {opt.label}
                       </option>
@@ -214,12 +398,17 @@ export function ProjectsPageClient() {
 
                 <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border/70 pt-4">
                   <DialogClose asChild>
-                    <Button type="button" variant="outline" className="rounded-full border-border/70">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-full border-border/70"
+                      disabled={submitting}
+                    >
                       Cancel
                     </Button>
                   </DialogClose>
-                  <Button type="submit" className="rounded-full">
-                    Create project
+                  <Button type="submit" className="rounded-full" disabled={submitting}>
+                    {submitting ? "Creating…" : "Create project"}
                   </Button>
                 </div>
               </form>

@@ -58,8 +58,10 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+// Project.slug is the URL segment for `/projects/[slug]` (unique per workspace).
 model Project {
   id                 String            @id @default(uuid())
+  slug               String            @unique
   name               String
   description        String?
   repositoryLocation String?

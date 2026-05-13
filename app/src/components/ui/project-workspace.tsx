@@ -7,6 +7,11 @@ import { AnimatedAIChat } from "@/components/ui/animated-ai-chat";
 import { Input } from "@/components/ui/input";
 import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { ProjectIframePreview } from "@/components/ui/project-iframe-preview";
+import {
+  SynaroProjectDockerPill,
+  type SynaroProjectCardModel,
+  type SynaroProjectEnvironmentStatus,
+} from "@/components/ui/project-cards-grid";
 import { Tree, TreeItem, TreeItemLabel } from "@/components/ui/tree";
 import { humanizeProjectSlug } from "@/lib/project-slug";
 import { cn } from "@/lib/utils";
@@ -217,14 +222,86 @@ function TreePanel() {
 export type ProjectWorkspaceProps = {
   /** Route segment from `/projects/[projectSlug]`; used for in-page context. */
   projectSlug?: string;
+  /** Prisma project id — enables Docker start/stop in the header. */
+  projectId?: string;
+  /** Merged DB + environment-service status from SSR. */
+  initialEnvironmentStatus?: SynaroProjectEnvironmentStatus;
 };
 
 /**
  * Full-width project workspace (file tree, AI chat, iframe preview) — same layout as the former sample page.
  */
-export function ProjectWorkspace({ projectSlug }: ProjectWorkspaceProps) {
+export function ProjectWorkspace({
+  projectSlug,
+  projectId,
+  initialEnvironmentStatus = "INACTIVE",
+}: ProjectWorkspaceProps) {
   const [tab, setTab] = React.useState<TabKey>("tree");
-  const projectLabel = projectSlug ? humanizeProjectSlug(projectSlug) : null;
+  const [environmentStatus, setEnvironmentStatus] =
+    React.useState<SynaroProjectEnvironmentStatus>(initialEnvironmentStatus);
+  const [dockerBusy, setDockerBusy] = React.useState(false);
+  const [dockerError, setDockerError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setEnvironmentStatus(initialEnvironmentStatus);
+  }, [initialEnvironmentStatus]);
+
+  React.useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    async function refresh() {
+      try {
+        const res = await fetch("/api/projects");
+        if (!res.ok || cancelled) return;
+        const body = (await res.json()) as { projects?: SynaroProjectCardModel[] };
+        const row = body.projects?.find((p) => p.id === projectId);
+        if (row && !cancelled) setEnvironmentStatus(row.environmentStatus);
+      } catch {
+        /* ignore */
+      }
+    }
+    void refresh();
+    const id = window.setInterval(refresh, 18000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [projectId]);
+
+  const handleDockerPress = React.useCallback(
+    async (action: "start" | "stop") => {
+      if (!projectId) return;
+      setDockerBusy(true);
+      setDockerError(null);
+      try {
+        const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/docker`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        });
+        const raw = await res.text();
+        let data: { error?: string; project?: SynaroProjectCardModel } = {};
+        if (raw) {
+          try {
+            data = JSON.parse(raw) as typeof data;
+          } catch {
+            setDockerError("Invalid response from server.");
+            return;
+          }
+        }
+        if (!res.ok) {
+          setDockerError(data.error ?? `Docker action failed (${res.status})`);
+          return;
+        }
+        if (data.project) setEnvironmentStatus(data.project.environmentStatus);
+      } catch {
+        setDockerError("Could not reach the app to update Docker.");
+      } finally {
+        setDockerBusy(false);
+      }
+    },
+    [projectId],
+  );
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -266,13 +343,20 @@ export function ProjectWorkspace({ projectSlug }: ProjectWorkspaceProps) {
                 <MessageSquareText className="size-4" />
                 AI chat
               </button>
-              {projectLabel ? (
-                <span
-                  className="ms-auto max-w-[min(100%,14rem)] truncate text-xs text-muted-foreground sm:max-w-xs"
-                  title={projectLabel}
-                >
-                  {projectLabel}
-                </span>
+              {projectId ? (
+                <div className="ms-auto flex max-w-[min(100%,16rem)] flex-col items-end gap-1 sm:max-w-xs">
+                  <SynaroProjectDockerPill
+                    environmentStatus={environmentStatus}
+                    interactive
+                    busy={dockerBusy}
+                    onPress={handleDockerPress}
+                  />
+                  {dockerError ? (
+                    <p className="text-right text-[0.65rem] leading-snug text-destructive sm:text-xs">
+                      {dockerError}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
             </div>
             <div className="flex min-h-0 flex-1 flex-col">
@@ -286,7 +370,10 @@ export function ProjectWorkspace({ projectSlug }: ProjectWorkspaceProps) {
             </div>
           </div>
 
-          <ProjectIframePreview className="h-full min-h-[40vh] xl:min-h-0" title="Preview" />
+          <ProjectIframePreview
+            className="h-full min-h-[40vh] xl:min-h-0"
+            title={projectSlug ? `Preview — ${humanizeProjectSlug(projectSlug)}` : "Preview"}
+          />
         </div>
       </div>
     </div>

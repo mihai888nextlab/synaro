@@ -1,10 +1,25 @@
 import type { GetServerSideProps } from "next";
+import { getServerSession } from "next-auth/next";
 import { useRouter } from "next/router";
 
+import type { SynaroProjectEnvironmentStatus } from "@/components/ui/project-cards-grid";
 import { ProjectWorkspace } from "@/components/ui/project-workspace";
-import { requireAuth } from "@/lib/auth-redirect";
+import {
+  latestEnvironmentSummariesByProjectId,
+  parseEnvironmentStatusFromService,
+} from "@/lib/environment-service-live";
+import { prisma } from "@/lib/prisma";
+import { authOptions } from "@/pages/api/auth/[...nextauth]";
 
-export default function ProjectWorkspacePage() {
+type ProjectWorkspacePageProps = {
+  projectId: string;
+  initialEnvironmentStatus: SynaroProjectEnvironmentStatus;
+};
+
+export default function ProjectWorkspacePage({
+  projectId,
+  initialEnvironmentStatus,
+}: ProjectWorkspacePageProps) {
   const router = useRouter();
   const raw = router.query.projectSlug;
   const slug =
@@ -18,7 +33,44 @@ export default function ProjectWorkspacePage() {
     );
   }
 
-  return <ProjectWorkspace projectSlug={slug} />;
+  return (
+    <ProjectWorkspace
+      projectSlug={slug}
+      projectId={projectId}
+      initialEnvironmentStatus={initialEnvironmentStatus}
+    />
+  );
 }
 
-export const getServerSideProps: GetServerSideProps = async (ctx) => requireAuth(ctx);
+export const getServerSideProps: GetServerSideProps<ProjectWorkspacePageProps> = async (ctx) => {
+  const session = await getServerSession(ctx.req, ctx.res, authOptions);
+  if (!session?.user?.id) {
+    return { redirect: { destination: "/login", permanent: false } };
+  }
+
+  const raw = ctx.params?.projectSlug;
+  const slug = typeof raw === "string" ? raw : Array.isArray(raw) ? (raw[0] ?? "") : "";
+  if (!slug) {
+    return { notFound: true };
+  }
+
+  const project = await prisma.project.findFirst({
+    where: { slug, userId: session.user.id },
+    select: { id: true, environmentStatus: true },
+  });
+  if (!project) {
+    return { notFound: true };
+  }
+
+  const live = await latestEnvironmentSummariesByProjectId([project.id]);
+  const s = live[project.id];
+  const st = s ? parseEnvironmentStatusFromService(s.status) : null;
+  const environmentStatus = (st ?? project.environmentStatus) as SynaroProjectEnvironmentStatus;
+
+  return {
+    props: {
+      projectId: project.id,
+      initialEnvironmentStatus: environmentStatus,
+    },
+  };
+};

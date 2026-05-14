@@ -4,6 +4,11 @@ import type { EnvironmentStatus, Project } from "@prisma/client";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
 
+import { getGithubAccessTokenForUser } from "@/lib/github-account";
+import {
+  defaultProjectNameFromGithubUrl,
+  normalizeGithubRepoUrl,
+} from "@/lib/github-repo-url";
 import { projectRowToCardModel, projectRowToCardModelWithStack } from "@/lib/map-project-to-card";
 import { prisma } from "@/lib/prisma";
 import {
@@ -12,7 +17,7 @@ import {
 } from "@/lib/environment-service-live";
 import { resolveProjectDockerImage } from "@/lib/project-docker-images";
 import { slugifyProjectName } from "@/lib/project-slug";
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
+import { authOptions } from "@/lib/next-auth-options";
 
 type EnvServiceRow = {
   id: string;
@@ -76,14 +81,23 @@ async function allocateUniqueSlug(name: string): Promise<string> {
   throw new Error("Could not allocate a unique slug");
 }
 
-async function provisionEnvironment(projectId: string, image: string): Promise<EnvServiceRow> {
+async function provisionEnvironment(
+  projectId: string,
+  image: string,
+  opts?: { gitRemoteUrl?: string | null; gitAccessToken?: string | null },
+): Promise<EnvServiceRow> {
   const base = environmentServiceBaseUrl();
+  const body: Record<string, string> = { projectId, image };
+  if (opts?.gitRemoteUrl) {
+    body.gitRemoteUrl = opts.gitRemoteUrl;
+    if (opts.gitAccessToken) body.gitAccessToken = opts.gitAccessToken;
+  }
   let res: Response;
   try {
     res = await fetch(`${base}/api/environments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId, image }),
+      body: JSON.stringify(body),
     });
   } catch (err) {
     throw new Error(formatEnvironmentProvisionFailure(err));
@@ -132,8 +146,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === "POST") {
-      const body = req.body as { name?: unknown; description?: unknown; dockerImage?: unknown };
-      const name = typeof body.name === "string" ? body.name.trim() : "";
+      const body = req.body as {
+        name?: unknown;
+        description?: unknown;
+        dockerImage?: unknown;
+        repositoryUrl?: unknown;
+      };
+      const repositoryUrlRaw =
+        typeof body.repositoryUrl === "string" ? body.repositoryUrl.trim() : "";
+      let cloneRepositoryUrl: string | null = null;
+      if (repositoryUrlRaw) {
+        cloneRepositoryUrl = normalizeGithubRepoUrl(repositoryUrlRaw);
+        if (!cloneRepositoryUrl) {
+          res.status(400).json({ error: "Invalid GitHub repository URL (use https://github.com/owner/repo)." });
+          return;
+        }
+      }
+
+      let name = typeof body.name === "string" ? body.name.trim() : "";
+      if (!name && cloneRepositoryUrl) {
+        name = defaultProjectNameFromGithubUrl(cloneRepositoryUrl);
+      }
       const description =
         typeof body.description === "string" ? body.description.trim().slice(0, 2000) : "";
       const dockerRaw = typeof body.dockerImage === "string" ? body.dockerImage : "automatic";
@@ -153,11 +186,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           description: description || null,
           userId,
           environmentStatus: "PROVISIONING",
+          cloneRepositoryUrl,
         },
       });
 
       try {
-        const env = await provisionEnvironment(project.id, image);
+        const gitAccessToken = cloneRepositoryUrl ? await getGithubAccessTokenForUser(userId) : null;
+        const env = await provisionEnvironment(project.id, image, {
+          gitRemoteUrl: cloneRepositoryUrl,
+          gitAccessToken: gitAccessToken ?? undefined,
+        });
         const nextStatus = parseEnvStatus(env.status);
         const base = previewHostBase();
         const port = typeof env.port === "number" ? env.port : null;

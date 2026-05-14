@@ -5,19 +5,21 @@ import { getServerSession } from "next-auth/next";
 import {
   fetchEnvironmentsForProject,
   parseRemoteStatus,
+  pickActiveRuntimeEnvironment,
   remoteCreateEnvironment,
   remoteDestroyEnvironment,
   remoteStartEnvironment,
   remoteStopEnvironment,
   type RemoteEnvironment,
 } from "@/lib/environment-service-api";
+import { getGithubAccessTokenForUser } from "@/lib/github-account";
 import { projectRowToCardModel } from "@/lib/map-project-to-card";
 import { prisma } from "@/lib/prisma";
 import {
   latestEnvironmentSummariesByProjectId,
   parseEnvironmentStatusFromService,
 } from "@/lib/environment-service-live";
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
+import { authOptions } from "@/lib/next-auth-options";
 
 function previewHostBase(): string {
   const fromEnv = process.env.SYNARO_PREVIEW_HOST?.trim();
@@ -75,6 +77,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const project = await prisma.project.findFirst({
       where: { id: projectId, userId: session.user.id },
+      select: { id: true, userId: true, cloneRepositoryUrl: true },
     });
     if (!project) {
       res.status(404).json({ error: "Project not found" });
@@ -83,10 +86,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     let env: RemoteEnvironment | null = null;
 
+    const createOpts =
+      project.cloneRepositoryUrl != null && project.cloneRepositoryUrl.length > 0
+        ? {
+            gitRemoteUrl: project.cloneRepositoryUrl,
+            gitAccessToken:
+              (await getGithubAccessTokenForUser(project.userId)) ?? undefined,
+          }
+        : undefined;
+
     if (action === "stop") {
       const rows = await fetchEnvironmentsForProject(projectId);
-      const latest = rows[0];
-      if (!latest) {
+      const active = pickActiveRuntimeEnvironment(rows);
+      if (!rows.length) {
         await prisma.project.update({
           where: { id: projectId },
           data: { environmentStatus: "INACTIVE", repositoryLocation: null },
@@ -94,32 +106,46 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         await respondWithSyncedCard(projectId, res);
         return;
       }
-      if (latest.status === "RUNNING") {
-        env = await remoteStopEnvironment(latest.id);
-      } else {
+      if (!active) {
+        const latest = rows[0]!;
         const patch = projectUpdateFromRemoteEnv(latest);
         await prisma.project.update({ where: { id: projectId }, data: patch });
         await respondWithSyncedCard(projectId, res);
         return;
       }
+      if (active.status === "RUNNING" || active.status === "PROVISIONING") {
+        env = await remoteStopEnvironment(active.id);
+      }
     } else {
       const rows = await fetchEnvironmentsForProject(projectId);
-      const latest = rows[0];
-      if (!latest) {
-        env = await remoteCreateEnvironment(projectId);
-      } else if (latest.status === "RUNNING") {
-        const patch = projectUpdateFromRemoteEnv(latest);
-        await prisma.project.update({ where: { id: projectId }, data: patch });
-        await respondWithSyncedCard(projectId, res);
-        return;
-      } else if (latest.status === "PROVISIONING") {
-        res.status(409).json({ error: "Environment is already starting. Wait for it to finish." });
-        return;
-      } else if (latest.status === "STOPPED" && latest.containerId) {
-        env = await remoteStartEnvironment(latest.id);
+      const active = pickActiveRuntimeEnvironment(rows);
+
+      if (!active) {
+        const stopped = rows.find((r) => r.status === "STOPPED" && r.containerId);
+        if (stopped) {
+          env = await remoteStartEnvironment(stopped.id);
+        } else if (!rows.length) {
+          env = await remoteCreateEnvironment(projectId, "node:20-alpine", createOpts);
+        } else {
+          const head = rows[0]!;
+          await remoteDestroyEnvironment(head.id);
+          const image =
+            typeof head.image === "string" && head.image.length > 0 ? head.image : "node:20-alpine";
+          env = await remoteCreateEnvironment(projectId, image, createOpts);
+        }
       } else {
-        await remoteDestroyEnvironment(latest.id);
-        env = await remoteCreateEnvironment(projectId);
+        if (active.status === "RUNNING") {
+          const patch = projectUpdateFromRemoteEnv(active);
+          await prisma.project.update({ where: { id: projectId }, data: patch });
+          await respondWithSyncedCard(projectId, res);
+          return;
+        }
+        if (active.status === "PROVISIONING") {
+          res.status(409).json({ error: "Environment is already starting. Wait for it to finish." });
+          return;
+        }
+        res.status(500).json({ error: `Unexpected environment status: ${active.status}` });
+        return;
       }
     }
 

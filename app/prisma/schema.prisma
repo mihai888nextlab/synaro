@@ -64,6 +64,8 @@ model Project {
   slug               String            @unique
   name               String
   description        String?
+  /// Source git remote (e.g. https://github.com/org/repo) for clone-on-provision; not the live preview URL.
+  cloneRepositoryUrl String?
   repositoryLocation String?
   environmentStatus  EnvironmentStatus @default(INACTIVE)
   createdAt          DateTime          @default(now())

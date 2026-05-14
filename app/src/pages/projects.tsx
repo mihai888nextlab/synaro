@@ -9,7 +9,7 @@ import {
 } from "@/lib/environment-service-live";
 import { projectRowToCardModel } from "@/lib/map-project-to-card";
 import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
+import { authOptions } from "@/lib/next-auth-options";
 
 export default function ProjectsPage({ initialProjects }: { initialProjects: SynaroProjectCardModel[] }) {
   return <ProjectsPageClient initialProjects={initialProjects} />;

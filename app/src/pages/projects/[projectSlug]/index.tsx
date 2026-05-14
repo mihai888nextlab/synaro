@@ -9,7 +9,7 @@ import {
   parseEnvironmentStatusFromService,
 } from "@/lib/environment-service-live";
 import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
+import { authOptions } from "@/lib/next-auth-options";
 
 type ProjectWorkspacePageProps = {
   projectId: string;

@@ -10,12 +10,27 @@ import { formatShortRelativeTime } from "@/lib/relative-time";
 const ICON_CYCLE: SynaroProjectCardIconKey[] = ["brain", "zap", "sparkles"];
 
 function stackLine(row: Project): string {
-  if (row.repositoryLocation?.startsWith("http")) {
+  const loc = row.repositoryLocation;
+  if (loc?.startsWith("http")) {
     try {
-      const u = new URL(row.repositoryLocation);
-      return `Preview ${u.host}`;
+      const u = new URL(loc);
+      if (u.hostname === "github.com" || u.hostname === "www.github.com") {
+        const p = u.pathname.replace(/^\/+|\/+$/g, "");
+        return p ? `GitHub · ${p}` : "GitHub";
+      }
+      return `Preview ${u.host}${u.port ? `:${u.port}` : ""}`;
     } catch {
       return "Preview URL";
+    }
+  }
+  const clone = row.cloneRepositoryUrl;
+  if (clone?.includes("github.com")) {
+    try {
+      const u = new URL(clone);
+      const p = u.pathname.replace(/^\/+|\/+$/g, "");
+      return p ? `GitHub · ${p}` : "GitHub";
+    } catch {
+      return "GitHub";
     }
   }
   return "Workspace";

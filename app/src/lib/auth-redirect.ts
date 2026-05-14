@@ -1,7 +1,7 @@
 import type { GetServerSidePropsContext, GetServerSidePropsResult } from "next";
 import { getServerSession } from "next-auth/next";
 
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
+import { authOptions } from "@/lib/next-auth-options";
 
 export async function requireAuth(
   ctx: GetServerSidePropsContext,

@@ -64,6 +64,14 @@ services:
       dockerfile: Dockerfile.dev
     container_name: synaro-environment-service
     restart: unless-stopped
+    # Prisma schema is bind-mounted; client in node_modules must be regenerated on each start.
+    # Do not rely on image-baked package.json "dev" script — recreate container after compose changes.
+    command:
+      [
+        'sh',
+        '-c',
+        'npx prisma migrate deploy && npx prisma generate && exec npx tsx watch src/index.ts',
+      ]
     ports:
       - '3004:3002'
     environment:
@@ -75,6 +83,8 @@ services:
     volumes:
       - ./services/environment-service/src:/app/src
       - ./services/environment-service/prisma:/app/prisma
+      - ./services/environment-service/package.json:/app/package.json
+      - ./services/environment-service/package-lock.json:/app/package-lock.json
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgresql-env:

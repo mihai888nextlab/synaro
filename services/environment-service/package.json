@@ -5,7 +5,8 @@
   "description": "Synaro Environment Service - manages Docker container lifecycle",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "postinstall": "prisma generate",
+    "dev": "prisma generate && tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "db:generate": "prisma generate",

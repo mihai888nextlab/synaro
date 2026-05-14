@@ -28,13 +28,13 @@ export async function fetchEnvironmentsForProject(projectId: string): Promise<Re
   return json as RemoteEnvironment[];
 }
 
-/** Prefer a live runtime row (newest RUNNING, else newest PROVISIONING). `rows` should be newest-first from the API. */
+/**
+ * Prefer the **newest** active runtime row (API returns environments `createdAt` desc).
+ * Previously we preferred any RUNNING over any PROVISIONING, which picked a **stale** older
+ * RUNNING container when a newer PROVISIONING clone existed — empty file tree while clone ran.
+ */
 export function pickActiveRuntimeEnvironment(rows: RemoteEnvironment[]): RemoteEnvironment | null {
-  const running = rows.filter((r) => r.status === "RUNNING");
-  if (running.length > 0) return running[0]!;
-  const provisioning = rows.filter((r) => r.status === "PROVISIONING");
-  if (provisioning.length > 0) return provisioning[0]!;
-  return null;
+  return rows.find((r) => r.status === "RUNNING" || r.status === "PROVISIONING") ?? null;
 }
 
 export async function remoteCreateEnvironment(
@@ -219,6 +219,18 @@ export async function remoteDestroyEnvironment(envId: string): Promise<void> {
   if (!res.ok && res.status !== 204) {
     const t = await res.text().catch(() => "");
     throw new Error(t || `Delete environment failed (${res.status})`);
+  }
+}
+
+/** Best-effort: remove every environment row for a project (Docker containers + DB rows in env service). */
+export async function destroyAllRemoteEnvironmentsForProject(projectId: string): Promise<void> {
+  const rows = await fetchEnvironmentsForProject(projectId);
+  for (const row of rows) {
+    try {
+      await remoteDestroyEnvironment(row.id);
+    } catch {
+      /* continue — still delete app project row */
+    }
   }
 }
 

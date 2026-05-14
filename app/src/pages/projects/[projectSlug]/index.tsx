@@ -8,17 +8,22 @@ import {
   latestEnvironmentSummariesByProjectId,
   parseEnvironmentStatusFromService,
 } from "@/lib/environment-service-live";
+import { whereProjectBySlugForUser } from "@/lib/project-access";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/next-auth-options";
 
 type ProjectWorkspacePageProps = {
   projectId: string;
   initialEnvironmentStatus: SynaroProjectEnvironmentStatus;
+  viewerIsOwner: boolean;
+  projectHasGitRemote: boolean;
 };
 
 export default function ProjectWorkspacePage({
   projectId,
   initialEnvironmentStatus,
+  viewerIsOwner,
+  projectHasGitRemote,
 }: ProjectWorkspacePageProps) {
   const router = useRouter();
   const raw = router.query.projectSlug;
@@ -37,7 +42,9 @@ export default function ProjectWorkspacePage({
     <ProjectWorkspace
       projectSlug={slug}
       projectId={projectId}
+      projectHasGitRemote={projectHasGitRemote}
       initialEnvironmentStatus={initialEnvironmentStatus}
+      canManageInvites={viewerIsOwner}
     />
   );
 }
@@ -55,8 +62,8 @@ export const getServerSideProps: GetServerSideProps<ProjectWorkspacePageProps> =
   }
 
   const project = await prisma.project.findFirst({
-    where: { slug, userId: session.user.id },
-    select: { id: true, environmentStatus: true },
+    where: whereProjectBySlugForUser(slug, session.user.id),
+    select: { id: true, environmentStatus: true, userId: true, cloneRepositoryUrl: true },
   });
   if (!project) {
     return { notFound: true };
@@ -71,6 +78,8 @@ export const getServerSideProps: GetServerSideProps<ProjectWorkspacePageProps> =
     props: {
       projectId: project.id,
       initialEnvironmentStatus: environmentStatus,
+      viewerIsOwner: project.userId === session.user.id,
+      projectHasGitRemote: Boolean(project.cloneRepositoryUrl?.trim()),
     },
   };
 };

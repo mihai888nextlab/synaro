@@ -46,9 +46,13 @@ function stackFromDockerImage(image: string): string {
 }
 
 /** Maps a Prisma `Project` row to the card grid model (JSON-serializable). */
-export function projectRowToCardModel(row: Project, index: number): SynaroProjectCardModel {
+export function projectRowToCardModel(
+  row: Project,
+  index: number,
+  opts?: { viewerUserId?: string },
+): SynaroProjectCardModel {
   const icon = ICON_CYCLE[Math.abs(index) % ICON_CYCLE.length]!;
-  return {
+  const model: SynaroProjectCardModel = {
     id: row.id,
     slug: row.slug,
     title: row.name,
@@ -58,6 +62,10 @@ export function projectRowToCardModel(row: Project, index: number): SynaroProjec
     environmentStatus: row.environmentStatus as SynaroProjectEnvironmentStatus,
     icon,
   };
+  if (opts?.viewerUserId != null) {
+    model.viewerCanDelete = row.userId === opts.viewerUserId;
+  }
+  return model;
 }
 
 /** Card model with optional stack line derived from the chosen Docker image (new project flow). */
@@ -65,8 +73,9 @@ export function projectRowToCardModelWithStack(
   row: Project,
   index: number,
   dockerImage?: string | null,
+  opts?: { viewerUserId?: string },
 ): SynaroProjectCardModel {
-  const base = projectRowToCardModel(row, index);
+  const base = projectRowToCardModel(row, index, opts);
   if (!dockerImage) return base;
   return { ...base, stack: stackFromDockerImage(dockerImage) };
 }

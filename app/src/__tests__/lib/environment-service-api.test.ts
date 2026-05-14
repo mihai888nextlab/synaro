@@ -24,6 +24,14 @@ describe("pickActiveRuntimeEnvironment", () => {
     expect(pickActiveRuntimeEnvironment(rows)?.id).toBe("p1");
   });
 
+  it("prefers the newest list row when both PROVISIONING and older RUNNING exist (avoid stale container)", () => {
+    const rows: RemoteEnvironment[] = [
+      { id: "new-prov", projectId: "p", status: "PROVISIONING", port: null, containerId: null },
+      { id: "old-run", projectId: "p", status: "RUNNING", port: 1, containerId: "x" },
+    ];
+    expect(pickActiveRuntimeEnvironment(rows)?.id).toBe("new-prov");
+  });
+
   it("returns null when fleet is idle (STOPPED/ERROR only)", () => {
     const rows: RemoteEnvironment[] = [
       { id: "a", projectId: "p", status: "STOPPED", port: null, containerId: null },

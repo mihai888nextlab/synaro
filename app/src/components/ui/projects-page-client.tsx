@@ -3,7 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { Github, Loader2, Upload, X } from "lucide-react";
+import { getProviders, signIn } from "next-auth/react";
+import { ChevronDown, Github, Loader2, Upload, X } from "lucide-react";
 
 import {
   SynaroProjectsCardsGrid,
@@ -17,9 +18,16 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { PROJECT_DOCKER_IMAGE_OPTIONS } from "@/lib/project-docker-images";
 import { defaultProjectNameFromGithubUrl, normalizeGithubRepoUrl } from "@/lib/github-repo-url";
+import { defaultFolderImportName } from "@/lib/import-folder-paths";
 import { cn } from "@/lib/utils";
 
 type GithubRepoRow = {
@@ -32,9 +40,105 @@ type GithubRepoRow = {
 };
 
 type TabKey = "create" | "import";
-type GithubImportSource = "url" | "repos";
 
-export function ProjectsPageClient({ initialProjects }: { initialProjects: SynaroProjectCardModel[] }) {
+type LocalImportEntry = { file: File; relativePath: string };
+
+function readAllDirectoryEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
+  return new Promise((resolve, reject) => {
+    const acc: FileSystemEntry[] = [];
+    const read = () => {
+      reader.readEntries((batch) => {
+        if (batch.length === 0) resolve(acc);
+        else {
+          acc.push(...batch);
+          read();
+        }
+      }, reject);
+    };
+    read();
+  });
+}
+
+async function walkDirectoryEntry(
+  dir: FileSystemDirectoryEntry,
+  prefix: string,
+  out: LocalImportEntry[],
+): Promise<void> {
+  const reader = dir.createReader();
+  const entries = await readAllDirectoryEntries(reader);
+  for (const e of entries) {
+    const rel = prefix ? `${prefix}/${e.name}` : e.name;
+    if (e.isFile) {
+      await new Promise<void>((resolve) => {
+        (e as FileSystemFileEntry).file(
+          (f) => {
+            out.push({ file: f, relativePath: rel });
+            resolve();
+          },
+          () => resolve(),
+        );
+      });
+    } else if (e.isDirectory) {
+      await walkDirectoryEntry(e as FileSystemDirectoryEntry, rel, out);
+    }
+  }
+}
+
+async function collectLocalImportEntries(dt: DataTransfer): Promise<LocalImportEntry[]> {
+  const items = dt.items;
+  if (!items || items.length === 0) {
+    return Array.from(dt.files ?? []).map((file) => ({
+      file,
+      relativePath: (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name,
+    }));
+  }
+  const out: LocalImportEntry[] = [];
+  const tasks: Promise<void>[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (!item || item.kind !== "file") continue;
+    const entry = typeof item.webkitGetAsEntry === "function" ? item.webkitGetAsEntry() : null;
+    if (entry?.isDirectory) {
+      const dir = entry as FileSystemDirectoryEntry;
+      tasks.push(walkDirectoryEntry(dir, dir.name, out));
+    } else if (entry?.isFile) {
+      tasks.push(
+        new Promise((resolve) => {
+          (entry as FileSystemFileEntry).file(
+            (f) => {
+              out.push({ file: f, relativePath: f.name });
+              resolve();
+            },
+            () => resolve(),
+          );
+        }),
+      );
+    } else {
+      const f = item.getAsFile();
+      if (f) {
+        out.push({
+          file: f,
+          relativePath: (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name,
+        });
+      }
+    }
+  }
+  await Promise.all(tasks);
+  const byPath = new Map<string, LocalImportEntry>();
+  for (const e of out) {
+    const k = e.relativePath.replace(/\\/g, "/");
+    byPath.set(k, { file: e.file, relativePath: k });
+  }
+  return [...byPath.values()];
+}
+
+export function ProjectsPageClient({
+  initialProjects,
+  linkedGithub,
+}: {
+  initialProjects: SynaroProjectCardModel[];
+  linkedGithub: boolean;
+}) {
   const router = useRouter();
   const [projects, setProjects] = React.useState<SynaroProjectCardModel[]>(initialProjects);
   const [open, setOpen] = React.useState(false);
@@ -44,9 +148,8 @@ export function ProjectsPageClient({ initialProjects }: { initialProjects: Synar
   const [description, setDescription] = React.useState("");
   const [dockerImage, setDockerImage] = React.useState<string>(PROJECT_DOCKER_IMAGE_OPTIONS[0].value);
 
-  const [importFiles, setImportFiles] = React.useState<File[]>([]);
+  const [importEntries, setImportEntries] = React.useState<LocalImportEntry[]>([]);
   const [githubUrl, setGithubUrl] = React.useState("");
-  const [githubImportSource, setGithubImportSource] = React.useState<GithubImportSource>("url");
   const [githubRepos, setGithubRepos] = React.useState<GithubRepoRow[]>([]);
   const [githubReposLoading, setGithubReposLoading] = React.useState(false);
   const [githubReposError, setGithubReposError] = React.useState<string | null>(null);
@@ -54,15 +157,27 @@ export function ProjectsPageClient({ initialProjects }: { initialProjects: Synar
   const [githubReposPage, setGithubReposPage] = React.useState(1);
   const [githubReposHasMore, setGithubReposHasMore] = React.useState(false);
   const [dragActive, setDragActive] = React.useState(false);
-  const [importProjectName, setImportProjectName] = React.useState("");
+  /** GitHub repo list opens in a dropdown from “My repositories”. */
+  const [githubReposMenuOpen, setGithubReposMenuOpen] = React.useState(false);
+  const [githubConnectBusy, setGithubConnectBusy] = React.useState(false);
+  const [githubConnectMessage, setGithubConnectMessage] = React.useState<string | null>(null);
 
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
   /** Shown after a successful create when the Docker / environment-service step did not complete. */
   const [postCreateNotice, setPostCreateNotice] = React.useState<string | null>(null);
   const [dockerBusyId, setDockerBusyId] = React.useState<string | null>(null);
 
   const folderInputRef = React.useRef<HTMLInputElement>(null);
+  /** Mirrors latest `projects` for optimistic delete revert without stale closures. */
+  const projectsRef = React.useRef(initialProjects);
+  /** DELETE in flight — hide these from periodic refresh until the request finishes (avoids “card comes back”). */
+  const deleteInFlightRef = React.useRef<Set<string>>(new Set());
+
+  React.useEffect(() => {
+    projectsRef.current = projects;
+  }, [projects]);
 
   React.useEffect(() => {
     setProjects(initialProjects);
@@ -76,7 +191,14 @@ export function ProjectsPageClient({ initialProjects }: { initialProjects: Synar
         const res = await fetch("/api/projects");
         if (!res.ok || cancelled) return;
         const body = (await res.json()) as { projects?: SynaroProjectCardModel[] };
-        if (body.projects && !cancelled) setProjects(body.projects);
+        if (body.projects && !cancelled) {
+          const hidden = deleteInFlightRef.current;
+          setProjects(
+            hidden.size === 0
+              ? body.projects
+              : body.projects.filter((p) => !hidden.has(p.id)),
+          );
+        }
       } catch {
         /* ignore */
       }
@@ -89,26 +211,59 @@ export function ProjectsPageClient({ initialProjects }: { initialProjects: Synar
     };
   }, []);
 
-  React.useEffect(() => {
-    const el = folderInputRef.current;
-    if (!el) return;
-    el.setAttribute("webkitdirectory", "");
-    el.setAttribute("directory", "");
+  const handleProjectDelete = React.useCallback(async (projectId: string) => {
+    setDeleteError(null);
+    const snapshot = [...projectsRef.current];
+    deleteInFlightRef.current.add(projectId);
+    setProjects((prev) => prev.filter((p) => p.id !== projectId));
+
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, { method: "DELETE" });
+      deleteInFlightRef.current.delete(projectId);
+      if (res.status === 204 || res.status === 404) {
+        return;
+      }
+      setProjects(snapshot);
+      const raw = await res.text();
+      let message = `Could not delete project (${res.status}).`;
+      if (raw) {
+        try {
+          const body = JSON.parse(raw) as { error?: string; detail?: string };
+          const parts = [body.error, body.detail].filter(
+            (s): s is string => typeof s === "string" && s.length > 0,
+          );
+          if (parts.length > 0) message = parts.join(" — ");
+        } catch {
+          /* keep default message */
+        }
+      }
+      setDeleteError(message);
+    } catch (err) {
+      deleteInFlightRef.current.delete(projectId);
+      setProjects(snapshot);
+      const msg = err instanceof Error ? err.message : String(err);
+      setDeleteError(
+        /failed to fetch|fetch failed|networkerror/i.test(msg)
+          ? "Could not reach the app while deleting. Check your connection and try again."
+          : msg || "Delete failed.",
+      );
+    }
   }, []);
 
   function resetForms() {
     setTitle("");
     setDescription("");
     setDockerImage(PROJECT_DOCKER_IMAGE_OPTIONS[0].value);
-    setImportFiles([]);
+    setImportEntries([]);
     setGithubUrl("");
-    setGithubImportSource("url");
     setGithubRepos([]);
     setGithubReposError(null);
     setGithubReposHint(null);
     setGithubReposPage(1);
     setGithubReposHasMore(false);
-    setImportProjectName("");
+    setGithubReposMenuOpen(false);
+    setGithubConnectMessage(null);
+    setGithubConnectBusy(false);
     setTab("create");
     setSubmitError(null);
   }
@@ -189,6 +344,83 @@ export function ProjectsPageClient({ initialProjects }: { initialProjects: Synar
     }
   }
 
+  async function submitFolderImportToApi() {
+    const paths = importEntries.map((e) => e.relativePath);
+    const name = defaultFolderImportName(paths.length > 0 ? paths : ["imported-project"]);
+    const trimmedDesc = description.trim();
+
+    setSubmitting(true);
+    setSubmitError(null);
+    setPostCreateNotice(null);
+    try {
+      const fd = new FormData();
+      fd.append("name", name);
+      if (trimmedDesc) fd.append("description", trimmedDesc);
+      fd.append("dockerImage", dockerImage);
+      for (const { file, relativePath } of importEntries) {
+        fd.append("files", file, relativePath.replace(/\\/g, "/"));
+      }
+
+      const res = await fetch("/api/projects/import-folder", {
+        method: "POST",
+        body: fd,
+      });
+
+      const raw = await res.text();
+      let data: {
+        error?: string;
+        detail?: string;
+        hint?: string;
+        project?: SynaroProjectCardModel;
+        environmentWarning?: string;
+      } = {};
+      if (raw) {
+        try {
+          data = JSON.parse(raw) as typeof data;
+        } catch {
+          setSubmitError(`Unexpected response (${res.status}). Try again.`);
+          return;
+        }
+      }
+
+      if (!res.ok) {
+        const parts = [data.error, data.detail, data.hint].filter(
+          (s): s is string => typeof s === "string" && s.length > 0,
+        );
+        setSubmitError(parts.join(" — ") || `Request failed (${res.status})`);
+        return;
+      }
+
+      if (!data.project) {
+        setSubmitError("Unexpected response from server.");
+        return;
+      }
+
+      setProjects((prev) => {
+        const rest = prev.filter((p) => p.id !== data.project!.id);
+        return [data.project!, ...rest];
+      });
+
+      if (data.environmentWarning) {
+        setPostCreateNotice(data.environmentWarning);
+        handleOpenChange(false);
+        return;
+      }
+
+      handleOpenChange(false);
+      await router.push(`/projects/${encodeURIComponent(data.project.slug)}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSubmitError(
+        /failed to fetch|fetch failed|networkerror/i.test(msg)
+          ? "Could not reach the app (network error). Check that Next.js is running and try again."
+          : msg || "Something went wrong — try again.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleCreateSubmit(e: React.FormEvent) {
     e.preventDefault();
     await submitProjectToApi({
@@ -206,7 +438,7 @@ export function ProjectsPageClient({ initialProjects }: { initialProjects: Synar
         setSubmitError("Enter a valid GitHub repository URL (https://github.com/owner/repo).");
         return;
       }
-      const name = importProjectName.trim() || defaultProjectNameFromGithubUrl(normalized);
+      const name = defaultProjectNameFromGithubUrl(normalized);
       await submitProjectToApi({
         name,
         description: description.trim() || undefined,
@@ -215,15 +447,21 @@ export function ProjectsPageClient({ initialProjects }: { initialProjects: Synar
       });
       return;
     }
-    if (importFiles.length > 0) {
-      handleOpenChange(false);
+    if (importEntries.length > 0) {
+      await submitFolderImportToApi();
+      return;
     }
   }
 
   function handleFolderInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const list = e.target.files;
     if (!list?.length) return;
-    setImportFiles(Array.from(list));
+    setImportEntries(
+      Array.from(list).map((file) => ({
+        file,
+        relativePath: (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name,
+      })),
+    );
     e.target.value = "";
   }
 
@@ -258,17 +496,43 @@ export function ProjectsPageClient({ initialProjects }: { initialProjects: Synar
     }
   }, []);
 
-  function handleSelectGithubRepo(repo: GithubRepoRow) {
-    setGithubUrl(repo.htmlUrl);
-    setGithubImportSource("url");
-    const n = normalizeGithubRepoUrl(repo.htmlUrl);
-    if (n) setImportProjectName(defaultProjectNameFromGithubUrl(n));
+  async function handleConnectGithubFromProjects() {
+    setGithubConnectMessage(null);
+    setGithubConnectBusy(true);
+    try {
+      const providers = await getProviders();
+      if (!providers?.github) {
+        setGithubConnectMessage(
+          "GitHub OAuth is not configured. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET, then restart the server.",
+        );
+        return;
+      }
+      await signIn("github", { callbackUrl: "/projects" });
+    } catch {
+      setGithubConnectMessage("Could not start GitHub sign-in.");
+    } finally {
+      setGithubConnectBusy(false);
+    }
   }
 
-  function onDrop(e: React.DragEvent) {
+  React.useEffect(() => {
+    if (tab !== "import") setGithubReposMenuOpen(false);
+  }, [tab]);
+
+  function handleSelectGithubRepo(repo: GithubRepoRow) {
+    setGithubUrl(repo.htmlUrl);
+    setGithubReposMenuOpen(false);
+  }
+
+  async function onDrop(e: React.DragEvent) {
+    e.preventDefault();
     setDragActive(false);
-    const files = Array.from(e.dataTransfer.files ?? []);
-    if (files.length) setImportFiles(files);
+    try {
+      const entries = await collectLocalImportEntries(e.dataTransfer);
+      if (entries.length) setImportEntries(entries);
+    } catch {
+      setSubmitError("Could not read the dropped folder. Try choosing it with the file picker instead.");
+    }
   }
 
   const handleDockerClick = React.useCallback(async (projectId: string, action: "start" | "stop") => {
@@ -327,6 +591,15 @@ export function ProjectsPageClient({ initialProjects }: { initialProjects: Synar
           </p>
         ) : null}
 
+        {deleteError ? (
+          <p
+            role="alert"
+            className="mb-4 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          >
+            {deleteError}
+          </p>
+        ) : null}
+
         <SynaroProjectsCardsGrid
           projects={projects}
           showNewProject
@@ -334,9 +607,12 @@ export function ProjectsPageClient({ initialProjects }: { initialProjects: Synar
           dockerInteractive
           dockerBusyId={dockerBusyId}
           onDockerClick={handleDockerClick}
+          cardMoreMenu
+          onProjectDelete={handleProjectDelete}
           onNewProjectClick={() => {
             setTab("create");
             setSubmitError(null);
+            setDeleteError(null);
             setPostCreateNotice(null);
             handleOpenChange(true);
           }}
@@ -495,7 +771,7 @@ export function ProjectsPageClient({ initialProjects }: { initialProjects: Synar
                 </div>
               </form>
             ) : (
-              <div className="flex flex-col gap-4 px-4 py-4 sm:px-5 sm:py-5">
+              <div className="flex flex-col gap-5 px-4 py-4 sm:px-5 sm:py-5">
                 {submitError && tab === "import" ? (
                   <p role="alert" className="text-sm text-destructive">
                     {submitError}
@@ -506,237 +782,217 @@ export function ProjectsPageClient({ initialProjects }: { initialProjects: Synar
                   type="file"
                   className="sr-only"
                   multiple
+                  {...({ webkitdirectory: "", mozdirectory: "" } as Record<string, string>)}
                   onChange={handleFolderInputChange}
                 />
 
-                <button
-                  type="button"
-                  onDragEnter={(e) => {
-                    e.preventDefault();
-                    setDragActive(true);
-                  }}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setDragActive(true);
-                  }}
-                  onDragLeave={(e) => {
-                    e.preventDefault();
-                    if (e.currentTarget === e.target) setDragActive(false);
-                  }}
-                  onDrop={onDrop}
-                  onClick={() => folderInputRef.current?.click()}
-                  className={cn(
-                    "flex min-h-[11rem] cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed px-4 py-8 text-center transition",
-                    dragActive
-                      ? "border-foreground/30 bg-muted/50"
-                      : "border-border/70 bg-muted/20 hover:border-border hover:bg-muted/35",
-                  )}
-                >
-                  <div className="flex size-12 items-center justify-center rounded-xl border border-border/70 bg-card text-muted-foreground">
-                    <Upload className="size-5" />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <p className="text-sm font-medium text-foreground">Drop a folder here</p>
-                    <p className="text-xs text-muted-foreground">
-                      Or click to choose a folder from Finder. Nested files are included when your browser allows it.
-                    </p>
-                  </div>
-                </button>
-
-                {importFiles.length > 0 ? (
-                  <p className="text-center text-xs text-muted-foreground">
-                    {importFiles.length} file{importFiles.length === 1 ? "" : "s"} selected
-                  </p>
-                ) : null}
-
-                <div className="flex flex-col gap-3">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">
-                    GitHub
-                  </p>
-                  <div
-                    role="tablist"
-                    aria-label="GitHub import source"
-                    className="flex gap-1 rounded-xl border border-border/70 bg-muted/40 p-1"
+                <section className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onDragEnter={(e) => {
+                      e.preventDefault();
+                      setDragActive(true);
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragActive(true);
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      if (e.currentTarget === e.target) setDragActive(false);
+                    }}
+                    onDrop={onDrop}
+                    onClick={() => folderInputRef.current?.click()}
+                    className={cn(
+                      "flex min-h-[11rem] cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed px-4 py-8 text-center transition",
+                      dragActive
+                        ? "border-foreground/30 bg-muted/50"
+                        : "border-border/70 bg-muted/20 hover:border-border hover:bg-muted/35",
+                    )}
                   >
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={githubImportSource === "url"}
-                      onClick={() => setGithubImportSource("url")}
-                      className={cn(
-                        "flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition sm:text-sm",
-                        githubImportSource === "url"
-                          ? "bg-card text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      Repo link
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={githubImportSource === "repos"}
-                      onClick={() => {
-                        setGithubImportSource("repos");
-                        void fetchGithubRepos(1, false);
-                      }}
-                      className={cn(
-                        "flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition sm:text-sm",
-                        githubImportSource === "repos"
-                          ? "bg-card text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      My repositories
-                    </button>
-                  </div>
-
-                  {githubImportSource === "url" ? (
-                    <div className="flex flex-col gap-2">
-                      <Input
-                        value={githubUrl}
-                        onChange={(e) => setGithubUrl(e.target.value)}
-                        onBlur={() => {
-                          const n = normalizeGithubRepoUrl(githubUrl);
-                          if (!n) return;
-                          setImportProjectName((prev) =>
-                            prev.trim() === "" ? defaultProjectNameFromGithubUrl(n) : prev,
-                          );
-                        }}
-                        placeholder="https://github.com/org/repo"
-                        type="url"
-                        inputMode="url"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Paste a repository URL. To pick from repos you own or collaborate on, use{" "}
-                        <span className="font-medium text-foreground">My repositories</span> (requires{" "}
-                        <Link
-                          href="/settings/profile"
-                          className="text-primary underline-offset-2 hover:underline"
-                        >
-                          GitHub connected
-                        </Link>
-                        ).
-                      </p>
+                    <div className="flex size-12 items-center justify-center rounded-xl border border-border/70 bg-card text-muted-foreground">
+                      <Upload className="size-5" />
                     </div>
-                  ) : (
-                    <div className="flex min-h-[10rem] flex-col gap-2">
-                      {githubReposLoading && githubRepos.length === 0 ? (
-                        <div className="flex flex-1 items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-                          <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
-                          Loading your repositories…
-                        </div>
-                      ) : null}
-                      {githubReposError ? (
-                        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                          <p>{githubReposError}</p>
-                          {githubReposHint ? (
-                            <p className="mt-1 text-xs text-muted-foreground">{githubReposHint}</p>
-                          ) : null}
-                          <p className="mt-2 text-xs">
-                            <Link
-                              href="/settings/profile"
-                              className="font-medium text-primary underline-offset-2 hover:underline"
-                            >
-                              Open profile settings
-                            </Link>
-                          </p>
-                        </div>
-                      ) : null}
-                      {!githubReposLoading && !githubReposError && githubRepos.length === 0 ? (
-                        <p className="py-6 text-center text-sm text-muted-foreground">
-                          No repositories in this page. Try{" "}
-                          <button
-                            type="button"
-                            className="text-primary underline-offset-2 hover:underline"
-                            onClick={() => void fetchGithubRepos(1, false)}
-                          >
-                            refresh
-                          </button>
-                          .
+                    <div className="flex flex-col items-center gap-1">
+                      <p className="text-sm font-medium text-foreground">Drop a folder here</p>
+                    </div>
+                  </button>
+                  {importEntries.length > 0 ? (
+                    <p className="text-center text-xs text-muted-foreground">
+                      {importEntries.length} file{importEntries.length === 1 ? "" : "s"} ready to import.
+                    </p>
+                  ) : null}
+                </section>
+
+                <section className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/15 p-4">
+                  <h3 className="text-sm font-semibold text-foreground">GitHub</h3>
+
+                  {!linkedGithub ? (
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full rounded-xl border-border/70 sm:w-[min(100%,20rem)]"
+                        disabled={submitting || githubConnectBusy}
+                        onClick={() => void handleConnectGithubFromProjects()}
+                      >
+                        {githubConnectBusy ? "Redirecting…" : "Connect GitHub"}
+                      </Button>
+                      {githubConnectMessage ? (
+                        <p role="alert" className="text-sm text-destructive">
+                          {githubConnectMessage}
                         </p>
                       ) : null}
-                      {githubRepos.length > 0 ? (
-                        <ul className="max-h-[min(40vh,17rem)] space-y-0.5 overflow-y-auto rounded-xl border border-border/60 bg-muted/20 p-1">
-                          {githubRepos.map((repo) => (
-                            <li key={`${repo.id}-${repo.fullName}`}>
-                              <button
-                                type="button"
-                                onClick={() => handleSelectGithubRepo(repo)}
-                                className="flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left text-sm transition hover:bg-muted"
-                              >
-                                <Github className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
-                                <span className="min-w-0 flex-1">
-                                  <span className="font-medium text-foreground">{repo.fullName}</span>
-                                  {repo.private ? (
-                                    <span className="ms-2 align-middle rounded-md border border-border/80 px-1 py-px text-[0.65rem] uppercase tracking-wide text-muted-foreground">
-                                      Private
-                                    </span>
-                                  ) : null}
-                                  {repo.description ? (
-                                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                                      {repo.description}
-                                    </span>
-                                  ) : null}
-                                </span>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                      {githubRepos.length > 0 && githubReposHasMore ? (
+                    </div>
+                  ) : (
+                    <DropdownMenu
+                      modal={false}
+                      open={githubReposMenuOpen}
+                      onOpenChange={(next) => {
+                        setGithubReposMenuOpen(next);
+                        if (next) void fetchGithubRepos(1, false);
+                      }}
+                    >
+                      <DropdownMenuTrigger asChild>
                         <Button
                           type="button"
                           variant="outline"
-                          size="sm"
-                          className="w-full rounded-lg border-border/70"
-                          disabled={githubReposLoading}
-                          onClick={() => void fetchGithubRepos(githubReposPage + 1, true)}
+                          className="w-full justify-between rounded-xl border-border/70 sm:w-[min(100%,20rem)]"
+                          disabled={submitting}
+                          aria-expanded={githubReposMenuOpen}
                         >
-                          {githubReposLoading ? (
-                            <>
-                              <Loader2 className="me-2 size-4 shrink-0 animate-spin" aria-hidden />
-                              Loading…
-                            </>
-                          ) : (
-                            "Load more"
-                          )}
+                          <span>My repositories</span>
+                          <ChevronDown
+                            className={cn(
+                              "size-4 shrink-0 text-muted-foreground transition-transform",
+                              githubReposMenuOpen && "rotate-180",
+                            )}
+                            aria-hidden
+                          />
                         </Button>
-                      ) : null}
-                      {githubRepos.length > 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                          Click a row to copy its URL into the repo link field.
-                        </p>
-                      ) : null}
-                    </div>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="start"
+                        sideOffset={6}
+                        className="z-[10000] w-[min(22rem,calc(100vw-2rem))] rounded-xl border-border/70 p-0"
+                        onCloseAutoFocus={(e) => e.preventDefault()}
+                        onWheel={(e) => {
+                          e.stopPropagation();
+                        }}
+                      >
+                        <div
+                          className="max-h-[min(60vh,22rem)] overflow-y-auto overscroll-y-contain p-1 touch-pan-y"
+                          onWheel={(e) => {
+                            e.stopPropagation();
+                          }}
+                        >
+                        {githubReposLoading && githubRepos.length === 0 ? (
+                          <div className="flex items-center justify-center gap-2 px-3 py-8 text-sm text-muted-foreground">
+                            <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                            Loading…
+                          </div>
+                        ) : null}
+                        {githubReposError ? (
+                          <>
+                            <div className="space-y-2 px-3 py-3 text-sm text-destructive">
+                              <p>{githubReposError}</p>
+                              {githubReposHint ? (
+                                <p className="text-xs text-muted-foreground">{githubReposHint}</p>
+                              ) : null}
+                              <Link
+                                href="/settings/profile"
+                                className="inline-block text-xs font-medium text-primary underline-offset-2 hover:underline"
+                              >
+                                Open profile settings
+                              </Link>
+                            </div>
+                            <DropdownMenuItem
+                              className="cursor-pointer justify-center text-center text-primary"
+                              onSelect={(e) => {
+                                e.preventDefault();
+                                void fetchGithubRepos(1, false);
+                              }}
+                            >
+                              Try again
+                            </DropdownMenuItem>
+                          </>
+                        ) : null}
+                        {!githubReposLoading && !githubReposError && githubRepos.length === 0 ? (
+                          <>
+                            <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                              No repositories in this page.
+                            </div>
+                            <DropdownMenuItem
+                              className="cursor-pointer justify-center text-center text-primary"
+                              onSelect={(e) => {
+                                e.preventDefault();
+                                void fetchGithubRepos(1, false);
+                              }}
+                            >
+                              Try again
+                            </DropdownMenuItem>
+                          </>
+                        ) : null}
+                        {githubRepos.map((repo) => (
+                          <DropdownMenuItem
+                            key={`${repo.id}-${repo.fullName}`}
+                            className={cn(
+                              "cursor-pointer rounded-lg px-2 py-2 focus:bg-muted",
+                              githubUrl.trim() === repo.htmlUrl.trim() && "bg-muted",
+                            )}
+                            onSelect={() => handleSelectGithubRepo(repo)}
+                          >
+                            <div className="flex w-full items-start gap-2">
+                              <Github className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+                              <span className="min-w-0 flex-1 text-left">
+                                <span className="font-medium text-foreground">{repo.fullName}</span>
+                                {repo.private ? (
+                                  <span className="ms-2 align-middle rounded-md border border-border/80 px-1 py-px text-[0.65rem] uppercase tracking-wide text-muted-foreground">
+                                    Private
+                                  </span>
+                                ) : null}
+                                {repo.description ? (
+                                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                                    {repo.description}
+                                  </span>
+                                ) : null}
+                              </span>
+                            </div>
+                          </DropdownMenuItem>
+                        ))}
+                        {githubRepos.length > 0 && githubReposHasMore ? (
+                          <DropdownMenuItem
+                            className="cursor-pointer justify-center text-muted-foreground"
+                            disabled={githubReposLoading}
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              void fetchGithubRepos(githubReposPage + 1, true);
+                            }}
+                          >
+                            {githubReposLoading ? (
+                              <span className="inline-flex items-center gap-2">
+                                <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                                Loading…
+                              </span>
+                            ) : (
+                              "Load more"
+                            )}
+                          </DropdownMenuItem>
+                        ) : null}
+                        </div>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
 
                   {githubUrl.trim() ? (
-                    <p className="truncate rounded-lg border border-border/50 bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground">
+                    <p className="truncate rounded-lg border border-border/50 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
                       <span className="text-muted-foreground/80">Selected </span>
                       <span className="font-mono text-foreground" title={githubUrl.trim()}>
                         {githubUrl.trim()}
                       </span>
                     </p>
                   ) : null}
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <label
-                    htmlFor="import-project-name"
-                    className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80"
-                  >
-                    Project name
-                  </label>
-                  <Input
-                    id="import-project-name"
-                    value={importProjectName}
-                    onChange={(e) => setImportProjectName(e.target.value)}
-                    placeholder="Defaults to GitHub repo name (e.g. my-app)"
-                    disabled={submitting}
-                    autoComplete="off"
-                  />
-                </div>
+                </section>
 
                 <div className="flex flex-col gap-2">
                   <label
@@ -761,10 +1017,6 @@ export function ProjectsPageClient({ initialProjects }: { initialProjects: Synar
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-muted-foreground">
-                    The container installs Git, clones your repo into <span className="font-mono">/tmp/synaro-workspace/app</span>
-                    , then keeps running for your workspace.
-                  </p>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border/70 pt-4">
@@ -776,16 +1028,23 @@ export function ProjectsPageClient({ initialProjects }: { initialProjects: Synar
                   <Button
                     type="button"
                     className="rounded-full"
-                    disabled={submitting || (importFiles.length === 0 && !githubUrl.trim())}
+                    disabled={
+                      submitting ||
+                      (importEntries.length === 0 && !githubUrl.trim())
+                    }
                     onClick={() => void handleImportContinue()}
                   >
                     {submitting && githubUrl.trim()
                       ? "Importing…"
-                      : submitting
-                        ? "Working…"
-                        : githubUrl.trim()
-                          ? "Import project"
-                          : "Continue"}
+                      : submitting && importEntries.length > 0
+                        ? "Uploading…"
+                        : submitting
+                          ? "Working…"
+                          : githubUrl.trim()
+                            ? "Import project"
+                            : importEntries.length > 0
+                              ? "Import folder"
+                              : "Continue"}
                   </Button>
                 </div>
               </div>

@@ -18,6 +18,7 @@ function fileId(pathFromRoot: string): string {
 export function filePathsToTreeItems(
   paths: string[],
   rootLabel: string,
+  options?: { emptyHint?: string },
 ): Record<string, WorkspaceExplorerItem> {
   const rootId = "root";
   const normalized = [
@@ -101,7 +102,11 @@ export function filePathsToTreeItems(
 
   if (!items[rootId]?.children?.length) {
     const emptyId = "syn:empty-hint";
-    items[emptyId] = { name: "No files listed yet (clone may still be running)" };
+    items[emptyId] = {
+      name:
+        options?.emptyHint ??
+        "No files found yet — if a clone or upload just started, wait and refresh; otherwise this workspace may be empty.",
+    };
     items[rootId] = { name: rootLabel, children: [emptyId] };
   }
 

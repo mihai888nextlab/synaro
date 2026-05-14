@@ -52,11 +52,15 @@ interface SignInPageProps {
   footerActionLabel?: string;
   footerActionHref?: string;
   resetPasswordHref?: string;
-  onSignIn?: (event: React.FormEvent<HTMLFormElement>) => void;
+  onSignIn?: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void>;
   /** Post-auth destination (path on this origin), e.g. `/dashboard` */
   oauthCallbackUrl?: string;
   onResetPassword?: () => void;
   onCreateAccount?: () => void;
+  /** Shown under the form (e.g. API or sign-in errors). */
+  formError?: string | null;
+  /** Disables the primary submit button while the parent handles signup/sign-in. */
+  isSubmitting?: boolean;
 }
 
 const GlassInputWrapper = ({ children }: { children: React.ReactNode }) => (
@@ -125,6 +129,8 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   oauthCallbackUrl = "/dashboard",
   onResetPassword,
   onCreateAccount,
+  formError,
+  isSubmitting = false,
 }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
@@ -183,7 +189,19 @@ export const SignInPage: React.FC<SignInPageProps> = ({
             </h1>
             <p className="text-zinc-400">{description}</p>
 
-            <form className="space-y-5" onSubmit={onSignIn}>
+            {formError ? (
+              <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200" role="alert">
+                {formError}
+              </p>
+            ) : null}
+
+            <form
+              className="space-y-5"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void Promise.resolve(onSignIn?.(event));
+              }}
+            >
               {mode === "signup" && (
                 <div>
                   <FloatingField name="fullName" type="text" label="Full Name" />
@@ -260,9 +278,10 @@ export const SignInPage: React.FC<SignInPageProps> = ({
 
               <button
                 type="submit"
-                className="w-full rounded-2xl bg-white py-4 font-medium text-black transition-colors hover:bg-zinc-200"
+                disabled={isSubmitting}
+                className="w-full rounded-2xl bg-white py-4 font-medium text-black transition-colors hover:bg-zinc-200 disabled:pointer-events-none disabled:opacity-60"
               >
-                {submitLabel}
+                {isSubmitting ? "Please wait…" : submitLabel}
               </button>
             </form>
 

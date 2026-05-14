@@ -8,6 +8,8 @@ import {
 } from "@/lib/environment-service-api";
 import { getGithubAccessTokenForUser } from "@/lib/github-account";
 import { parseGithubOwnerRepo } from "@/lib/github-repo-url";
+import { applyDynamicApiNoCacheHeaders } from "@/lib/apply-dynamic-api-no-cache";
+import { whereProjectByIdForUser } from "@/lib/project-access";
 import { prisma } from "@/lib/prisma";
 import type {
   WorkspaceSelectionApiResponse,
@@ -143,6 +145,8 @@ export default async function handler(
     return;
   }
 
+  applyDynamicApiNoCacheHeaders(res);
+
   const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
   const path = typeof req.query.path === "string" ? req.query.path.trim() : "";
 
@@ -158,7 +162,7 @@ export default async function handler(
   }
 
   const project = await prisma.project.findFirst({
-    where: { id: projectId, userId: session.user.id },
+    where: whereProjectByIdForUser(projectId, session.user.id),
     select: { id: true, cloneRepositoryUrl: true },
   });
   if (!project) {

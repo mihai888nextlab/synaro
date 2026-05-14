@@ -71,7 +71,10 @@ describe("API GET /api/projects/[projectId]/workspace-selection", () => {
     expect(res.statusCode).toBe(404);
     expect(prisma.project.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "foreign-project", userId: "u1" },
+        where: expect.objectContaining({
+          id: "foreign-project",
+          OR: expect.any(Array) as unknown,
+        }),
       }),
     );
   });

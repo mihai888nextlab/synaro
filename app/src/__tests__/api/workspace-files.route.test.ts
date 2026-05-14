@@ -44,6 +44,7 @@ describe("API GET /api/projects/[projectId]/workspace-files", () => {
     await handler(req, res);
 
     expect(res.statusCode).toBe(200);
+    expect(res.getHeader("cache-control")).toMatch(/no-store/i);
     const body = JSON.parse(res._getData() as string);
     expect(body.reason).toBe("no_environment");
     expect(body.paths).toEqual([]);

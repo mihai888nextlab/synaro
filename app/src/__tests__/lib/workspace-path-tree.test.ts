@@ -33,7 +33,7 @@ describe("filePathsToTreeItems", () => {
   it("injects empty-repo hint when no file paths remain", () => {
     const items = filePathsToTreeItems([], "empty");
     expect(items.root?.children?.[0]).toBe("syn:empty-hint");
-    expect(items["syn:empty-hint"]?.name).toMatch(/No files listed/);
+    expect(items["syn:empty-hint"]?.name).toMatch(/No files found yet|No files yet/);
   });
 
   it("creates intermediate folders for deep paths (monorepo layout)", () => {

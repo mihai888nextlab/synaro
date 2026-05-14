@@ -7,6 +7,7 @@ import { AnimatedAIChat } from "@/components/ui/animated-ai-chat";
 import { Input } from "@/components/ui/input";
 import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { ProjectIframePreview } from "@/components/ui/project-iframe-preview";
+import { ProjectShareInvite } from "@/components/ui/project-share-invite";
 import {
   SynaroProjectDockerPill,
   type SynaroProjectCardModel,
@@ -69,10 +70,9 @@ function ArchitectureWorkflowDetails() {
         <p>
           <span className="font-medium text-foreground">environment-service</span> (port 3004) exposes{" "}
           <code className="rounded bg-muted px-1 py-px text-[0.65rem]">/api/environments</code> and talks to Docker.
-          Each project runtime is a <span className="font-medium text-foreground">separate</span> container — the
-          clone lives only in that container&apos;s filesystem at{" "}
-          <code className="rounded bg-muted px-1 py-px text-[0.65rem]">/tmp/synaro-workspace/app</code> (not one shared
-          volume for all repos). When a Git URL is set, the service clones there. The file tree is built from{" "}
+          Each project gets its own container; the workspace lives at{" "}
+          <code className="rounded bg-muted px-1 py-px text-[0.65rem]">/tmp/synaro-workspace/app</code>. When a Git URL
+          is set, the service clones there; folder uploads are written to the same path. The file tree is built from{" "}
           <code className="rounded bg-muted px-1 py-px text-[0.65rem]">GET /api/environments/:id/workspace-files</code>{" "}
           (Docker exec + <code className="rounded bg-muted px-1 py-px text-[0.65rem]">find</code>).
         </p>
@@ -95,6 +95,8 @@ function ArchitectureWorkflowDetails() {
 
 type LiveExplorerTreeProps = {
   projectId?: string;
+  /** When false, hide GitHub-only panels (Actions / PRs); uploads have no linked repo. */
+  projectHasGitRemote: boolean;
   environmentStatus: SynaroProjectEnvironmentStatus;
   items: Record<string, WorkspaceExplorerItem>;
   truncated: boolean;
@@ -107,7 +109,14 @@ function formatShortDate(iso: string): string {
   return s || "—";
 }
 
-function LiveExplorerTree({ projectId, environmentStatus, items, truncated, loadState }: LiveExplorerTreeProps) {
+function LiveExplorerTree({
+  projectId,
+  projectHasGitRemote,
+  environmentStatus,
+  items,
+  truncated,
+  loadState,
+}: LiveExplorerTreeProps) {
   const initialExpanded = React.useMemo(() => defaultExpandedItemIds(items), [items]);
 
   const tree = useTree<WorkspaceExplorerItem>({
@@ -172,7 +181,7 @@ function LiveExplorerTree({ projectId, environmentStatus, items, truncated, load
       try {
         const res = await fetch(
           `/api/projects/${encodeURIComponent(pid)}/workspace-selection?path=${encodeURIComponent(relPath)}`,
-          { signal: ac.signal },
+          { signal: ac.signal, cache: "no-store" },
         );
         const raw = await res.text();
         let data: WorkspaceSelectionApiResponse | { error?: string } = {};
@@ -222,7 +231,7 @@ function LiveExplorerTree({ projectId, environmentStatus, items, truncated, load
         <div className="min-h-0 overflow-hidden rounded-2xl border border-border bg-card">
           <div className="flex items-center justify-between gap-2 px-3 py-2">
             <p className="text-xs font-medium text-muted-foreground">
-              Cloned repository
+              Project files
               {loadState === "loading" ? (
                 <span className="ms-2 font-normal text-muted-foreground">· loading…</span>
               ) : null}
@@ -297,7 +306,12 @@ function LiveExplorerTree({ projectId, environmentStatus, items, truncated, load
           </div>
 
           <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr] gap-3 p-3 pt-0">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div
+              className={cn(
+                "grid grid-cols-1 gap-3",
+                projectHasGitRemote ? "sm:grid-cols-3" : "sm:grid-cols-1",
+              )}
+            >
               <div className="rounded-2xl bg-muted/40 p-3">
                 <p className="text-xs font-medium text-muted-foreground">Commits</p>
                 {detailLoading ? (
@@ -308,7 +322,11 @@ function LiveExplorerTree({ projectId, environmentStatus, items, truncated, load
                 ) : detailError ? (
                   <p className="mt-2 text-xs text-destructive">{detailError}</p>
                 ) : commitsToShow.length === 0 ? (
-                  <p className="mt-2 text-xs text-muted-foreground">No commit history for this path yet.</p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {projectHasGitRemote
+                      ? "No commit history for this path yet."
+                      : "No Git history — uploaded projects do not include a .git directory (only the files you imported)."}
+                  </p>
                 ) : (
                   <ul className="mt-2 max-h-32 space-y-2 overflow-auto text-xs">
                     {commitsToShow.slice(0, 5).map((c, i) => (
@@ -333,77 +351,91 @@ function LiveExplorerTree({ projectId, environmentStatus, items, truncated, load
                 )}
               </div>
 
-              <div className="rounded-2xl bg-muted/40 p-3">
-                <p className="text-xs font-medium text-muted-foreground">Last build</p>
-                {detailLoading ? (
-                  <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                    Loading…
-                  </div>
-                ) : detail?.github?.lastWorkflowRun ? (
-                  <div className="mt-2 space-y-1 text-xs">
-                    <p className="font-medium text-foreground">{detail.github.lastWorkflowRun.name}</p>
-                    <p className="text-muted-foreground">
-                      {detail.github.lastWorkflowRun.status}
-                      {detail.github.lastWorkflowRun.conclusion
-                        ? ` · ${detail.github.lastWorkflowRun.conclusion}`
-                        : ""}
-                    </p>
-                    <p className="text-[0.65rem] text-muted-foreground">
-                      {formatShortDate(detail.github.lastWorkflowRun.createdAt)}
-                    </p>
-                    <a
-                      href={detail.github.lastWorkflowRun.htmlUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-[0.65rem] text-primary hover:underline"
-                    >
-                      View run <ExternalLink className="size-3" />
-                    </a>
-                  </div>
-                ) : (
-                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    {detail?.github === undefined && projectId
-                      ? "Link GitHub in your account and set a GitHub clone URL on the project to see Actions runs."
-                      : "No recent workflow run returned for this repository."}
-                  </p>
-                )}
-              </div>
-
-              <div className="rounded-2xl bg-muted/40 p-3">
-                <p className="text-xs font-medium text-muted-foreground">Open PRs</p>
-                {detailLoading ? (
-                  <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                    Loading…
-                  </div>
-                ) : detail?.github?.openPullRequests && detail.github.openPullRequests.length > 0 ? (
-                  <ul className="mt-2 max-h-32 space-y-2 overflow-auto text-xs">
-                    {detail.github.openPullRequests.map((pr) => (
-                      <li key={pr.number}>
+              {projectHasGitRemote ? (
+                <>
+                  <div className="rounded-2xl bg-muted/40 p-3">
+                    <p className="text-xs font-medium text-muted-foreground">Last build</p>
+                    {detailLoading ? (
+                      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                        <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                        Loading…
+                      </div>
+                    ) : detail?.github?.lastWorkflowRun ? (
+                      <div className="mt-2 space-y-1 text-xs">
+                        <p className="font-medium text-foreground">{detail.github.lastWorkflowRun.name}</p>
+                        <p className="text-muted-foreground">
+                          {detail.github.lastWorkflowRun.status}
+                          {detail.github.lastWorkflowRun.conclusion
+                            ? ` · ${detail.github.lastWorkflowRun.conclusion}`
+                            : ""}
+                        </p>
+                        <p className="text-[0.65rem] text-muted-foreground">
+                          {formatShortDate(detail.github.lastWorkflowRun.createdAt)}
+                        </p>
                         <a
-                          href={pr.htmlUrl}
+                          href={detail.github.lastWorkflowRun.htmlUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="font-medium text-primary hover:underline"
+                          className="inline-flex items-center gap-1 text-[0.65rem] text-primary hover:underline"
                         >
-                          #{pr.number}
+                          View run <ExternalLink className="size-3" />
                         </a>
-                        <span className="ms-1 text-muted-foreground line-clamp-2">{pr.title}</span>
-                        <span className="mt-0.5 block text-[0.65rem] text-muted-foreground">
-                          Updated {formatShortDate(pr.updatedAt)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                        {detail?.github === undefined && projectId
+                          ? "Link GitHub in your account and set a GitHub clone URL on the project to see Actions runs."
+                          : "No recent workflow run returned for this repository."}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl bg-muted/40 p-3">
+                    <p className="text-xs font-medium text-muted-foreground">Open PRs</p>
+                    {detailLoading ? (
+                      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                        <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                        Loading…
+                      </div>
+                    ) : detail?.github?.openPullRequests && detail.github.openPullRequests.length > 0 ? (
+                      <ul className="mt-2 max-h-32 space-y-2 overflow-auto text-xs">
+                        {detail.github.openPullRequests.map((pr) => (
+                          <li key={pr.number}>
+                            <a
+                              href={pr.htmlUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-medium text-primary hover:underline"
+                            >
+                              #{pr.number}
+                            </a>
+                            <span className="ms-1 text-muted-foreground line-clamp-2">{pr.title}</span>
+                            <span className="mt-0.5 block text-[0.65rem] text-muted-foreground">
+                              Updated {formatShortDate(pr.updatedAt)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                        {detail?.github === undefined && projectId
+                          ? "Connect GitHub to list open pull requests for this repo."
+                          : "No open PRs returned (or none open right now)."}
+                      </p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-2xl border border-border/60 bg-muted/25 p-3">
+                  <p className="text-xs font-medium text-muted-foreground">GitHub Actions and pull requests</p>
                   <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    {detail?.github === undefined && projectId
-                      ? "Connect GitHub to list open pull requests for this repo."
-                      : "No open PRs returned (or none open right now)."}
+                    Shown only for projects created from a GitHub repository URL. This project is a{" "}
+                    <span className="font-medium text-foreground">folder upload</span> (no linked repo). Files still
+                    live in the same container workspace as a Git import:{" "}
+                    <code className="rounded bg-muted px-1 py-px text-[0.65rem]">/tmp/synaro-workspace/app</code>.
                   </p>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl bg-muted/30 p-3">
@@ -450,11 +482,12 @@ function LiveExplorerTree({ projectId, environmentStatus, items, truncated, load
 
 type TreePanelProps = {
   projectId?: string;
+  projectHasGitRemote: boolean;
   environmentStatus: SynaroProjectEnvironmentStatus;
   treeRefreshKey: number;
 };
 
-function TreePanel({ projectId, environmentStatus, treeRefreshKey }: TreePanelProps) {
+function TreePanel({ projectId, projectHasGitRemote, environmentStatus, treeRefreshKey }: TreePanelProps) {
   const [items, setItems] = React.useState<Record<string, WorkspaceExplorerItem>>(() =>
     placeholderTreeItems("Connect to a project to load the repository tree."),
   );
@@ -493,7 +526,9 @@ function TreePanel({ projectId, environmentStatus, treeRefreshKey }: TreePanelPr
         setLoadState("loading");
       }
       try {
-        const res = await fetch(`/api/projects/${encodeURIComponent(pid)}/workspace-files`);
+        const res = await fetch(`/api/projects/${encodeURIComponent(pid)}/workspace-files`, {
+          cache: "no-store",
+        });
         const raw = await res.text();
         let data: WorkspaceFilesResponse | { error?: string } = {};
         try {
@@ -525,6 +560,7 @@ function TreePanel({ projectId, environmentStatus, treeRefreshKey }: TreePanelPr
         }
 
         const wf = data as WorkspaceFilesResponse;
+        const hasGitRemote = Boolean(wf.hasGitRemote);
         if (wf.reason === "no_environment") {
           if (!cancelled) {
             setItems(
@@ -572,14 +608,23 @@ function TreePanel({ projectId, environmentStatus, treeRefreshKey }: TreePanelPr
           return;
         }
 
-        const next = filePathsToTreeItems(wf.paths, wf.rootLabel);
+        const next = filePathsToTreeItems(wf.paths, wf.rootLabel, {
+          emptyHint:
+            wf.paths.length === 0
+              ? hasGitRemote
+                ? "No files yet — Git clone may still be running, or this repo has no files under the workspace search paths."
+                : "No files yet — the workspace may still be syncing, or the folder/upload was empty."
+              : undefined,
+        });
         if (!cancelled) {
           setItems(next);
           setTruncated(wf.truncated);
           setLoadState("ready");
           bumpTreeKey();
         }
-        stopPoll();
+        if (wf.paths.length > 0) {
+          stopPoll();
+        }
       } catch {
         if (!cancelled) {
           setItems(placeholderTreeItems("Network error while loading the file tree."));
@@ -611,6 +656,7 @@ function TreePanel({ projectId, environmentStatus, treeRefreshKey }: TreePanelPr
       <LiveExplorerTree
         key={treeKey}
         projectId={projectId}
+        projectHasGitRemote={projectHasGitRemote}
         environmentStatus={environmentStatus}
         items={items}
         truncated={truncated}
@@ -625,8 +671,12 @@ export type ProjectWorkspaceProps = {
   projectSlug?: string;
   /** Prisma project id — enables Docker start/stop in the header. */
   projectId?: string;
+  /** True when this project was created from a GitHub repo URL (not folder-only / blank). */
+  projectHasGitRemote: boolean;
   /** Merged DB + environment-service status from SSR. */
   initialEnvironmentStatus?: SynaroProjectEnvironmentStatus;
+  /** Only the project owner can create invite links. */
+  canManageInvites?: boolean;
 };
 
 /**
@@ -635,7 +685,9 @@ export type ProjectWorkspaceProps = {
 export function ProjectWorkspace({
   projectSlug,
   projectId,
+  projectHasGitRemote,
   initialEnvironmentStatus = "INACTIVE",
+  canManageInvites = false,
 }: ProjectWorkspaceProps) {
   const [tab, setTab] = React.useState<TabKey>("tree");
   const [environmentStatus, setEnvironmentStatus] =
@@ -748,12 +800,15 @@ export function ProjectWorkspace({
               </button>
               {projectId ? (
                 <div className="ms-auto flex max-w-[min(100%,16rem)] flex-col items-end gap-1 sm:max-w-xs">
-                  <SynaroProjectDockerPill
-                    environmentStatus={environmentStatus}
-                    interactive
-                    busy={dockerBusy}
-                    onPress={handleDockerPress}
-                  />
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {canManageInvites ? <ProjectShareInvite projectId={projectId} /> : null}
+                    <SynaroProjectDockerPill
+                      environmentStatus={environmentStatus}
+                      interactive
+                      busy={dockerBusy}
+                      onPress={handleDockerPress}
+                    />
+                  </div>
                   {dockerError ? (
                     <p className="text-right text-[0.65rem] leading-snug text-destructive sm:text-xs">
                       {dockerError}
@@ -766,6 +821,7 @@ export function ProjectWorkspace({
               {tab === "tree" ? (
                 <TreePanel
                   projectId={projectId}
+                  projectHasGitRemote={projectHasGitRemote}
                   environmentStatus={environmentStatus}
                   treeRefreshKey={treeRefreshKey}
                 />

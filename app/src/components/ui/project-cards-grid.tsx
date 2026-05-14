@@ -1,7 +1,16 @@
 import * as React from "react";
-import { Brain, Sparkles, Zap } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { BarChart2, Brain, MoreVertical, Sparkles, Trash2, Zap } from "lucide-react";
 import Link from "next/link";
 
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 export const SYNARO_PROJECT_CARD_ICONS = {
@@ -33,6 +42,8 @@ export type SynaroProjectCardModel = {
   /** Docker / dev-container state from the app database (synced when environments are provisioned). */
   environmentStatus: SynaroProjectEnvironmentStatus;
   icon: SynaroProjectCardIconKey;
+  /** When set, the signed-in viewer owns the project and may delete it from the grid menu. */
+  viewerCanDelete?: boolean;
 };
 
 export const DEFAULT_SYNARO_PROJECT_CARDS: SynaroProjectCardModel[] = [
@@ -218,6 +229,8 @@ export function SynaroProjectCard({
   dockerInteractive = false,
   dockerBusyId = null,
   onDockerClick,
+  cardMoreMenu = false,
+  onDeleteProject,
 }: {
   project: SynaroProjectCardModel;
   /** When true, the Docker pill is a button that starts/stops the container (projects page only). */
@@ -225,8 +238,12 @@ export function SynaroProjectCard({
   /** Project id currently performing a Docker action (shows spinner on that pill). */
   dockerBusyId?: string | null;
   onDockerClick?: (projectId: string, action: "start" | "stop") => void;
+  /** Kebab menu (analytics, delete for owners) — used on `/projects`. */
+  cardMoreMenu?: boolean;
+  onDeleteProject?: (projectId: string) => void | Promise<void>;
 }) {
   const href = `/projects/${encodeURIComponent(project.slug)}`;
+  const analyticsHref = `/projects/${encodeURIComponent(project.slug)}/analytics`;
   const Icon = SYNARO_PROJECT_CARD_ICONS[project.icon] ?? Brain;
   const busy = dockerBusyId === project.id;
 
@@ -237,7 +254,7 @@ export function SynaroProjectCard({
         "hover:border-border hover:shadow-black/[0.08] dark:border-border/55 dark:bg-card/90 dark:shadow-black/20 dark:hover:border-border/70",
       )}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center justify-between gap-2">
         <div
           className={cn(
             "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-card text-muted-foreground transition group-hover:bg-muted",
@@ -247,18 +264,69 @@ export function SynaroProjectCard({
         >
           <Icon className="size-4 shrink-0" />
         </div>
-        <SynaroProjectDockerPill
-          environmentStatus={project.environmentStatus}
-          interactive={dockerInteractive}
-          busy={busy}
-          onPress={
-            onDockerClick
-              ? (action) => {
-                  onDockerClick(project.id, action);
-                }
-              : undefined
-          }
-        />
+        <div className="flex shrink-0 items-center justify-end gap-1.5" dir="ltr">
+          <div className="flex shrink-0 items-center">
+            <SynaroProjectDockerPill
+              environmentStatus={project.environmentStatus}
+              interactive={dockerInteractive}
+              busy={busy}
+              onPress={
+                onDockerClick
+                  ? (action) => {
+                      onDockerClick(project.id, action);
+                    }
+                  : undefined
+              }
+            />
+          </div>
+          {cardMoreMenu ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-9 shrink-0 rounded-lg p-0 leading-none text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:block"
+                  aria-label={`More options for ${project.title}`}
+                >
+                  <MoreVertical className="size-4 shrink-0" aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48 rounded-xl border-border/70 p-1" sideOffset={6}>
+                <DropdownMenuItem asChild className="cursor-pointer rounded-lg">
+                  <Link href={analyticsHref} className="flex items-center gap-2">
+                    <BarChart2 className="size-4 shrink-0" aria-hidden />
+                    Analytics
+                  </Link>
+                </DropdownMenuItem>
+                {project.viewerCanDelete && onDeleteProject ? (
+                  <>
+                    <DropdownMenuSeparator className="bg-border/60" />
+                    <DropdownMenuItem
+                      className="cursor-pointer rounded-lg text-destructive focus:bg-destructive/10 focus:text-destructive"
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        if (
+                          !window.confirm(
+                            `Delete “${project.title}”? This removes the project and its Docker environments. This cannot be undone.`,
+                          )
+                        ) {
+                          return;
+                        }
+                        void onDeleteProject(project.id);
+                      }}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Trash2 className="size-4 shrink-0" aria-hidden />
+                        Delete project
+                      </span>
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+        </div>
       </div>
 
       <Link
@@ -326,6 +394,8 @@ export function SynaroProjectsCardsGrid({
   dockerInteractive = false,
   dockerBusyId = null,
   onDockerClick,
+  cardMoreMenu = false,
+  onProjectDelete,
   className,
 }: {
   projects?: SynaroProjectCardModel[];
@@ -335,6 +405,8 @@ export function SynaroProjectsCardsGrid({
   dockerInteractive?: boolean;
   dockerBusyId?: string | null;
   onDockerClick?: (projectId: string, action: "start" | "stop") => void;
+  cardMoreMenu?: boolean;
+  onProjectDelete?: (projectId: string) => void | Promise<void>;
   className?: string;
 }) {
   return (
@@ -344,15 +416,39 @@ export function SynaroProjectsCardsGrid({
         className,
       )}
     >
-      {projects.map((p) => (
-        <SynaroProjectCard
-          key={p.id}
-          project={p}
-          dockerInteractive={dockerInteractive}
-          dockerBusyId={dockerBusyId}
-          onDockerClick={onDockerClick}
-        />
-      ))}
+      <AnimatePresence initial={false}>
+        {projects.map((p) => (
+          <motion.div
+            key={p.id}
+            layout
+            className="min-w-0"
+            initial={{ opacity: 0, scale: 0.94 }}
+            animate={{
+              opacity: 1,
+              scale: 1,
+              transition: { type: "spring", stiffness: 420, damping: 28, mass: 0.85 },
+            }}
+            exit={{
+              scale: [1, 1.04, 0],
+              opacity: [1, 1, 0],
+              transition: {
+                duration: 0.32,
+                times: [0, 0.2, 1],
+                ease: "easeOut",
+              },
+            }}
+          >
+            <SynaroProjectCard
+              project={p}
+              dockerInteractive={dockerInteractive}
+              dockerBusyId={dockerBusyId}
+              onDockerClick={onDockerClick}
+              cardMoreMenu={cardMoreMenu}
+              onDeleteProject={onProjectDelete}
+            />
+          </motion.div>
+        ))}
+      </AnimatePresence>
       {showNewProject ? (
         <SynaroNewProjectCard href={newProjectHref} onClick={onNewProjectClick} />
       ) : null}

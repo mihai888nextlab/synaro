@@ -14,6 +14,7 @@ import {
 } from "@/lib/environment-service-api";
 import { getGithubAccessTokenForUser } from "@/lib/github-account";
 import { projectRowToCardModel } from "@/lib/map-project-to-card";
+import { whereProjectByIdForUser } from "@/lib/project-access";
 import { prisma } from "@/lib/prisma";
 import {
   latestEnvironmentSummariesByProjectId,
@@ -38,13 +39,13 @@ function projectUpdateFromRemoteEnv(env: RemoteEnvironment): {
   return { environmentStatus: st, repositoryLocation };
 }
 
-async function respondWithSyncedCard(projectId: string, res: NextApiResponse) {
+async function respondWithSyncedCard(projectId: string, res: NextApiResponse, viewerUserId: string) {
   const row = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
   const sum = await latestEnvironmentSummariesByProjectId([projectId]);
   const s = sum[projectId] ?? null;
   const st = s ? parseEnvironmentStatusFromService(s.status) : null;
   const merged = st ? { ...row, environmentStatus: st } : row;
-  res.status(200).json({ project: projectRowToCardModel(merged, 0) });
+  res.status(200).json({ project: projectRowToCardModel(merged, 0, { viewerUserId }) });
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -76,7 +77,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const project = await prisma.project.findFirst({
-      where: { id: projectId, userId: session.user.id },
+      where: whereProjectByIdForUser(projectId, session.user.id),
       select: { id: true, userId: true, cloneRepositoryUrl: true },
     });
     if (!project) {
@@ -103,14 +104,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           where: { id: projectId },
           data: { environmentStatus: "INACTIVE", repositoryLocation: null },
         });
-        await respondWithSyncedCard(projectId, res);
+        await respondWithSyncedCard(projectId, res, session.user.id);
         return;
       }
       if (!active) {
         const latest = rows[0]!;
         const patch = projectUpdateFromRemoteEnv(latest);
         await prisma.project.update({ where: { id: projectId }, data: patch });
-        await respondWithSyncedCard(projectId, res);
+        await respondWithSyncedCard(projectId, res, session.user.id);
         return;
       }
       if (active.status === "RUNNING" || active.status === "PROVISIONING") {
@@ -137,7 +138,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (active.status === "RUNNING") {
           const patch = projectUpdateFromRemoteEnv(active);
           await prisma.project.update({ where: { id: projectId }, data: patch });
-          await respondWithSyncedCard(projectId, res);
+          await respondWithSyncedCard(projectId, res, session.user.id);
           return;
         }
         if (active.status === "PROVISIONING") {
@@ -156,7 +157,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const patch = projectUpdateFromRemoteEnv(env);
     await prisma.project.update({ where: { id: projectId }, data: patch });
-    await respondWithSyncedCard(projectId, res);
+    await respondWithSyncedCard(projectId, res, session.user.id);
   } catch (err) {
     console.error("[api/projects/docker]", err);
     const msg = err instanceof Error ? err.message : String(err);

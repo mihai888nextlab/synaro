@@ -7,6 +7,8 @@ import {
   remoteListWorkspaceFiles,
 } from "@/lib/environment-service-api";
 import type { WorkspaceFilesResponse } from "@/lib/workspace-files-types";
+import { applyDynamicApiNoCacheHeaders } from "@/lib/apply-dynamic-api-no-cache";
+import { whereProjectByIdForUser } from "@/lib/project-access";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/next-auth-options";
 
@@ -33,6 +35,8 @@ export default async function handler(
     return;
   }
 
+  applyDynamicApiNoCacheHeaders(res);
+
   const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
   const session = await getServerSession(req, res, authOptions);
   if (!session?.user?.id) {
@@ -46,13 +50,15 @@ export default async function handler(
   }
 
   const project = await prisma.project.findFirst({
-    where: { id: projectId, userId: session.user.id },
-    select: { id: true },
+    where: whereProjectByIdForUser(projectId, session.user.id),
+    select: { id: true, cloneRepositoryUrl: true },
   });
   if (!project) {
     res.status(404).json({ error: "Project not found" });
     return;
   }
+
+  const hasGitRemote = Boolean(project.cloneRepositoryUrl?.trim());
 
   try {
     const rows = await fetchEnvironmentsForProject(projectId);
@@ -61,6 +67,7 @@ export default async function handler(
         paths: [],
         truncated: false,
         rootLabel: "repository",
+        hasGitRemote,
         reason: "no_environment",
       });
       return;
@@ -73,6 +80,7 @@ export default async function handler(
         paths: [],
         truncated: false,
         rootLabel: "repository",
+        hasGitRemote,
         reason: "not_active",
       });
       return;
@@ -85,6 +93,7 @@ export default async function handler(
         paths: [],
         truncated: false,
         rootLabel: remote.rootLabel,
+        hasGitRemote,
         reason: "not_active",
       });
       return;
@@ -94,6 +103,7 @@ export default async function handler(
         paths: [],
         truncated: false,
         rootLabel: remote.rootLabel,
+        hasGitRemote,
         reason: "clone_pending",
       });
       return;
@@ -102,6 +112,7 @@ export default async function handler(
       paths: remote.paths,
       truncated: remote.truncated,
       rootLabel: remote.rootLabel,
+      hasGitRemote,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -109,6 +120,7 @@ export default async function handler(
       paths: [],
       truncated: false,
       rootLabel: "repository",
+      hasGitRemote,
       reason: "unreachable",
       detail: msg,
     });

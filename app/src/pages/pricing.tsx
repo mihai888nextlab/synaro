@@ -3,7 +3,6 @@ import { CheckCircle2, XCircle } from "lucide-react";
 import type { GetServerSideProps } from "next";
 
 import { MinimalFooter } from "@/components/ui/minimal-footer";
-import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { SiteHeader } from "@/components/ui/site-header";
 import { redirectIfAuthed } from "@/lib/auth-redirect";
 
@@ -67,7 +66,6 @@ const plans: Plan[] = [
 export default function PricingPage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-black text-white">
-      <PageBackgroundPattern />
       <div className="relative z-10">
         <SiteHeader />
 
@@ -86,10 +84,8 @@ export default function PricingPage() {
           </div>
         </section>
 
-        <section className="relative mx-auto max-w-7xl overflow-hidden px-4 pb-16 sm:px-6 sm:pb-20 lg:pb-24">
-          <PageBackgroundPattern variant="section" className="z-0 opacity-70" />
-
-          <div className="relative z-10 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <section className="mx-auto max-w-7xl overflow-hidden px-4 pb-16 sm:px-6 sm:pb-20 lg:pb-24">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {plans.map((plan) => (
               <article
                 key={plan.name}

@@ -21,11 +21,11 @@ export function DashboardProjectsShowcase({
   return (
     <section
       className={cn(
-        "flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm shadow-black/[0.06] dark:border-border/50 dark:bg-card/90 dark:shadow-black/25",
+        "flex flex-col overflow-hidden rounded-2xl border-0 bg-muted/15 shadow-none dark:bg-muted/10",
         className,
       )}
     >
-      <div className="flex flex-col gap-3 border-b border-border/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <div className="flex flex-col gap-3 border-b border-border/50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <h2 className="text-lg font-semibold tracking-tight text-foreground">Projects</h2>
         <Button variant="outline" size="sm" className="shrink-0 rounded-xl text-muted-foreground" asChild>
           <Link href="/projects">
@@ -34,8 +34,13 @@ export function DashboardProjectsShowcase({
         </Button>
       </div>
 
-      <div className="p-5 sm:p-6">
-        <SynaroProjectsCardsGrid projects={projects} showNewProject newProjectHref="/projects" />
+      <div className="px-4 py-4 sm:px-5 sm:py-5">
+        <SynaroProjectsCardsGrid
+          projects={projects}
+          showNewProject
+          newProjectHref="/projects"
+          cardVariant="embedded"
+        />
       </div>
     </section>
   );

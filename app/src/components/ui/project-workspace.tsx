@@ -5,7 +5,6 @@ import { useTree } from "@headless-tree/react";
 
 import { AnimatedAIChat } from "@/components/ui/animated-ai-chat";
 import { Input } from "@/components/ui/input";
-import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { ProjectIframePreview } from "@/components/ui/project-iframe-preview";
 import { ProjectShareInvite } from "@/components/ui/project-share-invite";
 import {
@@ -759,10 +758,7 @@ export function ProjectWorkspace({
   );
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col">
-      <PageBackgroundPattern variant="section" className="pointer-events-none absolute inset-0 z-0 opacity-60" />
-
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
         <div
           className={cn(
             "grid min-h-0 flex-1 gap-0",
@@ -838,7 +834,6 @@ export function ProjectWorkspace({
             title={projectSlug ? `Preview — ${humanizeProjectSlug(projectSlug)}` : "Preview"}
           />
         </div>
-      </div>
     </div>
   );
 }

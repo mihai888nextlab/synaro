@@ -2,7 +2,6 @@ import Link from "next/link";
 import { Monitor, MoonStar, Sun } from "lucide-react";
 import type { GetServerSideProps } from "next";
 
-import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { requireAuth } from "@/lib/auth-redirect";
 import { useTheme, type ThemeMode } from "@/components/ui/theme-provider";
 
@@ -21,10 +20,8 @@ export default function PreferencesPage() {
   const { mode, resolvedMode, setMode } = useTheme();
 
   return (
-    <div className="relative overflow-hidden">
-      <PageBackgroundPattern variant="section" className="z-0 opacity-70" />
-
-      <div className="relative z-10 rounded-2xl border border-border/70 bg-card/80 p-6">
+    <div>
+      <div className="rounded-2xl border border-border/70 bg-card/80 p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm text-muted-foreground">Preferences</p>

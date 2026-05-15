@@ -231,6 +231,7 @@ export function SynaroProjectCard({
   onDockerClick,
   cardMoreMenu = false,
   onDeleteProject,
+  variant = "default",
 }: {
   project: SynaroProjectCardModel;
   /** When true, the Docker pill is a button that starts/stops the container (projects page only). */
@@ -241,6 +242,8 @@ export function SynaroProjectCard({
   /** Kebab menu (analytics, delete for owners) — used on `/projects`. */
   cardMoreMenu?: boolean;
   onDeleteProject?: (projectId: string) => void | Promise<void>;
+  /** `embedded` = lighter surface for dashboard / nested layouts (no “card on card”). */
+  variant?: "default" | "embedded";
 }) {
   const href = `/projects/${encodeURIComponent(project.slug)}`;
   const analyticsHref = `/projects/${encodeURIComponent(project.slug)}/analytics`;
@@ -250,8 +253,10 @@ export function SynaroProjectCard({
   return (
     <div
       className={cn(
-        "group flex flex-col rounded-xl border border-border/70 bg-card p-4 text-left shadow-sm shadow-black/[0.06] transition-colors sm:p-[1.125rem]",
-        "hover:border-border hover:shadow-black/[0.08] dark:border-border/55 dark:bg-card/90 dark:shadow-black/20 dark:hover:border-border/70",
+        "group flex flex-col rounded-xl text-left transition-colors",
+        variant === "embedded"
+          ? "border-0 bg-muted/20 p-4 shadow-none sm:p-[1.125rem] hover:bg-muted/30 dark:bg-muted/10 dark:hover:bg-muted/20"
+          : "border border-border/70 bg-card p-4 shadow-sm shadow-black/[0.06] sm:p-[1.125rem] hover:border-border hover:shadow-black/[0.08] dark:border-border/55 dark:bg-card/90 dark:shadow-black/20 dark:hover:border-border/70",
       )}
     >
       <div className="flex items-center justify-between gap-2">
@@ -359,15 +364,19 @@ export function SynaroNewProjectCard({
   href = "/projects",
   onClick,
   className,
+  variant = "default",
 }: {
   href?: string;
   /** When set, the card acts as a button (e.g. opens a modal) instead of navigating. */
   onClick?: () => void;
   className?: string;
+  variant?: "default" | "embedded";
 }) {
   const styles = cn(
-    "flex min-h-[11.25rem] cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border/70 px-5 py-8 text-sm font-medium text-muted-foreground transition sm:min-h-[12rem]",
-    "hover:border-border hover:bg-muted/30 hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70 dark:border-border/55 dark:hover:bg-muted/15",
+    "flex min-h-[11.25rem] cursor-pointer flex-col items-center justify-center rounded-xl px-5 py-8 text-sm font-medium text-muted-foreground transition sm:min-h-[12rem]",
+    variant === "embedded"
+      ? "border border-dashed border-border/40 bg-transparent hover:border-border/60 hover:bg-muted/25 hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70 dark:border-border/35 dark:hover:bg-muted/15"
+      : "border border-dashed border-border/70 hover:border-border hover:bg-muted/30 hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70 dark:border-border/55 dark:hover:bg-muted/15",
     className,
   );
 
@@ -396,6 +405,7 @@ export function SynaroProjectsCardsGrid({
   onDockerClick,
   cardMoreMenu = false,
   onProjectDelete,
+  cardVariant = "default",
   className,
 }: {
   projects?: SynaroProjectCardModel[];
@@ -407,6 +417,8 @@ export function SynaroProjectsCardsGrid({
   onDockerClick?: (projectId: string, action: "start" | "stop") => void;
   cardMoreMenu?: boolean;
   onProjectDelete?: (projectId: string) => void | Promise<void>;
+  /** Lighter project tiles for dashboard-style panels. */
+  cardVariant?: "default" | "embedded";
   className?: string;
 }) {
   return (
@@ -440,6 +452,7 @@ export function SynaroProjectsCardsGrid({
           >
             <SynaroProjectCard
               project={p}
+              variant={cardVariant}
               dockerInteractive={dockerInteractive}
               dockerBusyId={dockerBusyId}
               onDockerClick={onDockerClick}
@@ -450,7 +463,11 @@ export function SynaroProjectsCardsGrid({
         ))}
       </AnimatePresence>
       {showNewProject ? (
-        <SynaroNewProjectCard href={newProjectHref} onClick={onNewProjectClick} />
+        <SynaroNewProjectCard
+          href={newProjectHref}
+          onClick={onNewProjectClick}
+          variant={cardVariant}
+        />
       ) : null}
     </div>
   );

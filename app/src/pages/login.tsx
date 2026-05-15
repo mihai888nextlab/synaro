@@ -4,7 +4,6 @@ import { ArrowLeft } from "lucide-react";
 import { signIn } from "next-auth/react";
 import type { GetServerSideProps } from "next";
 
-import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { SignInPage, type Testimonial } from "@/components/ui/sign-in";
 import { redirectIfAuthed } from "@/lib/auth-redirect";
 
@@ -48,7 +47,6 @@ export default function LoginPage() {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-black text-white">
-      <PageBackgroundPattern />
       <div className="relative z-10">
         <div className="px-4 pt-4 sm:px-6 sm:pt-6">
           <div className="flex items-center gap-3">

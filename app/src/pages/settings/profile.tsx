@@ -7,7 +7,6 @@ import { Pencil } from "lucide-react";
 import { getProviders, signIn } from "next-auth/react";
 import { getServerSession } from "next-auth/next";
 
-import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/next-auth-options";
 
@@ -156,9 +155,7 @@ export default function ProfilePage({
   }
 
   return (
-    <div className="relative overflow-hidden">
-      <PageBackgroundPattern variant="section" className="z-0 opacity-70" />
-      <form onSubmit={handleSubmit} className="relative z-10 space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-xl border border-border/70 bg-card/80 p-4">
             {isEditing ? (
@@ -268,7 +265,6 @@ export default function ProfilePage({
           ) : null}
         </div>
       </form>
-    </div>
   );
 }
 

@@ -1,33 +1,46 @@
 import type { GetServerSideProps } from "next";
+import { getServerSession } from "next-auth/next";
 import Link from "next/link";
 
+import type { SynaroProjectCardModel } from "@/components/ui/project-cards-grid";
 import { Button } from "@/components/ui/button";
-import { DashboardKpiStrip } from "@/components/ui/dashboard-kpi-strip";
-import { DashboardLogsTable } from "@/components/ui/dashboard-logs-table";
+import { DashboardKpiStrip, type DashboardKpiItem } from "@/components/ui/dashboard-kpi-strip";
+import { DashboardLogsTable, type DashboardLogRow } from "@/components/ui/dashboard-logs-table";
 import { DashboardProjectsShowcase } from "@/components/ui/dashboard-projects-showcase";
-import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
-import { requireAuth } from "@/lib/auth-redirect";
+import { authOptions } from "@/lib/next-auth-options";
+import { getDashboardProjectPayload } from "@/lib/user-project-cards";
 
-export default function DashboardPage() {
+type DashboardPageProps = {
+  projects: SynaroProjectCardModel[];
+  kpiItems: DashboardKpiItem[];
+  activityLogs: DashboardLogRow[];
+};
+
+export default function DashboardPage({ projects, kpiItems, activityLogs }: DashboardPageProps) {
   return (
-    <div className="relative overflow-hidden">
-      <PageBackgroundPattern variant="section" className="pointer-events-none absolute inset-0 z-0 opacity-60" />
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 sm:gap-10">
+      <DashboardKpiStrip items={kpiItems} />
 
-      <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-8 sm:gap-10">
-        <DashboardKpiStrip />
+      <DashboardProjectsShowcase projects={projects} />
 
-        <DashboardProjectsShowcase />
-
-        <DashboardLogsTable
-          headerEnd={
-            <Button variant="outline" size="sm" className="rounded-xl text-muted-foreground" asChild>
-              <Link href="/logs">View logs</Link>
-            </Button>
-          }
-        />
-      </div>
+      <DashboardLogsTable
+        logs={activityLogs}
+        headerEnd={
+          <Button variant="outline" size="sm" className="rounded-xl text-muted-foreground" asChild>
+            <Link href="/logs">View logs</Link>
+          </Button>
+        }
+      />
     </div>
   );
 }
 
-export const getServerSideProps: GetServerSideProps = async (ctx) => requireAuth(ctx);
+export const getServerSideProps: GetServerSideProps<DashboardPageProps> = async (ctx) => {
+  const session = await getServerSession(ctx.req, ctx.res, authOptions);
+  if (!session?.user?.id) {
+    return { redirect: { destination: "/login", permanent: false } };
+  }
+
+  const { projects, kpiItems, activityLogs } = await getDashboardProjectPayload(session.user.id);
+  return { props: { projects, kpiItems, activityLogs } };
+};

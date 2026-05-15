@@ -3,14 +3,9 @@ import { getServerSession } from "next-auth/next";
 
 import type { SynaroProjectCardModel } from "@/components/ui/project-cards-grid";
 import { ProjectsPageClient } from "@/components/ui/projects-page-client";
-import {
-  latestEnvironmentSummariesByProjectId,
-  parseEnvironmentStatusFromService,
-} from "@/lib/environment-service-live";
-import { projectRowToCardModel } from "@/lib/map-project-to-card";
-import { whereProjectVisibleToUser } from "@/lib/project-access";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/next-auth-options";
+import { getUserProjectCardsWithRows } from "@/lib/user-project-cards";
 
 export default function ProjectsPage({
   initialProjects,
@@ -38,17 +33,7 @@ export const getServerSideProps: GetServerSideProps<{
   const providerSet = new Set(user?.accounts.map((a) => a.provider) ?? []);
   const linkedGithub = providerSet.has("github");
 
-  const rows = await prisma.project.findMany({
-    where: whereProjectVisibleToUser(session.user.id),
-    orderBy: { updatedAt: "desc" },
-  });
-  const live = await latestEnvironmentSummariesByProjectId(rows.map((r) => r.id));
-  const initialProjects = rows.map((row, i) => {
-    const s = live[row.id];
-    const st = s ? parseEnvironmentStatusFromService(s.status) : null;
-    const merged = st ? { ...row, environmentStatus: st } : row;
-    return projectRowToCardModel(merged, i, { viewerUserId: session.user.id });
-  });
+  const { cards: initialProjects } = await getUserProjectCardsWithRows(session.user.id);
 
   return { props: { initialProjects, linkedGithub } };
 };

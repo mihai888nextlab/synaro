@@ -8,19 +8,15 @@ import {
   defaultProjectNameFromGithubUrl,
   normalizeGithubRepoUrl,
 } from "@/lib/github-repo-url";
-import { projectRowToCardModel, projectRowToCardModelWithStack } from "@/lib/map-project-to-card";
+import { projectRowToCardModelWithStack } from "@/lib/map-project-to-card";
 import { prisma } from "@/lib/prisma";
-import {
-  latestEnvironmentSummariesByProjectId,
-  parseEnvironmentStatusFromService,
-} from "@/lib/environment-service-live";
 import {
   formatEnvironmentProvisionFailure,
   provisionProjectEnvironment,
 } from "@/lib/provision-project-environment";
 import { resolveProjectDockerImage } from "@/lib/project-docker-images";
-import { whereProjectVisibleToUser } from "@/lib/project-access";
 import { authOptions } from "@/lib/next-auth-options";
+import { getUserProjectCardsWithRows } from "@/lib/user-project-cards";
 
 /** Base URL the browser uses to reach published container ports (host machine). */
 function previewHostBase(): string {
@@ -50,17 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === "GET") {
-      const rows = await prisma.project.findMany({
-        where: whereProjectVisibleToUser(userId),
-        orderBy: { updatedAt: "desc" },
-      });
-      const live = await latestEnvironmentSummariesByProjectId(rows.map((r) => r.id));
-      const cards = rows.map((row, i) => {
-        const s = live[row.id];
-        const st = s ? parseEnvironmentStatusFromService(s.status) : null;
-        const merged = st ? { ...row, environmentStatus: st } : row;
-        return projectRowToCardModel(merged, i, { viewerUserId: userId });
-      });
+      const { cards } = await getUserProjectCardsWithRows(userId);
       res.status(200).json({ projects: cards });
       return;
     }

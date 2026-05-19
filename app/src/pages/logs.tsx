@@ -1,24 +1,37 @@
 import type { GetServerSideProps } from "next";
+import { getServerSession } from "next-auth/next";
 
-import { DashboardLogsTable, LOG_PAGE_PLACEHOLDER_LOGS } from "@/components/ui/dashboard-logs-table";
-import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
-import { requireAuth } from "@/lib/auth-redirect";
+import { DashboardLogsTable, type DashboardLogRow } from "@/components/ui/dashboard-logs-table";
+import { getUserActivityLogs } from "@/lib/activity-log";
+import { authOptions } from "@/lib/next-auth-options";
 
-export default function LogsPage() {
+type LogsPageProps = {
+  logs: DashboardLogRow[];
+};
+
+export default function LogsPage({ logs }: LogsPageProps) {
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-      <PageBackgroundPattern variant="section" className="pointer-events-none absolute inset-0 z-0 opacity-60" />
-
-      <div className="relative z-10 mx-auto flex w-full min-h-0 max-w-7xl flex-1 flex-col">
-        <DashboardLogsTable
-          hideHeader
-          frameless
-          logs={LOG_PAGE_PLACEHOLDER_LOGS}
-          className="flex min-h-0 flex-1 max-h-[calc(100dvh-11rem)]"
-        />
-      </div>
+    <div className="mx-auto flex w-full min-h-0 max-w-7xl flex-1 flex-col overflow-hidden">
+      <DashboardLogsTable
+        hideHeader
+        frameless
+        logs={logs}
+        emptyMessage="Start or stop a project container to record activity. Logs reset each day."
+        className="flex min-h-0 flex-1 max-h-[calc(100dvh-11rem)]"
+      />
     </div>
   );
 }
 
-export const getServerSideProps: GetServerSideProps = async (ctx) => requireAuth(ctx);
+export const getServerSideProps: GetServerSideProps<LogsPageProps> = async (ctx) => {
+  const session = await getServerSession(ctx.req, ctx.res, authOptions);
+  if (!session?.user?.id) {
+    return { redirect: { destination: "/login", permanent: false } };
+  }
+
+  const logs = await getUserActivityLogs(session.user.id, {
+    limit: 200,
+    timeFormat: "datetime",
+  });
+  return { props: { logs } };
+};

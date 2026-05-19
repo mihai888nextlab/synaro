@@ -80,7 +80,7 @@ function TreeItem<T = unknown>({ item, className, asChild, children, ...props }:
   const Comp = (asChild ? Slot : "button") as React.ElementType;
 
   return (
-    <TreeContext.Provider value={{ indent, currentItem: item }}>
+    <TreeContext.Provider value={{ indent, currentItem: item as ItemInstance<unknown> }}>
       <Comp
         data-slot="tree-item"
         style={mergedStyle}

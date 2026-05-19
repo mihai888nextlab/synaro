@@ -6,6 +6,12 @@ import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { getProviders, signIn } from "next-auth/react";
 
+const GitHubIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="size-5" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+  </svg>
+);
+
 const GoogleIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" className="size-5" viewBox="0 0 48 48">
     <path
@@ -46,13 +52,15 @@ interface SignInPageProps {
   footerActionLabel?: string;
   footerActionHref?: string;
   resetPasswordHref?: string;
-  error?: string | null;
-  loading?: boolean;
-  onSignIn?: (event: React.FormEvent<HTMLFormElement>) => void;
+  onSignIn?: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void>;
   /** Post-auth destination (path on this origin), e.g. `/dashboard` */
   oauthCallbackUrl?: string;
   onResetPassword?: () => void;
   onCreateAccount?: () => void;
+  /** Shown under the form (e.g. API or sign-in errors). */
+  formError?: string | null;
+  /** Disables the primary submit button while the parent handles signup/sign-in. */
+  isSubmitting?: boolean;
 }
 
 const GlassInputWrapper = ({ children }: { children: React.ReactNode }) => (
@@ -123,10 +131,14 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   oauthCallbackUrl = "/dashboard",
   onResetPassword,
   onCreateAccount,
+  formError,
+  isSubmitting = false,
 }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
+  const [githubBusy, setGithubBusy] = useState(false);
+  const [githubError, setGithubError] = useState<string | null>(null);
 
   const handleGoogleClick = async () => {
     setGoogleError(null);
@@ -135,7 +147,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
       const providers = await getProviders();
       if (!providers?.google) {
         setGoogleError(
-          "Google sign-in is not available. Check GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET and restart the dev server.",
+          "Google sign-in is not available. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, then restart the dev server.",
         );
         return;
       }
@@ -146,6 +158,25 @@ export const SignInPage: React.FC<SignInPageProps> = ({
       setGoogleError(e instanceof Error ? e.message : "Google sign-in failed.");
     } finally {
       setGoogleBusy(false);
+    }
+  };
+
+  const handleGithubClick = async () => {
+    setGithubError(null);
+    setGithubBusy(true);
+    try {
+      const providers = await getProviders();
+      if (!providers?.github) {
+        setGithubError(
+          "GitHub sign-in is not available. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET, then restart the dev server.",
+        );
+        return;
+      }
+      await signIn("github", { callbackUrl: oauthCallbackUrl });
+    } catch (e) {
+      setGithubError(e instanceof Error ? e.message : "GitHub sign-in failed.");
+    } finally {
+      setGithubBusy(false);
     }
   };
 
@@ -160,7 +191,19 @@ export const SignInPage: React.FC<SignInPageProps> = ({
             </h1>
             <p className="text-zinc-400">{description}</p>
 
-            <form className="space-y-5" onSubmit={onSignIn}>
+            {formError ? (
+              <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200" role="alert">
+                {formError}
+              </p>
+            ) : null}
+
+            <form
+              className="space-y-5"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void Promise.resolve(onSignIn?.(event));
+              }}
+            >
               {mode === "signup" && (
                 <div>
                   <FloatingField name="fullName" type="text" label="Full Name" />
@@ -243,10 +286,10 @@ export const SignInPage: React.FC<SignInPageProps> = ({
 
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full rounded-2xl bg-white py-4 font-medium text-black transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={isSubmitting}
+                className="w-full rounded-2xl bg-white py-4 font-medium text-black transition-colors hover:bg-zinc-200 disabled:pointer-events-none disabled:opacity-60"
               >
-                {loading ? (mode === "signup" ? "Creating account..." : "Signing in...") : submitLabel}
+                {isSubmitting ? "Please wait…" : submitLabel}
               </button>
             </form>
 
@@ -257,19 +300,34 @@ export const SignInPage: React.FC<SignInPageProps> = ({
               </span>
             </div>
 
-            <button
-              type="button"
-              disabled={googleBusy}
-              onClick={() => void handleGoogleClick()}
-              disabled={loading}
-              className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/15 py-4 text-zinc-100 transition-colors hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-60 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <GoogleIcon />
-              {googleBusy ? "Redirecting…" : "Continue with Google"}
-            </button>
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                disabled={googleBusy || githubBusy}
+                onClick={() => void handleGoogleClick()}
+                className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/15 py-4 text-zinc-100 transition-colors hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <GoogleIcon />
+                {googleBusy ? "Redirecting…" : "Continue with Google"}
+              </button>
+              <button
+                type="button"
+                disabled={googleBusy || githubBusy}
+                onClick={() => void handleGithubClick()}
+                className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/15 py-4 text-zinc-100 transition-colors hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <GitHubIcon />
+                {githubBusy ? "Redirecting…" : "Continue with GitHub"}
+              </button>
+            </div>
             {googleError ? (
               <p className="text-center text-sm text-red-400/90" role="alert">
                 {googleError}
+              </p>
+            ) : null}
+            {githubError ? (
+              <p className="text-center text-sm text-red-400/90" role="alert">
+                {githubError}
               </p>
             ) : null}
 

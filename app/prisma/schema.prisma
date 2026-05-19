@@ -8,17 +8,19 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(uuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  password      String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  accounts      Account[]
-  sessions      Session[]
-  projects      Project[]
+  id           String    @id @default(uuid())
+  email        String    @unique
+  name         String
+  passwordHash String?   // credentials login only
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  accounts         Account[]
+  sessions         Session[]
+  projects         Project[]
+  projectMembers   ProjectMember[]
+  invitesCreated   ProjectInvite[] @relation("ProjectInviteCreatedBy")
+  activityLogs     ActivityLog[]
 }
 
 model Account {
@@ -55,18 +57,78 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+// Project.slug is the URL segment for `/projects/[slug]` (unique per workspace).
 model Project {
   id                 String            @id @default(uuid())
+  slug               String            @unique
   name               String
   description        String?
+  /// Source git remote (e.g. https://github.com/org/repo) for clone-on-provision; not the live preview URL.
+  cloneRepositoryUrl String?
   repositoryLocation String?
   environmentStatus  EnvironmentStatus @default(INACTIVE)
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   userId             String
   user               User              @relation(fields: [userId], references: [id])
+  members            ProjectMember[]
+  invites            ProjectInvite[]
+  activityLogs       ActivityLog[]
 
   @@index([userId])
+}
+
+/// User-visible audit trail (container start/stop, etc.) for dashboard and `/logs`.
+model ActivityLog {
+  id        String            @id @default(uuid())
+  userId    String
+  projectId String
+  action    String
+  status    ActivityLogStatus
+  createdAt DateTime          @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([projectId, createdAt(sort: Desc)])
+}
+
+enum ActivityLogStatus {
+  DONE
+  RUNNING
+  STOPPED
+}
+
+/// Collaborators invited via share link (see `ProjectInvite`). Owner remains `Project.userId`.
+model ProjectMember {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@index([projectId])
+}
+
+/// Opaque token in `/projects/invite/[token]` — only project owner can create.
+model ProjectInvite {
+  id          String    @id @default(uuid())
+  token       String    @unique
+  projectId   String
+  createdById String
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User    @relation("ProjectInviteCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
 }
 
 enum EnvironmentStatus {

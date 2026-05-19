@@ -2,7 +2,6 @@ import type { GetServerSideProps } from "next";
 import { useRouter } from "next/router";
 
 import { Component as CampaignAreaChartCard } from "@/components/ui/area-chart-analytics-card";
-import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { requireAuth } from "@/lib/auth-redirect";
 import { cn } from "@/lib/utils";
 
@@ -41,20 +40,14 @@ export default function ProjectAnalyticsPage() {
 
   if (!router.isReady) {
     return (
-      <div className="relative overflow-hidden">
-        <PageBackgroundPattern variant="section" className="pointer-events-none absolute inset-0 z-0 opacity-60" />
-        <div className="relative z-10 mx-auto w-full max-w-7xl">
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        </div>
+      <div className="mx-auto w-full max-w-7xl">
+        <p className="text-sm text-muted-foreground">Loading…</p>
       </div>
     );
   }
 
   return (
-    <div className="relative overflow-hidden">
-      <PageBackgroundPattern variant="section" className="pointer-events-none absolute inset-0 z-0 opacity-60" />
-
-      <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-8 sm:gap-10">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 sm:gap-10">
         <section
           aria-label="Project analytics"
           className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-5 xl:gap-6"
@@ -79,7 +72,6 @@ export default function ProjectAnalyticsPage() {
             </div>
           </aside>
         </section>
-      </div>
     </div>
   );
 }

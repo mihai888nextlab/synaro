@@ -45,6 +45,16 @@ type TabKey = ProjectWorkspaceTab;
 
 const indent = 20;
 
+/** Outer padding for the explorer grid (tree + detail) — reuse for the terminal tab shell. */
+const workspaceExplorerTabPaddingClass = "px-3 pb-3 pt-0";
+
+/**
+ * Height behavior for the “Project files” card and the terminal card: capped on small
+ * viewports, full column height from `lg` up.
+ */
+const workspaceExplorerPrimaryCardSizeClass =
+  "max-h-[min(50vh,28rem)] min-h-0 lg:h-full lg:max-h-none";
+
 function placeholderTreeItems(message: string): Record<string, WorkspaceExplorerItem> {
   const hint = "syn:status";
   return {
@@ -255,11 +265,17 @@ function LiveExplorerTree({
   return (
     <div
       className={cn(
-        "grid min-h-0 flex-1 grid-cols-1 gap-3 px-3 pb-3 pt-0 lg:h-full lg:grid-rows-1 lg:gap-3",
+        "grid min-h-0 flex-1 grid-cols-1 gap-3 lg:h-full lg:grid-rows-1 lg:gap-3",
+        workspaceExplorerTabPaddingClass,
         showSelectionPanel ? "lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]" : "lg:grid-cols-1",
       )}
     >
-        <div className="flex max-h-[min(50vh,28rem)] min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-full lg:max-h-none">
+        <div
+          className={cn(
+            "flex flex-col overflow-hidden rounded-2xl border border-border bg-card",
+            workspaceExplorerPrimaryCardSizeClass,
+          )}
+        >
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
             <p className="text-xs font-medium text-muted-foreground">
               Project files
@@ -897,6 +913,7 @@ export function ProjectWorkspace({
               <div
                 className={cn(
                   "absolute inset-0 flex min-h-0 flex-col",
+                  workspaceExplorerTabPaddingClass,
                   tab !== "terminal" && "pointer-events-none invisible",
                 )}
                 aria-hidden={tab !== "terminal"}
@@ -905,7 +922,7 @@ export function ProjectWorkspace({
                   projectId={projectId}
                   environmentStatus={environmentStatus}
                   visible={tab === "terminal"}
-                  className="m-3 min-h-[min(24rem,50vh)] flex-1 sm:m-4 xl:min-h-0"
+                  className={workspaceExplorerPrimaryCardSizeClass}
                 />
               </div>
               <div

@@ -64,6 +64,7 @@ export const authOptions: NextAuthOptions = {
   debug: process.env.NODE_ENV === "development",
   pages: {
     signIn: "/login",
+    error: "/login",
   },
   providers: [
     ...(google ? [google] : []),
@@ -79,9 +80,9 @@ export const authOptions: NextAuthOptions = {
         if (!email || !password) return null;
 
         const user = await prisma.user.findUnique({ where: { email } });
-        if (!user?.passwordHash) return null;
+        if (!user?.password) return null;
 
-        const ok = await bcrypt.compare(password, user.passwordHash);
+        const ok = await bcrypt.compare(password, user.password);
         if (!ok) return null;
 
         return { id: user.id, email: user.email, name: user.name };

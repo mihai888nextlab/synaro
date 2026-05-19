@@ -1,7 +1,8 @@
-import type { FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { ArrowLeft } from "lucide-react";
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import type { GetServerSideProps } from "next";
 
 import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
@@ -30,20 +31,43 @@ const sampleTestimonials: Testimonial[] = [
 ];
 
 export default function LoginPage() {
-  const handleSignIn = (event: FormEvent<HTMLFormElement>) => {
+  const router = useRouter();
+  const { data: session } = useSession();
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (session) {
+      router.push("/dashboard");
+    }
+  }, [session, router]);
+
+  const handleSignIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setError(null);
+    setLoading(true);
+
     const formData = new FormData(event.currentTarget);
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
-    const callbackUrl =
-      typeof window !== "undefined"
-        ? `${window.location.origin}/dashboard`
-        : "/dashboard";
-    void signIn("credentials", {
-      email,
-      password,
-      callbackUrl,
-    });
+
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError("Invalid email or password");
+      } else if (result?.ok) {
+        router.push("/dashboard");
+      }
+    } catch {
+      setError("An unexpected error occurred");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -71,9 +95,11 @@ export default function LoginPage() {
           footerPrompt="New to Synaro?"
           footerActionLabel="Create account"
           footerActionHref="/signup"
+          error={error}
+          loading={loading}
           onSignIn={handleSignIn}
-          onResetPassword={() => {}}
-          onCreateAccount={() => {}}
+          onResetPassword={() => { }}
+          onCreateAccount={() => { }}
         />
       </div>
     </main>

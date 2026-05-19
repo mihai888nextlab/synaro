@@ -80,7 +80,7 @@ const items: Record<string, Item> = {
 
 const indent = 20;
 
-function TreePanel() {
+export function TreePanel() {
   const [query, setQuery] = React.useState("");
   const [selectedId, setSelectedId] = React.useState<string | null>("schema");
 

@@ -26,16 +26,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const existing = await prisma.user.findUnique({ where: { email: cleanEmail } });
   if (existing) return res.status(409).json({ error: "Email already in use" });
 
-  const passwordHash = await bcrypt.hash(password, 12);
+  const hashedPassword = await bcrypt.hash(password, 12);
   const user = await prisma.user.create({
     data: {
       email: cleanEmail,
       name: fullName.trim(),
-      passwordHash,
+      password: hashedPassword,
     },
     select: { id: true, email: true, name: true },
   });
 
-  return res.status(201).json({ user });
+  return res.status(201).json({ message: "User created successfully" });
 }
 

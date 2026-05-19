@@ -46,6 +46,8 @@ interface SignInPageProps {
   footerActionLabel?: string;
   footerActionHref?: string;
   resetPasswordHref?: string;
+  error?: string | null;
+  loading?: boolean;
   onSignIn?: (event: React.FormEvent<HTMLFormElement>) => void;
   /** Post-auth destination (path on this origin), e.g. `/dashboard` */
   oauthCallbackUrl?: string;
@@ -115,6 +117,8 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   footerActionLabel = "Create Account",
   footerActionHref,
   resetPasswordHref,
+  error,
+  loading,
   onSignIn,
   oauthCallbackUrl = "/dashboard",
   onResetPassword,
@@ -231,11 +235,18 @@ export const SignInPage: React.FC<SignInPageProps> = ({
                 )}
               </div>
 
+              {error && (
+                <p className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+                  {error}
+                </p>
+              )}
+
               <button
                 type="submit"
-                className="w-full rounded-2xl bg-white py-4 font-medium text-black transition-colors hover:bg-zinc-200"
+                disabled={loading}
+                className="w-full rounded-2xl bg-white py-4 font-medium text-black transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {submitLabel}
+                {loading ? (mode === "signup" ? "Creating account..." : "Signing in...") : submitLabel}
               </button>
             </form>
 
@@ -250,7 +261,8 @@ export const SignInPage: React.FC<SignInPageProps> = ({
               type="button"
               disabled={googleBusy}
               onClick={() => void handleGoogleClick()}
-              className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/15 py-4 text-zinc-100 transition-colors hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={loading}
+              className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/15 py-4 text-zinc-100 transition-colors hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-60 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <GoogleIcon />
               {googleBusy ? "Redirecting…" : "Continue with Google"}

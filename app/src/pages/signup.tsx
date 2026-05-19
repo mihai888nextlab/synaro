@@ -1,7 +1,8 @@
-import type { FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { ArrowLeft } from "lucide-react";
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import type { GetServerSideProps } from "next";
 
 import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
@@ -30,8 +31,22 @@ const sampleTestimonials: Testimonial[] = [
 ];
 
 export default function SignupPage() {
-  const handleSignUp = (event: FormEvent<HTMLFormElement>) => {
+  const router = useRouter();
+  const { data: session } = useSession();
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (session) {
+      router.push("/dashboard");
+    }
+  }, [session, router]);
+
+  const handleSignUp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setError(null);
+    setLoading(true);
+
     const formData = new FormData(event.currentTarget);
     const payload = {
       fullName: String(formData.get("fullName") ?? ""),
@@ -40,27 +55,40 @@ export default function SignupPage() {
       confirmPassword: String(formData.get("confirmPassword") ?? ""),
     };
 
-    void (async () => {
+    try {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
+      if (res.status === 409) {
+        setError("Email already in use");
         return;
       }
 
-      const callbackUrl =
-        typeof window !== "undefined"
-          ? `${window.location.origin}/dashboard`
-          : "/dashboard";
-      await signIn("credentials", {
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Failed to create account");
+        return;
+      }
+
+      const result = await signIn("credentials", {
         email: payload.email,
         password: payload.password,
-        callbackUrl,
+        redirect: false,
       });
-    })();
+
+      if (result?.error) {
+        setError("Account created but sign in failed. Please try logging in.");
+      } else if (result?.ok) {
+        router.push("/dashboard");
+      }
+    } catch {
+      setError("An unexpected error occurred");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -89,9 +117,11 @@ export default function SignupPage() {
           footerPrompt="Already have an account?"
           footerActionLabel="Sign in"
           footerActionHref="/login"
+          error={error}
+          loading={loading}
           onSignIn={handleSignUp}
-          onResetPassword={() => {}}
-          onCreateAccount={() => {}}
+          onResetPassword={() => { }}
+          onCreateAccount={() => { }}
         />
       </div>
     </main>

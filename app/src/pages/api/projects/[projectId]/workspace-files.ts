@@ -8,6 +8,7 @@ import {
 } from "@/lib/environment-service-api";
 import type { WorkspaceFilesResponse } from "@/lib/workspace-files-types";
 import { applyDynamicApiNoCacheHeaders } from "@/lib/apply-dynamic-api-no-cache";
+import { filterWorkspaceTreePaths } from "@/lib/workspace-tree-filter";
 import { whereProjectByIdForUser } from "@/lib/project-access";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/next-auth-options";
@@ -109,7 +110,7 @@ export default async function handler(
       return;
     }
     res.status(200).json({
-      paths: remote.paths,
+      paths: filterWorkspaceTreePaths(remote.paths),
       truncated: remote.truncated,
       rootLabel: remote.rootLabel,
       hasGitRemote,

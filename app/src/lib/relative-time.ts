@@ -12,3 +12,14 @@ export function formatShortRelativeTime(from: Date, now = new Date()): string {
   if (w < 8) return `${w}w ago`;
   return from.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
+
+/** Full local timestamp for the logs page. */
+export function formatLogTimestamp(date: Date): string {
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}

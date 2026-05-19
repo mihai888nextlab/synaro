@@ -12,6 +12,7 @@ import {
   remoteStopEnvironment,
   type RemoteEnvironment,
 } from "@/lib/environment-service-api";
+import { recordDockerActivityLog, recordProjectActivityLog } from "@/lib/activity-log";
 import { getGithubAccessTokenForUser } from "@/lib/github-account";
 import { projectRowToCardModel } from "@/lib/map-project-to-card";
 import { whereProjectByIdForUser } from "@/lib/project-access";
@@ -48,8 +49,28 @@ async function respondWithSyncedCard(projectId: string, res: NextApiResponse, vi
   res.status(200).json({ project: projectRowToCardModel(merged, 0, { viewerUserId }) });
 }
 
+async function persistDockerResult(
+  projectId: string,
+  actorUserId: string,
+  viewerUserId: string,
+  kind: "start" | "stop",
+  patch: { environmentStatus: EnvironmentStatus; repositoryLocation?: string | null },
+  res: NextApiResponse,
+) {
+  await prisma.project.update({ where: { id: projectId }, data: patch });
+  await recordDockerActivityLog({
+    userId: actorUserId,
+    projectId,
+    kind,
+    environmentStatus: patch.environmentStatus,
+  });
+  await respondWithSyncedCard(projectId, res, viewerUserId);
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
+  let actorUserId: string | null = null;
+  let dockerAction: "start" | "stop" | null = null;
 
   try {
     if (req.method !== "POST") {
@@ -75,6 +96,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.status(400).json({ error: "Body must include action: \"start\" | \"stop\"" });
       return;
     }
+    dockerAction = action;
+    actorUserId = session.user.id;
 
     const project = await prisma.project.findFirst({
       where: whereProjectByIdForUser(projectId, session.user.id),
@@ -100,18 +123,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const rows = await fetchEnvironmentsForProject(projectId);
       const active = pickActiveRuntimeEnvironment(rows);
       if (!rows.length) {
-        await prisma.project.update({
-          where: { id: projectId },
-          data: { environmentStatus: "INACTIVE", repositoryLocation: null },
-        });
-        await respondWithSyncedCard(projectId, res, session.user.id);
+        await persistDockerResult(
+          projectId,
+          session.user.id,
+          session.user.id,
+          "stop",
+          { environmentStatus: "INACTIVE", repositoryLocation: null },
+          res,
+        );
         return;
       }
       if (!active) {
         const latest = rows[0]!;
         const patch = projectUpdateFromRemoteEnv(latest);
-        await prisma.project.update({ where: { id: projectId }, data: patch });
-        await respondWithSyncedCard(projectId, res, session.user.id);
+        await persistDockerResult(projectId, session.user.id, session.user.id, "stop", patch, res);
         return;
       }
       if (active.status === "RUNNING" || active.status === "PROVISIONING") {
@@ -156,8 +181,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const patch = projectUpdateFromRemoteEnv(env);
-    await prisma.project.update({ where: { id: projectId }, data: patch });
-    await respondWithSyncedCard(projectId, res, session.user.id);
+    await persistDockerResult(
+      projectId,
+      session.user.id,
+      session.user.id,
+      action,
+      patch,
+      res,
+    );
   } catch (err) {
     console.error("[api/projects/docker]", err);
     const msg = err instanceof Error ? err.message : String(err);
@@ -167,6 +198,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           where: { id: projectId },
           data: { environmentStatus: "ERROR" },
         });
+        if (actorUserId && dockerAction) {
+          await recordProjectActivityLog({
+            userId: actorUserId,
+            projectId,
+            action:
+              dockerAction === "start" ? "Container start failed" : "Container stop failed",
+            status: "STOPPED",
+          });
+        }
       } catch {
         /* ignore */
       }

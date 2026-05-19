@@ -234,6 +234,44 @@ export async function destroyAllRemoteEnvironmentsForProject(projectId: string):
   }
 }
 
+export async function remoteExecTerminal(
+  envId: string,
+  command: string,
+): Promise<{ output: string; exitCode: number | null; cwd: string }> {
+  const base = environmentServiceBaseUrl();
+  const res = await fetch(`${base}/api/environments/${encodeURIComponent(envId)}/terminal`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ command }),
+    signal: AbortSignal.timeout(120_000),
+  });
+  const text = await res.text();
+  let parsed: unknown;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    parsed = null;
+  }
+  if (!res.ok) {
+    const detail =
+      parsed && typeof parsed === "object" && parsed !== null && "error" in parsed
+        ? String((parsed as { error?: unknown }).error)
+        : parsed && typeof parsed === "object" && parsed !== null && "detail" in parsed
+          ? String((parsed as { detail?: unknown }).detail)
+          : text;
+    const err = new Error(detail || `Terminal exec failed (${res.status})`);
+    (err as Error & { status?: number }).status = res.status;
+    throw err;
+  }
+  if (!parsed || typeof parsed !== "object") throw new Error("Invalid terminal response");
+  const o = parsed as Record<string, unknown>;
+  return {
+    output: typeof o.output === "string" ? o.output : "",
+    exitCode: typeof o.exitCode === "number" ? o.exitCode : null,
+    cwd: typeof o.cwd === "string" ? o.cwd : "/tmp/synaro-workspace/app",
+  };
+}
+
 export function parseRemoteStatus(s: string): EnvironmentStatus | null {
   const allowed: EnvironmentStatus[] = [
     "INACTIVE",

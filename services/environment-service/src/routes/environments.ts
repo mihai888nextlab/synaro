@@ -11,7 +11,12 @@ import {
   getWorkspaceSelection,
   reconcileDeadContainersForProject,
   uploadWorkspaceTar,
+  execTerminalCommand,
 } from '../managers/docker.manager.js'
+
+const terminalExecSchema = z.object({
+  command: z.string().max(8000),
+})
 
 const createSchema = z.object({
   projectId: z.string().uuid(),
@@ -60,6 +65,28 @@ export const environmentRoutes: FastifyPluginAsync = async (app) => {
       if (msg.includes('No container')) return reply.status(404).send({ error: msg })
       app.log.error(err)
       return reply.status(500).send({ error: 'Failed to list workspace files', detail: msg })
+    }
+  })
+
+  // POST /api/environments/:id/terminal — run a shell command in the container workspace
+  app.post('/:id/terminal', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const parsed = terminalExecSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Body must include command (string)' })
+    }
+    try {
+      const result = await execTerminalCommand(id, parsed.data.command)
+      return reply.send(result)
+    } catch (err) {
+      const msg = String(err)
+      if (msg.includes('not active') || msg.includes('not running')) {
+        return reply.status(409).send({ error: msg })
+      }
+      if (msg.includes('No container')) return reply.status(404).send({ error: msg })
+      if (msg.includes('too long')) return reply.status(400).send({ error: msg })
+      app.log.error(err)
+      return reply.status(500).send({ error: 'Failed to run command', detail: msg })
     }
   })
 

@@ -1,9 +1,20 @@
 import * as React from "react";
-import { ExternalLink, FileIcon, FolderIcon, FolderOpenIcon, Layers, Loader2, MessageSquareText, FolderTree } from "lucide-react";
+import {
+  ExternalLink,
+  FileIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  Layers,
+  Loader2,
+  MessageSquareText,
+  FolderTree,
+  TerminalSquare,
+} from "lucide-react";
 import { hotkeysCoreFeature, syncDataLoaderFeature } from "@headless-tree/core";
 import { useTree } from "@headless-tree/react";
 
 import { AnimatedAIChat } from "@/components/ui/animated-ai-chat";
+import { ProjectContainerTerminal } from "@/components/ui/project-container-terminal";
 import { Input } from "@/components/ui/input";
 import { ProjectIframePreview } from "@/components/ui/project-iframe-preview";
 import { ProjectShareInvite } from "@/components/ui/project-share-invite";
@@ -13,6 +24,11 @@ import {
   type SynaroProjectEnvironmentStatus,
 } from "@/components/ui/project-cards-grid";
 import { Tree, TreeItem, TreeItemLabel } from "@/components/ui/tree";
+import {
+  readProjectTab,
+  writeProjectTab,
+  type ProjectWorkspaceTab,
+} from "@/lib/dashboard-workflow-storage";
 import { humanizeProjectSlug } from "@/lib/project-slug";
 import {
   filePathsToTreeItems,
@@ -23,7 +39,7 @@ import type { WorkspaceFilesResponse } from "@/lib/workspace-files-types";
 import type { WorkspaceSelectionApiResponse } from "@/lib/workspace-selection-types";
 import { cn } from "@/lib/utils";
 
-type TabKey = "tree" | "chat";
+type TabKey = ProjectWorkspaceTab;
 
 const indent = 20;
 
@@ -226,9 +242,9 @@ function LiveExplorerTree({
         }));
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 px-3 pb-3 pt-0 lg:grid-cols-[360px_1fr] lg:gap-3">
-        <div className="min-h-0 overflow-hidden rounded-2xl border border-border bg-card">
-          <div className="flex items-center justify-between gap-2 px-3 py-2">
+    <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 px-3 pb-3 pt-0 lg:h-full lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)] lg:grid-rows-1 lg:gap-3">
+        <div className="flex max-h-[min(50vh,28rem)] min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-full lg:max-h-none">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
             <p className="text-xs font-medium text-muted-foreground">
               Project files
               {loadState === "loading" ? (
@@ -248,7 +264,7 @@ function LiveExplorerTree({
               </div>
             </div>
           </div>
-          <div className="min-h-0 overflow-auto p-3">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
             <Tree className="gap-0.5" indent={indent} tree={tree}>
               {visibleItems.map((item) => {
                 const isSelected = selectedId === item.getId();
@@ -648,7 +664,7 @@ function TreePanel({ projectId, projectHasGitRemote, environmentStatus, treeRefr
   }, [projectId, environmentStatus, treeRefreshKey, bumpTreeKey]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="shrink-0 px-3 pb-2 pt-1">
         <ArchitectureWorkflowDetails />
       </div>
@@ -688,7 +704,14 @@ export function ProjectWorkspace({
   initialEnvironmentStatus = "INACTIVE",
   canManageInvites = false,
 }: ProjectWorkspaceProps) {
-  const [tab, setTab] = React.useState<TabKey>("tree");
+  const [tab, setTab] = React.useState<TabKey>(() => {
+    if (typeof window === "undefined" || !projectSlug) return "tree";
+    return readProjectTab(projectSlug) ?? "tree";
+  });
+
+  React.useEffect(() => {
+    if (projectSlug) writeProjectTab(projectSlug, tab);
+  }, [projectSlug, tab]);
   const [environmentStatus, setEnvironmentStatus] =
     React.useState<SynaroProjectEnvironmentStatus>(initialEnvironmentStatus);
   const [dockerBusy, setDockerBusy] = React.useState(false);
@@ -794,6 +817,19 @@ export function ProjectWorkspace({
                 <MessageSquareText className="size-4" />
                 AI chat
               </button>
+              <button
+                type="button"
+                onClick={() => setTab("terminal")}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition",
+                  tab === "terminal"
+                    ? "bg-muted text-foreground"
+                    : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <TerminalSquare className="size-4" />
+                Terminal
+              </button>
               {projectId ? (
                 <div className="ms-auto flex max-w-[min(100%,16rem)] flex-col items-end gap-1 sm:max-w-xs">
                   <div className="flex flex-wrap items-center justify-end gap-2">
@@ -813,19 +849,44 @@ export function ProjectWorkspace({
                 </div>
               ) : null}
             </div>
-            <div className="flex min-h-0 flex-1 flex-col">
-              {tab === "tree" ? (
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              <div
+                className={cn(
+                  "absolute inset-0 flex min-h-0 flex-col",
+                  tab !== "tree" && "pointer-events-none invisible",
+                )}
+                aria-hidden={tab !== "tree"}
+              >
                 <TreePanel
                   projectId={projectId}
                   projectHasGitRemote={projectHasGitRemote}
                   environmentStatus={environmentStatus}
                   treeRefreshKey={treeRefreshKey}
                 />
-              ) : (
-                <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
-                  <AnimatedAIChat className="w-full max-w-3xl" />
-                </div>
-              )}
+              </div>
+              <div
+                className={cn(
+                  "absolute inset-0 flex min-h-0 flex-col",
+                  tab !== "terminal" && "pointer-events-none invisible",
+                )}
+                aria-hidden={tab !== "terminal"}
+              >
+                <ProjectContainerTerminal
+                  projectId={projectId}
+                  environmentStatus={environmentStatus}
+                  visible={tab === "terminal"}
+                  className="m-3 min-h-[min(24rem,50vh)] flex-1 sm:m-4 xl:min-h-0"
+                />
+              </div>
+              <div
+                className={cn(
+                  "absolute inset-0 flex min-h-0 flex-1 items-center justify-center overflow-auto p-4",
+                  tab !== "chat" && "pointer-events-none invisible",
+                )}
+                aria-hidden={tab !== "chat"}
+              >
+                <AnimatedAIChat className="w-full max-w-3xl" />
+              </div>
             </div>
           </div>
 

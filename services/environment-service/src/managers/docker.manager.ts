@@ -1,7 +1,11 @@
 import { Buffer } from 'node:buffer'
-import { Readable } from 'node:stream'
+import { PassThrough, Readable } from 'node:stream'
 
 import { docker } from '../lib/docker.js'
+import {
+  buildWorkspaceFindPruneExpr,
+  filterWorkspaceTreePaths,
+} from '../lib/workspace-tree-filter.js'
 import { prisma } from '../lib/prisma.js'
 import { toGithubAuthenticatedCloneUrl, toPublicGitCloneUrl } from '../lib/git-clone.js'
 
@@ -9,7 +13,40 @@ type EnvironmentStatus = 'INACTIVE' | 'PROVISIONING' | 'RUNNING' | 'STOPPED' | '
 const BASE_PORT = 4000
 const MAX_PORT = 4999
 /** Workspace root inside the environment container (matches `git clone … app`). */
-const WORKSPACE_ROOT = '/tmp/synaro-workspace/app'
+export const WORKSPACE_ROOT = '/tmp/synaro-workspace/app'
+
+/**
+ * Directory where the interactive terminal should start (`HOME` + cwd).
+ * Uses `…/app`, or a single nested folder inside it (common folder-upload layout).
+ */
+export async function resolveTerminalWorkspaceDir(containerId: string): Promise<string> {
+  const script = [
+    `ROOT="${WORKSPACE_ROOT}"`,
+    'if [ ! -d "$ROOT" ]; then',
+    '  if [ -d /tmp/synaro-workspace ]; then ROOT=/tmp/synaro-workspace; else ROOT=/; fi',
+    'fi',
+    'cd "$ROOT" || exit 1',
+    'count=$(ls -A 2>/dev/null | wc -l | tr -d " ")',
+    'if [ "$count" = "1" ]; then',
+    '  only=$(ls -A 2>/dev/null | head -n 1)',
+    '  if [ -n "$only" ] && [ -d "$only" ]; then cd "$only" 2>/dev/null || true; fi',
+    'fi',
+    'pwd',
+  ].join('\n')
+  try {
+    const out = await execShellInContainer(containerId, script)
+    const line = out
+      .trim()
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .pop()
+    if (line?.startsWith('/')) return line
+  } catch {
+    /* fall through */
+  }
+  return WORKSPACE_ROOT
+}
 
 // Find a free port in our range by checking existing environments
 async function allocatePort(): Promise<number> {
@@ -392,10 +429,18 @@ export async function listWorkspaceFilePaths(environmentId: string): Promise<{
   }
 
   // No `set -e`: avoid failing the whole exec when `cd` races with a slow clone.
+  let workspaceDir = WORKSPACE_ROOT
+  try {
+    workspaceDir = await resolveTerminalWorkspaceDir(environment.containerId)
+  } catch {
+    workspaceDir = WORKSPACE_ROOT
+  }
+
+  const pruneExpr = buildWorkspaceFindPruneExpr()
   const script = [
-    `if [ ! -d "${WORKSPACE_ROOT}" ]; then exit 0; fi`,
-    `cd "${WORKSPACE_ROOT}" 2>/dev/null || exit 0`,
-    `find . -name .git -prune -o -name node_modules -prune -o -name .next -prune -o -name dist -prune -o -name build -prune -o -type f -print 2>/dev/null | LC_ALL=C sort | head -n ${
+    `if [ ! -d "${workspaceDir}" ]; then exit 0; fi`,
+    `cd "${workspaceDir}" 2>/dev/null || exit 0`,
+    `find . \\( ${pruneExpr} \\) -prune -o -type f ! -path '*/.*' ! -name '.*' -print 2>/dev/null | LC_ALL=C sort | head -n ${
       WORKSPACE_LIST_MAX + 1
     }`,
   ].join('; ')
@@ -412,9 +457,10 @@ export async function listWorkspaceFilePaths(environmentId: string): Promise<{
     .map((l) => l.trim())
     .filter((l) => l.length > 0)
   const truncated = lines.length > WORKSPACE_LIST_MAX
-  const paths = (truncated ? lines.slice(0, WORKSPACE_LIST_MAX) : lines).map((l) =>
+  const rawPaths = (truncated ? lines.slice(0, WORKSPACE_LIST_MAX) : lines).map((l) =>
     l.replace(/^\.\//, ''),
   )
+  const paths = filterWorkspaceTreePaths(rawPaths)
 
   return { paths, truncated, rootLabel }
 }
@@ -557,4 +603,85 @@ export async function getWorkspaceSelection(environmentId: string, relativePath:
   }
 
   return { path: safe, kind, content, contentTruncated, gitLog }
+}
+
+const TERMINAL_MAX_COMMAND_LEN = 8_000
+const TERMINAL_MAX_OUTPUT_BYTES = 96 * 1024
+
+export type TerminalExecResult = {
+  output: string
+  exitCode: number | null
+  cwd: string
+}
+
+/**
+ * Run a shell command in the project container workspace (non-interactive exec).
+ */
+export async function execTerminalCommand(environmentId: string, command: string): Promise<TerminalExecResult> {
+  const environment = await prisma.environment.findUnique({ where: { id: environmentId } })
+  if (!environment?.containerId) {
+    throw new Error('No container found for this environment')
+  }
+  if (environment.status !== 'RUNNING') {
+    throw new Error('Container is not active')
+  }
+
+  const container = docker.getContainer(environment.containerId)
+  let inspect: Awaited<ReturnType<typeof container.inspect>>
+  try {
+    inspect = await container.inspect()
+  } catch {
+    throw new Error('No container found for this environment')
+  }
+  if (!inspect.State?.Running) {
+    await prisma.environment.update({ where: { id: environmentId }, data: { status: 'STOPPED' } }).catch(() => {})
+    throw new Error('Container is not running')
+  }
+
+  const trimmed = command.replace(/\r\n/g, '\n').replace(/\r/g, '').trim()
+  if (!trimmed) {
+    return { output: '', exitCode: 0, cwd: WORKSPACE_ROOT }
+  }
+  if (trimmed.length > TERMINAL_MAX_COMMAND_LEN) {
+    throw new Error(`Command too long (max ${TERMINAL_MAX_COMMAND_LEN} characters)`)
+  }
+
+  // Use `;` joins only — Alpine ash rejects `if … elif … fi cmd` on one line (space-joined).
+  const workspaceDir = await resolveTerminalWorkspaceDir(environment.containerId)
+  const script = [`cd "${workspaceDir}"`, trimmed].join('; ')
+
+  const execInstance = await container.exec({
+    Cmd: ['sh', '-c', script],
+    AttachStdout: true,
+    AttachStderr: true,
+    Tty: false,
+  })
+
+  const stream = await execInstance.start({ hijack: true, stdin: false })
+  const stdout = new PassThrough()
+  const stderr = new PassThrough()
+  docker.modem.demuxStream(stream, stdout, stderr)
+
+  const outChunks: Buffer[] = []
+  const errChunks: Buffer[] = []
+  stdout.on('data', (chunk: Buffer) => outChunks.push(chunk))
+  stderr.on('data', (chunk: Buffer) => errChunks.push(chunk))
+
+  await new Promise<void>((resolve, reject) => {
+    stream.on('end', () => resolve())
+    stream.on('error', reject)
+  })
+
+  const exitInspect = await execInstance.inspect()
+  let output = Buffer.concat([...outChunks, ...errChunks]).toString('utf8')
+  output = output.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  if (Buffer.byteLength(output, 'utf8') > TERMINAL_MAX_OUTPUT_BYTES) {
+    output = `…(output truncated)\n${output.slice(-TERMINAL_MAX_OUTPUT_BYTES)}`
+  }
+
+  return {
+    output: output.trimEnd(),
+    exitCode: typeof exitInspect.ExitCode === 'number' ? exitInspect.ExitCode : null,
+    cwd: workspaceDir,
+  }
 }

@@ -20,6 +20,7 @@ model User {
   projects         Project[]
   projectMembers   ProjectMember[]
   invitesCreated   ProjectInvite[] @relation("ProjectInviteCreatedBy")
+  activityLogs     ActivityLog[]
 }
 
 model Account {
@@ -76,8 +77,31 @@ model Project {
   user               User              @relation(fields: [userId], references: [id])
   members            ProjectMember[]
   invites            ProjectInvite[]
+  activityLogs       ActivityLog[]
 
   @@index([userId])
+}
+
+/// User-visible audit trail (container start/stop, etc.) for dashboard and `/logs`.
+model ActivityLog {
+  id        String            @id @default(uuid())
+  userId    String
+  projectId String
+  action    String
+  status    ActivityLogStatus
+  createdAt DateTime          @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([projectId, createdAt(sort: Desc)])
+}
+
+enum ActivityLogStatus {
+  DONE
+  RUNNING
+  STOPPED
 }
 
 /// Collaborators invited via share link (see `ProjectInvite`). Owner remains `Project.userId`.

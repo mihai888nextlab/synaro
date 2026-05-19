@@ -1,11 +1,8 @@
 import type { Project } from "@prisma/client";
 
 import type { DashboardKpiItem } from "@/components/ui/dashboard-kpi-strip";
-import type { DashboardLogRow } from "@/components/ui/dashboard-logs-table";
-import type {
-  SynaroProjectCardModel,
-  SynaroProjectEnvironmentStatus,
-} from "@/components/ui/project-cards-grid";
+import { getUserActivityLogs } from "@/lib/activity-log";
+import type { SynaroProjectCardModel } from "@/components/ui/project-cards-grid";
 import {
   latestEnvironmentSummariesByProjectId,
   parseEnvironmentStatusFromService,
@@ -31,24 +28,6 @@ export async function getUserProjectCardsWithRows(userId: string): Promise<{
     return projectRowToCardModel(merged, i, { viewerUserId: userId });
   });
   return { rows, cards };
-}
-
-function logLineForEnvironment(
-  status: SynaroProjectEnvironmentStatus,
-): { action: string; logStatus: DashboardLogRow["status"] } {
-  switch (status) {
-    case "RUNNING":
-      return { action: "Docker environment running", logStatus: "running" };
-    case "PROVISIONING":
-      return { action: "Environment starting", logStatus: "running" };
-    case "ERROR":
-      return { action: "Environment error", logStatus: "stopped" };
-    case "STOPPED":
-      return { action: "Environment stopped", logStatus: "stopped" };
-    case "INACTIVE":
-    default:
-      return { action: "Workspace idle", logStatus: "done" };
-  }
 }
 
 function buildKpiItems(rows: Project[], cards: SynaroProjectCardModel[]): DashboardKpiItem[] {
@@ -102,29 +81,13 @@ function buildKpiItems(rows: Project[], cards: SynaroProjectCardModel[]): Dashbo
   ];
 }
 
-function buildActivityLogs(cards: SynaroProjectCardModel[]): DashboardLogRow[] {
-  return cards.slice(0, 12).map((c) => {
-    const { action, logStatus } = logLineForEnvironment(c.environmentStatus);
-    return {
-      id: c.id,
-      action,
-      project: c.title,
-      status: logStatus,
-      time: c.updatedRelative,
-    };
-  });
-}
-
-/** Data for `/dashboard`: project cards, KPI strip, and activity table derived from the same project list. */
-export async function getDashboardProjectPayload(userId: string): Promise<{
-  projects: SynaroProjectCardModel[];
-  kpiItems: DashboardKpiItem[];
-  activityLogs: DashboardLogRow[];
-}> {
+/** Data for `/dashboard`: project cards, KPI strip, and recent activity logs. */
+export async function getDashboardProjectPayload(userId: string) {
   const { rows, cards } = await getUserProjectCardsWithRows(userId);
+  const activityLogs = await getUserActivityLogs(userId, { limit: 12, timeFormat: "relative" });
   return {
     projects: cards,
     kpiItems: buildKpiItems(rows, cards),
-    activityLogs: buildActivityLogs(cards),
+    activityLogs,
   };
 }

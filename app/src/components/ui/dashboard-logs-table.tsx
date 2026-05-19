@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
@@ -8,8 +7,12 @@ export type DashboardLogRow = {
   action: string;
   project: string;
   status: "done" | "running" | "stopped";
-  /** Relative time label, e.g. "2m ago" */
+  /** Display time (relative on dashboard, full timestamp on `/logs`). */
   time: string;
+  /** Full timestamp for hover / accessibility. */
+  timeTitle?: string;
+  /** ISO-8601 instant for `<time dateTime>`. */
+  occurredAt?: string;
 };
 
 export const DASHBOARD_PLACEHOLDER_LOGS: DashboardLogRow[] = [
@@ -146,6 +149,7 @@ export function DashboardLogsTable({
   className,
   title = "Recent activity",
   headerEnd,
+  emptyMessage = "No activity yet. Start or stop a project container to see events here.",
   /** Omit title row / toolbar (e.g. `/logs` full-page list). */
   hideHeader = false,
   /** No outer card: no border, radius, or lifted surface — table sits flush on the page. */
@@ -156,9 +160,12 @@ export function DashboardLogsTable({
   title?: string;
   /** Right side of the header row (e.g. View logs on the dashboard). */
   headerEnd?: ReactNode;
+  emptyMessage?: string;
   hideHeader?: boolean;
   frameless?: boolean;
 }) {
+  const isEmpty = logs.length === 0;
+
   return (
     <section
       className={cn(
@@ -176,6 +183,17 @@ export function DashboardLogsTable({
         </div>
       ) : null}
 
+      {isEmpty ? (
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col items-center justify-center text-center",
+            hideHeader ? "px-4 py-16 sm:py-24" : "px-5 py-12 sm:px-6 sm:py-16",
+          )}
+        >
+          <p className="text-base font-medium text-foreground">There are no logs</p>
+          <p className="mt-2 max-w-md text-sm text-muted-foreground">{emptyMessage}</p>
+        </div>
+      ) : (
       <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead>
@@ -215,23 +233,6 @@ export function DashboardLogsTable({
             </tr>
           </thead>
           <tbody>
-            {logs.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={4}
-                  className={cn(
-                    "py-10 text-center text-sm text-muted-foreground",
-                    frameless ? "px-0" : "px-5 sm:px-6",
-                  )}
-                >
-                  No projects yet. Create one from{" "}
-                  <Link href="/projects" className="font-medium text-primary underline-offset-2 hover:underline">
-                    Projects
-                  </Link>
-                  .
-                </td>
-              </tr>
-            ) : null}
             {logs.map((row) => (
               <tr
                 key={row.id}
@@ -261,14 +262,16 @@ export function DashboardLogsTable({
                     "whitespace-nowrap py-3.5 text-right tabular-nums text-muted-foreground",
                     frameless ? "pl-3 pr-0 sm:pl-4" : "px-5 sm:px-6",
                   )}
+                  title={row.timeTitle}
                 >
-                  {row.time}
+                  <time dateTime={row.occurredAt}>{row.time}</time>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      )}
     </section>
   );
 }

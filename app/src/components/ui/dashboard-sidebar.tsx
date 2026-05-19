@@ -17,6 +17,11 @@ import {
 import { signOut, useSession } from "next-auth/react";
 
 import { SynaroLogo } from "@/components/ui/synaro-logo";
+import {
+  getProjectsNavHref,
+  readLastProjectsPath,
+  writeLastProjectsPath,
+} from "@/lib/dashboard-workflow-storage";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -34,6 +39,9 @@ const navItems: NavItem[] = [
 
 function isActiveRoute(current: string, href: string) {
   if (href === "/dashboard") return current === "/dashboard";
+  if (href === "/projects" || href.startsWith("/projects/")) {
+    return current === "/projects" || current.startsWith("/projects/");
+  }
   return current === href || current.startsWith(`${href}/`);
 }
 
@@ -64,7 +72,25 @@ export function DashboardSidebar({
   }, [menuOpen]);
 
   const activePath = router.pathname;
-  const items = useMemo(() => navItems, []);
+  const [projectsHref, setProjectsHref] = useState("/projects");
+
+  useEffect(() => {
+    setProjectsHref(getProjectsNavHref());
+  }, []);
+
+  useEffect(() => {
+    writeLastProjectsPath(router.asPath);
+    const href = readLastProjectsPath();
+    if (href) setProjectsHref(href);
+  }, [router.asPath]);
+
+  const items = useMemo(
+    () =>
+      navItems.map((item) =>
+        item.href === "/projects" ? { ...item, href: projectsHref } : item,
+      ),
+    [projectsHref],
+  );
 
   return (
     <aside

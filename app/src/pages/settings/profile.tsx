@@ -219,15 +219,7 @@ export default function ProfilePage({
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">
             GitHub
           </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Connect GitHub to sign in with GitHub and use the same email as this account. Your GitHub
-            email must match <span className="font-medium text-foreground">{email}</span> (or be
-            visible to the GitHub OAuth app). After connecting, use{" "}
-            <span className="font-medium text-foreground">Projects → Import → My repositories</span>{" "}
-            to choose a repo. If that list fails with a permission error, disconnect GitHub here and
-            connect again so your token includes repository access.
-          </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
             {linkedGithub ? (
               <span className="inline-flex items-center rounded-full border border-emerald-500/35 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
                 Connected

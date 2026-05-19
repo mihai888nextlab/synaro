@@ -4,12 +4,12 @@ import {
   FileIcon,
   FolderIcon,
   FolderOpenIcon,
-  Layers,
   Loader2,
   MessageSquareText,
   FolderTree,
   TerminalSquare,
 } from "lucide-react";
+import type { TreeState, Updater } from "@headless-tree/core";
 import { hotkeysCoreFeature, syncDataLoaderFeature } from "@headless-tree/core";
 import { useTree } from "@headless-tree/react";
 
@@ -26,7 +26,9 @@ import {
 import { Tree, TreeItem, TreeItemLabel } from "@/components/ui/tree";
 import {
   readProjectTab,
+  readWorkspaceTreeExpanded,
   writeProjectTab,
+  writeWorkspaceTreeExpanded,
   type ProjectWorkspaceTab,
 } from "@/lib/dashboard-workflow-storage";
 import { humanizeProjectSlug } from "@/lib/project-slug";
@@ -43,69 +45,12 @@ type TabKey = ProjectWorkspaceTab;
 
 const indent = 20;
 
-function defaultExpandedItemIds(items: Record<string, WorkspaceExplorerItem>): string[] {
-  const out = new Set<string>(["root"]);
-  function visit(id: string, depth: number) {
-    if (depth >= 4) return;
-    const ch = items[id]?.children;
-    if (!ch?.length) return;
-    for (const c of ch) {
-      out.add(c);
-      if ((items[c]?.children?.length ?? 0) > 0) visit(c, depth + 1);
-    }
-  }
-  visit("root", 0);
-  return [...out];
-}
-
 function placeholderTreeItems(message: string): Record<string, WorkspaceExplorerItem> {
   const hint = "syn:status";
   return {
     root: { name: "repository", children: [hint] },
     [hint]: { name: message },
   };
-}
-
-function ArchitectureWorkflowDetails() {
-  return (
-    <details className="group rounded-2xl border border-border bg-card/40 text-left text-muted-foreground">
-      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-medium text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
-        <Layers className="size-3.5 shrink-0 text-muted-foreground" />
-        <span>How Synaro services connect</span>
-        <span className="ms-auto text-[0.65rem] font-normal text-muted-foreground group-open:hidden">Show</span>
-        <span className="ms-auto hidden text-[0.65rem] font-normal text-muted-foreground group-open:inline">Hide</span>
-      </summary>
-      <div className="space-y-2.5 border-t border-border px-3 pb-3 pt-2 text-[0.7rem] leading-relaxed sm:text-xs">
-        <p>
-          <span className="font-medium text-foreground">This app</span> (Next.js + Prisma) owns users and projects. UI
-          calls <code className="rounded bg-muted px-1 py-px text-[0.65rem]">/api/projects</code>,{" "}
-          <code className="rounded bg-muted px-1 py-px text-[0.65rem]">/api/projects/[id]/docker</code>, and{" "}
-          <code className="rounded bg-muted px-1 py-px text-[0.65rem]">/api/projects/[id]/workspace-files</code>.
-        </p>
-        <p>
-          <span className="font-medium text-foreground">environment-service</span> (port 3004) exposes{" "}
-          <code className="rounded bg-muted px-1 py-px text-[0.65rem]">/api/environments</code> and talks to Docker.
-          Each project gets its own container; the workspace lives at{" "}
-          <code className="rounded bg-muted px-1 py-px text-[0.65rem]">/tmp/synaro-workspace/app</code>. When a Git URL
-          is set, the service clones there; folder uploads are written to the same path. The file tree is built from{" "}
-          <code className="rounded bg-muted px-1 py-px text-[0.65rem]">GET /api/environments/:id/workspace-files</code>{" "}
-          (Docker exec + <code className="rounded bg-muted px-1 py-px text-[0.65rem]">find</code>).
-        </p>
-        <p>
-          <span className="font-medium text-foreground">project-service</span> (3002) is a separate Fastify + Prisma
-          service with <code className="rounded bg-muted px-1 py-px text-[0.65rem]">/api/projects</code> on its own
-          database; this dashboard does not call it yet—the app persists projects in the main Synaro DB.
-        </p>
-        <p>
-          <span className="font-medium text-foreground">ai-orchestration-service</span> (3003) exposes{" "}
-          <code className="rounded bg-muted px-1 py-px text-[0.65rem]">/api/tasks</code> for Kimi-backed tasks.{" "}
-          <span className="font-medium text-foreground">execution-manager</span> exposes{" "}
-          <code className="rounded bg-muted px-1 py-px text-[0.65rem]">/api/executions</code> for a different container
-          execution path.
-        </p>
-      </div>
-    </details>
-  );
 }
 
 type LiveExplorerTreeProps = {
@@ -132,12 +77,76 @@ function LiveExplorerTree({
   truncated,
   loadState,
 }: LiveExplorerTreeProps) {
-  const initialExpanded = React.useMemo(() => defaultExpandedItemIds(items), [items]);
+  /** Restore from localStorage on every mount (tab switches remount this tree via `treeKey`). */
+  const [expandedItems, setExpandedItems] = React.useState<string[]>(() =>
+    typeof window !== "undefined" && projectId ? readWorkspaceTreeExpanded(projectId) ?? [] : [],
+  );
+  const initialHydratedRef = React.useRef(false);
+  const allowPersistExpandedRef = React.useRef(false);
+  const prevProjectIdForExpandedRef = React.useRef<string | undefined>(undefined);
+
+  /** Only reset when navigating to a different project — not on remount of the same project (same `projectId`). */
+  React.useEffect(() => {
+    if (!projectId) {
+      prevProjectIdForExpandedRef.current = undefined;
+      initialHydratedRef.current = false;
+      allowPersistExpandedRef.current = false;
+      setExpandedItems([]);
+      return;
+    }
+    if (prevProjectIdForExpandedRef.current !== projectId) {
+      const wasSet = prevProjectIdForExpandedRef.current !== undefined;
+      prevProjectIdForExpandedRef.current = projectId;
+      if (wasSet) {
+        initialHydratedRef.current = false;
+        allowPersistExpandedRef.current = false;
+        setExpandedItems(readWorkspaceTreeExpanded(projectId) ?? []);
+      }
+    }
+  }, [projectId]);
+
+  React.useEffect(() => {
+    if (!projectId) return;
+    if (loadState !== "ready") return;
+    const firstChild = items.root?.children?.[0];
+    if (typeof firstChild === "string" && firstChild.startsWith("syn:")) return;
+
+    const keys = new Set(Object.keys(items));
+    if (!initialHydratedRef.current) {
+      initialHydratedRef.current = true;
+      setExpandedItems((prev) => {
+        const next = prev.filter((id) => keys.has(id));
+        return next;
+      });
+      allowPersistExpandedRef.current = true;
+      return;
+    }
+    setExpandedItems((prev) => {
+      const next = prev.filter((id) => keys.has(id));
+      if (next.length === prev.length && next.every((v, i) => v === prev[i])) return prev;
+      return next;
+    });
+  }, [projectId, loadState, items]);
+
+  const handleTreeSetState = React.useCallback(
+    (updaterOrValue: Updater<Partial<TreeState<WorkspaceExplorerItem>>>) => {
+      if (typeof updaterOrValue === "function") return;
+      if (!Array.isArray(updaterOrValue.expandedItems)) return;
+      setExpandedItems(updaterOrValue.expandedItems);
+      if (allowPersistExpandedRef.current && projectId) {
+        writeWorkspaceTreeExpanded(projectId, updaterOrValue.expandedItems);
+      }
+    },
+    [projectId],
+  );
 
   const tree = useTree<WorkspaceExplorerItem>({
     initialState: {
-      expandedItems: initialExpanded,
+      expandedItems: [],
+      focusedItem: null,
     },
+    state: { expandedItems },
+    setState: handleTreeSetState,
     indent,
     rootItemId: "root",
     getItemName: (item) => item.getItemData().name,
@@ -241,8 +250,15 @@ function LiveExplorerTree({
           href: null as string | null,
         }));
 
+  const showSelectionPanel = Boolean(selectedPath);
+
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 px-3 pb-3 pt-0 lg:h-full lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)] lg:grid-rows-1 lg:gap-3">
+    <div
+      className={cn(
+        "grid min-h-0 flex-1 grid-cols-1 gap-3 px-3 pb-3 pt-0 lg:h-full lg:grid-rows-1 lg:gap-3",
+        showSelectionPanel ? "lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]" : "lg:grid-cols-1",
+      )}
+    >
         <div className="flex max-h-[min(50vh,28rem)] min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-full lg:max-h-none">
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
             <p className="text-xs font-medium text-muted-foreground">
@@ -297,17 +313,14 @@ function LiveExplorerTree({
           </div>
         </div>
 
+        {showSelectionPanel ? (
         <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card">
           <div className="flex items-center justify-between px-3 py-2.5">
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">
-                {selectedItem ? selectedItem.getItemName() : "Select a file or folder"}
+                {selectedItem ? selectedItem.getItemName() : selectedPath}
               </p>
-              <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
-                {selectedPath
-                  ? selectedPath
-                  : "Choose an item in the tree to load metadata and file contents from the container."}
-              </p>
+              <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{selectedPath}</p>
             </div>
             <div className="hidden sm:block">
               {truncated ? (
@@ -462,10 +475,6 @@ function LiveExplorerTree({
                 </div>
               ) : detailError ? (
                 <p className="mt-3 text-xs text-destructive">{detailError}</p>
-              ) : !selectedPath ? (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Select a file to view its contents from the running container (text only, size-capped).
-                </p>
               ) : detail?.kind === "directory" ? (
                 <p className="mt-3 text-xs text-muted-foreground">
                   This path is a directory. Expand it in the tree or pick a file to see source preview.
@@ -491,6 +500,7 @@ function LiveExplorerTree({
             </div>
           </div>
         </div>
+        ) : null}
     </div>
   );
 }
@@ -510,6 +520,9 @@ function TreePanel({ projectId, projectHasGitRemote, environmentStatus, treeRefr
   const [treeKey, setTreeKey] = React.useState("initial");
   const [loadState, setLoadState] = React.useState<"idle" | "loading" | "ready" | "hint">("idle");
   const treeNonce = React.useRef(0);
+  /** After first successful tree paint, refetches skip the full-tree loading placeholder (tab / Docker refresh). */
+  const treeWasReadyRef = React.useRef(false);
+  const prevProjectIdForTreeRef = React.useRef<string | undefined>(undefined);
   const bumpTreeKey = React.useCallback(() => {
     treeNonce.current += 1;
     setTreeKey(`tree-${treeNonce.current}`);
@@ -517,10 +530,17 @@ function TreePanel({ projectId, projectHasGitRemote, environmentStatus, treeRefr
 
   React.useEffect(() => {
     if (!projectId) {
+      treeWasReadyRef.current = false;
+      prevProjectIdForTreeRef.current = undefined;
       setItems(placeholderTreeItems("Connect to a project to load the repository tree."));
       setLoadState("hint");
       bumpTreeKey();
       return;
+    }
+
+    if (prevProjectIdForTreeRef.current !== projectId) {
+      treeWasReadyRef.current = false;
+      prevProjectIdForTreeRef.current = projectId;
     }
 
     const pid = projectId;
@@ -536,7 +556,7 @@ function TreePanel({ projectId, projectHasGitRemote, environmentStatus, treeRefr
     }
 
     async function load() {
-      if (!cancelled) {
+      if (!cancelled && !treeWasReadyRef.current) {
         setItems(placeholderTreeItems("Loading file list…"));
         setLoadState("loading");
       }
@@ -635,6 +655,7 @@ function TreePanel({ projectId, projectHasGitRemote, environmentStatus, treeRefr
           setItems(next);
           setTruncated(wf.truncated);
           setLoadState("ready");
+          treeWasReadyRef.current = true;
           bumpTreeKey();
         }
         if (wf.paths.length > 0) {
@@ -665,9 +686,6 @@ function TreePanel({ projectId, projectHasGitRemote, environmentStatus, treeRefr
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="shrink-0 px-3 pb-2 pt-1">
-        <ArchitectureWorkflowDetails />
-      </div>
       <LiveExplorerTree
         key={treeKey}
         projectId={projectId}
@@ -717,10 +735,22 @@ export function ProjectWorkspace({
   const [dockerBusy, setDockerBusy] = React.useState(false);
   const [dockerError, setDockerError] = React.useState<string | null>(null);
   const [treeRefreshKey, setTreeRefreshKey] = React.useState(0);
+  const prevWorkspaceTabRef = React.useRef<ProjectWorkspaceTab | null>(null);
 
   React.useEffect(() => {
     setEnvironmentStatus(initialEnvironmentStatus);
   }, [initialEnvironmentStatus]);
+
+  /** Refetch workspace file list when returning from Terminal (or chat) so shell edits show without a full reload. */
+  React.useEffect(() => {
+    const prev = prevWorkspaceTabRef.current;
+    prevWorkspaceTabRef.current = tab;
+    if (tab !== "tree") return;
+    if (prev === null) return;
+    if (prev === "tree") return;
+    if (!projectId) return;
+    setTreeRefreshKey((k) => k + 1);
+  }, [tab, projectId]);
 
   React.useEffect(() => {
     if (!projectId) return;

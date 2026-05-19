@@ -8,6 +8,8 @@ export const WORKFLOW_STORAGE_KEYS = {
   lastProjectSlug: `${PREFIX}lastProjectSlug`,
   projectTab: (slug: string) => `${PREFIX}tab.${slug}`,
   terminalScrollback: (projectId: string) => `${PREFIX}terminal.${projectId}`,
+  /** Expanded headless-tree item ids for the project workspace file explorer. */
+  workspaceTreeExpanded: (projectId: string) => `${PREFIX}treeExpanded.${projectId}`,
 } as const;
 
 export type ProjectWorkspaceTab = "tree" | "chat" | "terminal";
@@ -83,6 +85,37 @@ export function writeProjectTab(slug: string, tab: ProjectWorkspaceTab): void {
 }
 
 const MAX_TERMINAL_SCROLLBACK_BYTES = 200_000;
+
+const MAX_WORKSPACE_TREE_EXPANDED_IDS = 400;
+
+/** `null` = nothing stored yet; `[]` = user had everything collapsed. */
+export function readWorkspaceTreeExpanded(projectId: string): string[] | null {
+  if (!canUseStorage() || !projectId.trim()) return null;
+  try {
+    const raw = window.localStorage.getItem(WORKFLOW_STORAGE_KEYS.workspaceTreeExpanded(projectId.trim()));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    return parsed
+      .filter((x): x is string => typeof x === "string")
+      .slice(0, MAX_WORKSPACE_TREE_EXPANDED_IDS);
+  } catch {
+    return null;
+  }
+}
+
+export function writeWorkspaceTreeExpanded(projectId: string, expandedItemIds: string[]): void {
+  if (!canUseStorage() || !projectId.trim()) return;
+  try {
+    const payload = expandedItemIds.slice(0, MAX_WORKSPACE_TREE_EXPANDED_IDS);
+    window.localStorage.setItem(
+      WORKFLOW_STORAGE_KEYS.workspaceTreeExpanded(projectId.trim()),
+      JSON.stringify(payload),
+    );
+  } catch {
+    /* quota / private mode */
+  }
+}
 
 export function readTerminalScrollback(projectId: string): string | null {
   if (!canUseStorage() || !projectId) return null;

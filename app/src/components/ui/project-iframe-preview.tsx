@@ -11,16 +11,23 @@ const DEFAULT_PREVIEW_URL = "about:blank";
 export function ProjectIframePreview({
   className,
   title = "Preview",
-  /** When true: no title bar or URL controls — full-height iframe only */
   chromeless = false,
+  previewUrl,
 }: {
   className?: string;
-  /** Label shown in the panel header (ignored when chromeless) */
   title?: string;
   chromeless?: boolean;
+  /** When set by parent (e.g. after Run), navigate the iframe here automatically. */
+  previewUrl?: string | null;
 }) {
   const [urlInput, setUrlInput] = React.useState(DEFAULT_PREVIEW_URL);
   const [iframeSrc, setIframeSrc] = React.useState(DEFAULT_PREVIEW_URL);
+
+  React.useEffect(() => {
+    if (!previewUrl) return;
+    setUrlInput(previewUrl);
+    setIframeSrc(previewUrl);
+  }, [previewUrl]);
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
 
   const applyUrl = React.useCallback(() => {

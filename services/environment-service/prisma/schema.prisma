@@ -16,6 +16,11 @@ model Environment {
   gitRemoteUrl String?
   status      EnvironmentStatus @default(INACTIVE)
   port        Int?
+  /// Subdomain slug for public access via Traefik (e.g. "my-app-a3f9" → my-app-a3f9.synaro.io).
+  /// Only set when SYNARO_DOMAIN env var is configured on the environment service.
+  subdomain    String?           @unique
+  /// Optional custom domain connected by the user (e.g. "myapp.com").
+  customDomain String?
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 

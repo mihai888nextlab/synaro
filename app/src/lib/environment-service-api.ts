@@ -13,6 +13,10 @@ export type RemoteEnvironment = {
   port: number | null;
   containerId: string | null;
   image?: string;
+  subdomain?: string | null;
+  customDomain?: string | null;
+  /** Resolved public URL — https://{subdomain}.{domain} in production, http://localhost:{port} locally. */
+  publicUrl?: string | null;
 };
 
 export async function fetchEnvironmentsForProject(projectId: string): Promise<RemoteEnvironment[]> {
@@ -40,7 +44,7 @@ export function pickActiveRuntimeEnvironment(rows: RemoteEnvironment[]): RemoteE
 export async function remoteCreateEnvironment(
   projectId: string,
   image = "node:20-alpine",
-  opts?: { gitRemoteUrl?: string | null; gitAccessToken?: string | null },
+  opts?: { gitRemoteUrl?: string | null; gitAccessToken?: string | null; projectSlug?: string | null },
 ): Promise<RemoteEnvironment> {
   const base = environmentServiceBaseUrl();
   const payload: Record<string, unknown> = { projectId, image };
@@ -48,6 +52,7 @@ export async function remoteCreateEnvironment(
     payload.gitRemoteUrl = opts.gitRemoteUrl;
     if (opts.gitAccessToken) payload.gitAccessToken = opts.gitAccessToken;
   }
+  if (opts?.projectSlug) payload.projectSlug = opts.projectSlug;
   const res = await fetch(`${base}/api/environments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

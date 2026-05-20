@@ -34,9 +34,13 @@ function projectUpdateFromRemoteEnv(env: RemoteEnvironment): {
   repositoryLocation: string | null;
 } {
   const st = parseRemoteStatus(env.status) ?? "ERROR";
+  if (st !== "RUNNING") return { environmentStatus: st, repositoryLocation: null };
+
+  // Prefer the public URL returned by the environment service (set when SYNARO_DOMAIN is configured).
+  // Fall back to localhost:{port} for local development.
   const port = typeof env.port === "number" ? env.port : null;
   const repositoryLocation =
-    st === "RUNNING" && port != null ? `${previewHostBase()}:${port}` : null;
+    env.publicUrl ?? (port != null ? `${previewHostBase()}:${port}` : null);
   return { environmentStatus: st, repositoryLocation };
 }
 
@@ -101,7 +105,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const project = await prisma.project.findFirst({
       where: whereProjectByIdForUser(projectId, session.user.id),
-      select: { id: true, userId: true, cloneRepositoryUrl: true },
+      select: { id: true, userId: true, cloneRepositoryUrl: true, slug: true },
     });
     if (!project) {
       res.status(404).json({ error: "Project not found" });
@@ -110,14 +114,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     let env: RemoteEnvironment | null = null;
 
-    const createOpts =
-      project.cloneRepositoryUrl != null && project.cloneRepositoryUrl.length > 0
+    const createOpts = {
+      ...(project.cloneRepositoryUrl != null && project.cloneRepositoryUrl.length > 0
         ? {
             gitRemoteUrl: project.cloneRepositoryUrl,
-            gitAccessToken:
-              (await getGithubAccessTokenForUser(project.userId)) ?? undefined,
+            gitAccessToken: (await getGithubAccessTokenForUser(project.userId)) ?? undefined,
           }
-        : undefined;
+        : {}),
+      projectSlug: project.slug,
+    };
 
     if (action === "stop") {
       const rows = await fetchEnvironmentsForProject(projectId);

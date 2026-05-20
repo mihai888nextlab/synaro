@@ -7,14 +7,17 @@ export const kimi = new OpenAI({
 })
 
 export const MODELS = {
-  // Cheap model for analysis (file selection, repo scanning)
+  // Fast model for file analysis (repo scanning, relevance filtering)
   ANALYZE: 'moonshot-v1-8k',
   // Capable model for code generation
   GENERATE: 'kimi-k2.6',
 } as const
 
 export const TOKEN_BUDGETS = {
-  ANALYZE_MAX_INPUT: 4_000,
-  GENERATE_MAX_INPUT: 20_000,
-  MAX_OUTPUT: 4_000,
+  // Enough to hold a large repo tree + task description
+  ANALYZE_MAX_INPUT: 16_000,
+  // Enough to hold many source files as context
+  GENERATE_MAX_INPUT: 100_000,
+  // ~8000 tokens ≈ ~600 lines of code per response
+  MAX_OUTPUT: 8_000,
 } as const

@@ -12,6 +12,34 @@ import { toGithubAuthenticatedCloneUrl, toPublicGitCloneUrl } from '../lib/git-c
 type EnvironmentStatus = 'INACTIVE' | 'PROVISIONING' | 'RUNNING' | 'STOPPED' | 'ERROR'
 const BASE_PORT = 4000
 const MAX_PORT = 4999
+
+/**
+ * When set, user containers are exposed via Traefik reverse proxy at
+ * `{subdomain}.{SYNARO_DOMAIN}` instead of `localhost:{port}`.
+ * Leave unset for local development (port-binding mode).
+ */
+const SYNARO_DOMAIN = process.env.SYNARO_DOMAIN?.trim() ?? ''
+const TRAEFIK_NETWORK = process.env.TRAEFIK_NETWORK?.trim() || 'traefik-net'
+const ACME_RESOLVER = process.env.ACME_RESOLVER?.trim() || 'letsencrypt'
+
+/** Build a URL-safe subdomain from a project slug + first 6 chars of env UUID. */
+function buildSubdomain(projectSlug: string, envId: string): string {
+  const slug = projectSlug
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 32)
+  const suffix = envId.replace(/-/g, '').slice(0, 6)
+  return `${slug}-${suffix}`
+}
+
+/** Compute public URL for an environment. Falls back to localhost:{port} for local dev. */
+export function envPublicUrl(env: { subdomain?: string | null; port?: number | null }): string | null {
+  if (SYNARO_DOMAIN && env.subdomain) return `https://${env.subdomain}.${SYNARO_DOMAIN}`
+  if (env.port) return `http://localhost:${env.port}`
+  return null
+}
 /** Workspace root inside the environment container (matches `git clone … app`). */
 export const WORKSPACE_ROOT = '/tmp/synaro-workspace/app'
 
@@ -61,7 +89,11 @@ async function allocatePort(): Promise<number> {
   throw new Error('No available ports in range')
 }
 
-async function updateStatus(id: string, status: EnvironmentStatus, extra?: { containerId?: string; port?: number }) {
+async function updateStatus(
+  id: string,
+  status: EnvironmentStatus,
+  extra?: { containerId?: string; port?: number; subdomain?: string },
+) {
   return prisma.environment.update({
     where: { id },
     data: { status, ...extra },
@@ -142,6 +174,8 @@ export type CreateEnvironmentOptions = {
   gitRemoteUrl?: string | null
   /** GitHub OAuth token for private repo clone (x-access-token). */
   gitAccessToken?: string | null
+  /** Project slug used to build the Traefik subdomain (e.g. "my-express-app"). */
+  projectSlug?: string | null
 }
 
 export async function createEnvironment(
@@ -162,7 +196,14 @@ export async function createEnvironment(
   })
 
   try {
-    const port = await allocatePort()
+    // In Traefik mode (SYNARO_DOMAIN set) containers are reached via the proxy network —
+    // no host port binding needed. In local-dev mode we still allocate a host port.
+    const useTraefik = Boolean(SYNARO_DOMAIN)
+    const port = useTraefik ? null : await allocatePort()
+    const subdomain =
+      useTraefik && options?.projectSlug
+        ? buildSubdomain(options.projectSlug, environment.id)
+        : null
 
     // Pull image if not present
     await new Promise<void>((resolve, reject) => {
@@ -204,20 +245,37 @@ export async function createEnvironment(
       cmd = 'mkdir -p /tmp/synaro-workspace/app && echo "Environment ready" && exec tail -f /dev/null'
     }
 
+    // Build Traefik labels when running behind the proxy (VPS / production mode).
+    const labels: Record<string, string> = {
+      'synaro.environment.id': environment.id,
+      'synaro.project.id': projectId,
+    }
+    if (useTraefik && subdomain) {
+      const routerName = `synaro-env-${environment.id}`
+      labels['traefik.enable'] = 'true'
+      labels[`traefik.http.routers.${routerName}.rule`] = `Host(\`${subdomain}.${SYNARO_DOMAIN}\`)`
+      labels[`traefik.http.routers.${routerName}.tls`] = 'true'
+      labels[`traefik.http.routers.${routerName}.tls.certresolver`] = ACME_RESOLVER
+      labels[`traefik.http.services.${routerName}.loadbalancer.server.port`] = '3000'
+    }
+
+    const hostConfig: Record<string, unknown> = {
+      Memory: 512 * 1024 * 1024, // 512 MB
+      NanoCpus: 500_000_000, // 0.5 CPU
+      // In Traefik mode put the container on the shared proxy network so Traefik can reach it.
+      // In local-dev mode use the default bridge with an explicit port binding.
+      NetworkMode: useTraefik ? TRAEFIK_NETWORK : 'bridge',
+    }
+    if (port !== null) {
+      hostConfig.PortBindings = { '3000/tcp': [{ HostPort: String(port) }] }
+    }
+
     const container = await docker.createContainer({
       Image: image,
       Cmd: ['sh', '-c', cmd],
       Env: env,
-      Labels: {
-        'synaro.environment.id': environment.id,
-        'synaro.project.id': projectId,
-      },
-      HostConfig: {
-        PortBindings: { '3000/tcp': [{ HostPort: String(port) }] },
-        Memory: 512 * 1024 * 1024, // 512MB
-        NanoCpus: 500_000_000, // 0.5 CPU
-        NetworkMode: 'bridge',
-      },
+      Labels: labels,
+      HostConfig: hostConfig,
     })
 
     await container.start()
@@ -247,7 +305,8 @@ export async function createEnvironment(
 
     return updateStatus(environment.id, 'RUNNING', {
       containerId,
-      port,
+      ...(port !== null ? { port } : {}),
+      ...(subdomain ? { subdomain } : {}),
     })
   } catch (err) {
     await updateStatus(environment.id, 'ERROR')

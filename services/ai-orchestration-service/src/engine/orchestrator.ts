@@ -1,10 +1,11 @@
 import { kimi, MODELS, TOKEN_BUDGETS } from '../lib/kimi.js'
+import { buildRepoTree } from '../lib/filesystem.js'
 import {
-  listProjectFiles,
-  readFiles,
-  applyFileChanges,
-  buildRepoTree,
-} from '../lib/filesystem.js'
+  getActiveEnvironment,
+  listContainerFiles,
+  readContainerFile,
+  writeContainerFiles,
+} from '../lib/environment-client.js'
 import { prisma } from '../lib/prisma.js'
 
 type TaskStatus = 'PENDING' | 'ANALYZING' | 'GENERATING' | 'APPLYING' | 'DONE' | 'FAILED'
@@ -26,11 +27,12 @@ async function updateTask(id: string, status: TaskStatus, extra?: object) {
 // Step 1 — cheap call to identify which files are relevant
 async function analyzeRelevantFiles(
   prompt: string,
-  repoTree: string
+  repoTree: string,
 ): Promise<{ files: string[]; inputTokens: number; outputTokens: number }> {
-  const systemPrompt = `You are a code analysis assistant. Given a repository file tree and a user task, 
-return ONLY a JSON array of file paths that are relevant to completing the task.
-Be selective — return only the files that need to be read or modified.
+  const systemPrompt = `You are a code analysis assistant. Given a repository file tree and a user task, return ONLY a JSON object listing the file paths relevant to completing the task.
+
+Be selective — return only files that need to be read or modified. For new projects/features, include entry points, config files, and any files the new code will integrate with.
+
 Return format: { "files": ["path/to/file.ts", ...] }
 Return ONLY valid JSON, no explanation.`
 
@@ -38,54 +40,59 @@ Return ONLY valid JSON, no explanation.`
 
   const response = await kimi.chat.completions.create({
     model: MODELS.ANALYZE,
-    max_tokens: 500,
+    max_tokens: 1_000,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ],
   })
 
-  const content = response.choices[0]?.message?.content ?? '{}'
-  const parsed = JSON.parse(content.replace(/```json|```/g, '').trim())
-  const files: string[] = parsed.files ?? []
+  const raw = response.choices[0]?.message?.content ?? '{}'
+  let parsed: { files?: string[] } = {}
+  try {
+    parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()) as { files?: string[] }
+  } catch {
+    parsed = {}
+  }
 
   return {
-    files,
+    files: parsed.files ?? [],
     inputTokens: response.usage?.prompt_tokens ?? 0,
     outputTokens: response.usage?.completion_tokens ?? 0,
   }
 }
 
-// Step 2 — targeted call to generate code changes
+// Step 2 — generate all file changes needed for the task
 async function generateChanges(
   prompt: string,
-  fileContents: { path: string; content: string }[]
+  existingFiles: { path: string; content: string }[],
 ): Promise<{ result: TaskResult; inputTokens: number; outputTokens: number }> {
-  const systemPrompt = `You are an expert software engineer. Given a task and relevant source files, 
-produce the necessary file changes to complete the task.
+  const systemPrompt = `You are an expert software engineer. Given a task and the current source files, produce all necessary file changes to complete the task — including new files.
 
 Return ONLY a JSON object in this exact format:
 {
-  "summary": "Brief description of what was changed",
+  "summary": "One-sentence description of what was done",
   "changes": [
     {
       "path": "relative/path/to/file.ts",
-      "content": "full new file content here"
+      "content": "full file content"
     }
   ]
 }
 
 Rules:
-- Always return the FULL file content, not just the changed parts
-- Only include files that actually need to change
-- Keep changes minimal and focused on the task
-- Return ONLY valid JSON, no explanation outside the JSON`
+- Always return the FULL file content for every changed or created file
+- Create new files when needed (routes, modules, components, etc.)
+- Include all files required for the feature to work end-to-end
+- Wire new code into existing entry points (index.ts, app.ts, router, etc.) when needed
+- Return ONLY valid JSON — no explanation outside the JSON block`
 
-  const filesSection = fileContents
-    .map(f => `### ${f.path}\n\`\`\`\n${f.content}\n\`\`\``)
-    .join('\n\n')
+  const filesSection =
+    existingFiles.length > 0
+      ? existingFiles.map((f) => `### ${f.path}\n\`\`\`\n${f.content}\n\`\`\``).join('\n\n')
+      : '(no existing files yet — this is a new project)'
 
-  const userPrompt = `Task: ${prompt}\n\nRelevant files:\n\n${filesSection}`
+  const userPrompt = `Task: ${prompt}\n\nExisting files:\n\n${filesSection}`
 
   const response = await kimi.chat.completions.create({
     model: MODELS.GENERATE,
@@ -96,12 +103,19 @@ Rules:
     ],
   })
 
-  const content = response.choices[0]?.message?.content ?? '{}'
-  const parsed = JSON.parse(content.replace(/```json|```/g, '').trim())
+  const raw = response.choices[0]?.message?.content ?? '{}'
+  let parsed: { summary?: string; changes?: FileChange[] } = {}
+  try {
+    // Strip potential markdown code fences around the JSON
+    const cleaned = raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```$/m, '').trim()
+    parsed = JSON.parse(cleaned) as typeof parsed
+  } catch {
+    parsed = {}
+  }
 
   return {
     result: {
-      summary: parsed.summary ?? '',
+      summary: parsed.summary ?? 'Changes applied.',
       changes: parsed.changes ?? [],
     },
     inputTokens: response.usage?.prompt_tokens ?? 0,
@@ -109,7 +123,7 @@ Rules:
   }
 }
 
-// Main orchestration function
+/** Main orchestration function — reads from and writes to the running environment container. */
 export async function executeTask(taskId: string): Promise<void> {
   const task = await prisma.task.findUnique({ where: { id: taskId } })
   if (!task) throw new Error(`Task ${taskId} not found`)
@@ -118,31 +132,47 @@ export async function executeTask(taskId: string): Promise<void> {
   let totalOutputTokens = 0
 
   try {
-    // Step 1 — Analyze
+    // ── Step 1: Find the running environment ──────────────────────────────
     await updateTask(taskId, 'ANALYZING')
 
-    const allFiles = await listProjectFiles(task.projectId)
-    const repoTree = buildRepoTree(allFiles)
+    const env = await getActiveEnvironment(task.projectId)
+    if (!env) {
+      throw new Error(
+        'No running environment found for this project. ' +
+          'Start the environment using the runtime pill before sending AI tasks.',
+      )
+    }
 
+    // ── Step 2: List all workspace files ─────────────────────────────────
+    const allPaths = await listContainerFiles(env.id)
+    const repoTree = buildRepoTree(allPaths.map((p) => ({ path: p, size: 0 })))
+
+    // ── Step 3: Identify relevant files ──────────────────────────────────
     const analysis = await analyzeRelevantFiles(task.prompt, repoTree)
     totalInputTokens += analysis.inputTokens
     totalOutputTokens += analysis.outputTokens
 
-    // Step 2 — Read relevant files
-    const relevantFiles = await readFiles(task.projectId, analysis.files)
+    // ── Step 4: Read relevant files in parallel ───────────────────────────
+    const fileContents = await Promise.all(
+      analysis.files.map(async (filePath) => {
+        const content = await readContainerFile(env.id, filePath)
+        return content !== null ? { path: filePath, content } : null
+      }),
+    )
+    const existingFiles = fileContents.filter((f): f is { path: string; content: string } => f !== null)
 
-    // Step 3 — Generate changes
+    // ── Step 5: Generate changes ─────────────────────────────────────────
     await updateTask(taskId, 'GENERATING')
 
-    const generation = await generateChanges(task.prompt, relevantFiles)
+    const generation = await generateChanges(task.prompt, existingFiles)
     totalInputTokens += generation.inputTokens
     totalOutputTokens += generation.outputTokens
 
-    // Step 4 — Apply changes
+    // ── Step 6: Write files into the container ────────────────────────────
     await updateTask(taskId, 'APPLYING')
-    await applyFileChanges(task.projectId, generation.result.changes)
+    await writeContainerFiles(env.id, generation.result.changes)
 
-    // Step 5 — Done
+    // ── Done ──────────────────────────────────────────────────────────────
     await updateTask(taskId, 'DONE', {
       result: generation.result,
       inputTokens: totalInputTokens,

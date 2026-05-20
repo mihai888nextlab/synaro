@@ -12,6 +12,7 @@ import {
   reconcileDeadContainersForProject,
   uploadWorkspaceTar,
   execTerminalCommand,
+  envPublicUrl,
 } from '../managers/docker.manager.js'
 
 const terminalExecSchema = z.object({
@@ -25,7 +26,14 @@ const createSchema = z.object({
     .preprocess((v) => (v === '' || v === null || v === undefined ? undefined : v), z.string().url().optional()),
   gitAccessToken: z
     .preprocess((v) => (v === '' || v === null || v === undefined ? undefined : v), z.string().min(1).optional()),
+  projectSlug: z
+    .preprocess((v) => (v === '' || v === null || v === undefined ? undefined : v), z.string().min(1).max(80).optional()),
 })
+
+/** Attach the computed public URL to an environment row before sending to clients. */
+function withPublicUrl<T extends { subdomain?: string | null; port?: number | null }>(env: T) {
+  return { ...env, publicUrl: envPublicUrl(env) }
+}
 
 export const environmentRoutes: FastifyPluginAsync = async (app) => {
   app.addContentTypeParser(
@@ -50,7 +58,7 @@ export const environmentRoutes: FastifyPluginAsync = async (app) => {
       where: projectId ? { projectId } : undefined,
       orderBy: { createdAt: 'desc' },
     })
-    return reply.send(environments)
+    return reply.send(environments.map(withPublicUrl))
   })
 
   // GET /api/environments/:id/workspace-files — list files in cloned repo (Docker exec)
@@ -116,7 +124,7 @@ export const environmentRoutes: FastifyPluginAsync = async (app) => {
     const { id } = req.params as { id: string }
     const environment = await prisma.environment.findUnique({ where: { id } })
     if (!environment) return reply.status(404).send({ error: 'Environment not found' })
-    return reply.send(environment)
+    return reply.send(withPublicUrl(environment))
   })
 
   // POST /api/environments — create and start a new environment
@@ -128,8 +136,9 @@ export const environmentRoutes: FastifyPluginAsync = async (app) => {
       const environment = await createEnvironment(result.data.projectId, result.data.image ?? 'node:20-alpine', {
         gitRemoteUrl: result.data.gitRemoteUrl,
         gitAccessToken: result.data.gitAccessToken,
+        projectSlug: result.data.projectSlug,
       })
-      return reply.status(201).send(environment)
+      return reply.status(201).send(withPublicUrl(environment))
     } catch (err) {
       app.log.error(err)
       return reply.status(500).send({ error: 'Failed to create environment', detail: String(err) })
@@ -161,7 +170,7 @@ export const environmentRoutes: FastifyPluginAsync = async (app) => {
     const { id } = req.params as { id: string }
     try {
       const environment = await startEnvironment(id)
-      return reply.send(environment)
+      return reply.send(withPublicUrl(environment))
     } catch (err) {
       return reply.status(500).send({ error: 'Failed to start environment', detail: String(err) })
     }
@@ -172,9 +181,32 @@ export const environmentRoutes: FastifyPluginAsync = async (app) => {
     const { id } = req.params as { id: string }
     try {
       const environment = await stopEnvironment(id)
-      return reply.send(environment)
+      return reply.send(withPublicUrl(environment))
     } catch (err) {
       return reply.status(500).send({ error: 'Failed to stop environment', detail: String(err) })
+    }
+  })
+
+  // POST /api/environments/:id/custom-domain — set or clear the custom domain for an environment
+  app.post('/:id/custom-domain', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const { customDomain } = req.body as { customDomain?: string }
+    const domain = typeof customDomain === 'string' ? customDomain.trim().toLowerCase() : null
+
+    try {
+      const environment = await prisma.environment.update({
+        where: { id },
+        data: { customDomain: domain || null },
+      })
+      return reply.send({
+        ...withPublicUrl(environment),
+        customDomain: environment.customDomain,
+        instructions: domain
+          ? `Point a CNAME record for ${domain} → ${process.env.SYNARO_DOMAIN ?? 'your-vps-domain'}. SSL will be provisioned automatically.`
+          : null,
+      })
+    } catch (err) {
+      return reply.status(500).send({ error: 'Failed to update custom domain', detail: String(err) })
     }
   })
 

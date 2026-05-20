@@ -7,7 +7,10 @@ import {
   Loader2,
   MessageSquareText,
   FolderTree,
+  PlayIcon,
+  ScrollText,
   TerminalSquare,
+  X,
 } from "lucide-react";
 import type { TreeState, Updater } from "@headless-tree/core";
 import { hotkeysCoreFeature, syncDataLoaderFeature } from "@headless-tree/core";
@@ -751,6 +754,15 @@ export function ProjectWorkspace({
   const [dockerBusy, setDockerBusy] = React.useState(false);
   const [dockerError, setDockerError] = React.useState<string | null>(null);
   const [treeRefreshKey, setTreeRefreshKey] = React.useState(0);
+  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const [runStatus, setRunStatus] = React.useState<"idle" | "starting" | "running" | "error">("idle");
+  const [runError, setRunError] = React.useState<string | null>(null);
+  const [showLogs, setShowLogs] = React.useState(false);
+  const [logLines, setLogLines] = React.useState<string[]>([]);
+  const runPollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const logPollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const logEndRef = React.useRef<HTMLDivElement>(null);
+  const hasRestoredRunRef = React.useRef(false);
   const prevWorkspaceTabRef = React.useRef<ProjectWorkspaceTab | null>(null);
 
   React.useEffect(() => {
@@ -788,6 +800,116 @@ export function ProjectWorkspace({
       cancelled = true;
       window.clearInterval(id);
     };
+  }, [projectId]);
+
+  // Stop polling on unmount
+  React.useEffect(() => () => {
+    if (runPollRef.current) clearInterval(runPollRef.current);
+    if (logPollRef.current) clearInterval(logPollRef.current);
+  }, []);
+
+  // Persist previewUrl to localStorage so it survives page refresh
+  React.useEffect(() => {
+    if (!projectId || !previewUrl) return;
+    localStorage.setItem(`synaro:previewUrl:${projectId}`, previewUrl);
+  }, [projectId, previewUrl]);
+
+  // On mount: if environment is already RUNNING, check whether the app is still listening
+  React.useEffect(() => {
+    if (!projectId || environmentStatus !== "RUNNING" || hasRestoredRunRef.current) return;
+    hasRestoredRunRef.current = true;
+
+    void (async () => {
+      try {
+        const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/run`);
+        if (!res.ok) return;
+        const data = (await res.json()) as { ready?: boolean; previewUrl?: string };
+        if (data.ready) {
+          const url =
+            data.previewUrl ??
+            localStorage.getItem(`synaro:previewUrl:${projectId}`);
+          setRunStatus("running");
+          if (url) setPreviewUrl(url);
+        }
+      } catch {
+        // ignore — app may not be running
+      }
+    })();
+  }, [projectId, environmentStatus]);
+
+  // Poll /tmp/app.log every 3 s while the log panel is open
+  React.useEffect(() => {
+    if (logPollRef.current) clearInterval(logPollRef.current);
+    if (!showLogs || !projectId || runStatus !== "running") return;
+
+    const fetchLogs = async () => {
+      try {
+        const res = await fetch(
+          `/api/projects/${encodeURIComponent(projectId)}/run?action=logs`,
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as { lines?: string[] };
+        if (data.lines) {
+          setLogLines(data.lines);
+          logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    void fetchLogs();
+    logPollRef.current = setInterval(() => void fetchLogs(), 3000);
+    return () => {
+      if (logPollRef.current) clearInterval(logPollRef.current);
+    };
+  }, [showLogs, projectId, runStatus]);
+
+  const handleRun = React.useCallback(async () => {
+    if (!projectId) return;
+    setRunStatus("starting");
+    setRunError(null);
+    if (runPollRef.current) clearInterval(runPollRef.current);
+
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/run`, {
+        method: "POST",
+      });
+      const data = (await res.json()) as { previewUrl?: string; command?: string; error?: string };
+      if (!res.ok) {
+        setRunStatus("error");
+        setRunError(data.error ?? `Run failed (${res.status})`);
+        return;
+      }
+      const url = data.previewUrl ?? null;
+
+      // Poll until port 3000 is open in the container (max 60s)
+      let elapsed = 0;
+      runPollRef.current = setInterval(async () => {
+        elapsed += 2000;
+        try {
+          const statusRes = await fetch(`/api/projects/${encodeURIComponent(projectId)}/run`);
+          const statusData = (await statusRes.json()) as { ready?: boolean; previewUrl?: string };
+          if (statusData.ready) {
+            clearInterval(runPollRef.current!);
+            runPollRef.current = null;
+            setRunStatus("running");
+            setPreviewUrl(statusData.previewUrl ?? url);
+          } else if (elapsed >= 60_000) {
+            clearInterval(runPollRef.current!);
+            runPollRef.current = null;
+            // Open anyway — app might still be installing
+            setRunStatus("running");
+            setPreviewUrl(url);
+          }
+        } catch {
+          // keep polling
+        }
+      }, 2000);
+    } catch {
+      setRunStatus("error");
+      setRunError("Could not reach the server.");
+    }
   }, [projectId]);
 
   const handleDockerPress = React.useCallback(
@@ -876,6 +998,47 @@ export function ProjectWorkspace({
               <TerminalSquare className="size-4" />
               Terminal
             </button>
+            {projectId && environmentStatus === "RUNNING" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void handleRun()}
+                  disabled={runStatus === "starting"}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition",
+                    runStatus === "running"
+                      ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                      : runStatus === "error"
+                        ? "bg-destructive/10 text-destructive"
+                        : runStatus === "starting"
+                          ? "bg-muted text-muted-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-green-500/10 hover:text-green-600 dark:hover:text-green-400",
+                  )}
+                >
+                  {runStatus === "starting" ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <PlayIcon className="size-4" />
+                  )}
+                  {runStatus === "starting" ? "Starting…" : runStatus === "running" ? "Running" : "Run"}
+                </button>
+                {runStatus === "running" ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowLogs((v) => !v)}
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition",
+                      showLogs
+                        ? "bg-muted text-foreground"
+                        : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    <ScrollText className="size-4" />
+                    Logs
+                  </button>
+                ) : null}
+              </>
+            ) : null}
             {projectId ? (
               <div className="ms-auto flex max-w-[min(100%,16rem)] flex-col items-end gap-1 sm:max-w-xs">
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -890,6 +1053,11 @@ export function ProjectWorkspace({
                 {dockerError ? (
                   <p className="text-right text-[0.65rem] leading-snug text-destructive sm:text-xs">
                     {dockerError}
+                  </p>
+                ) : null}
+                {runError ? (
+                  <p className="text-right text-[0.65rem] leading-snug text-destructive sm:text-xs">
+                    {runError}
                   </p>
                 ) : null}
               </div>
@@ -932,14 +1100,50 @@ export function ProjectWorkspace({
               )}
               aria-hidden={tab !== "chat"}
             >
-              <AnimatedAIChat className="w-full max-w-3xl" />
+              <AnimatedAIChat className="w-full max-w-3xl" projectId={projectId} />
             </div>
           </div>
+
+          {/* Log panel — shown when app is running and user toggles Logs */}
+          {showLogs ? (
+            <div className="flex h-48 shrink-0 flex-col border-t border-border/60">
+              <div className="flex shrink-0 items-center justify-between px-3 py-1.5">
+                <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <ScrollText className="size-3.5" />
+                  App logs
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowLogs(false)}
+                  className="rounded p-0.5 text-muted-foreground transition hover:text-foreground"
+                  aria-label="Close logs"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-2">
+                {logLines.length === 0 ? (
+                  <p className="py-2 text-[0.7rem] text-muted-foreground/60">(waiting for output…)</p>
+                ) : (
+                  logLines.map((line, i) => (
+                    <div
+                      key={i}
+                      className="whitespace-pre-wrap break-all font-mono text-[0.7rem] leading-5 text-muted-foreground"
+                    >
+                      {line || " "}
+                    </div>
+                  ))
+                )}
+                <div ref={logEndRef} />
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <ProjectIframePreview
           className="h-full min-h-[40vh] xl:min-h-0"
           title={projectSlug ? `Preview — ${humanizeProjectSlug(projectSlug)}` : "Preview"}
+          previewUrl={previewUrl}
         />
       </div>
     </div>

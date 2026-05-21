@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir /s /b \"C:\\\\Users\\\\Mihai\\\\Documents\\\\GitHub\\\\synaro\\\\services\\\\ai-orchestration-service\")",
+      "Bash(docker exec quizzical_elbakyan *)"
+    ]
+  }
+}

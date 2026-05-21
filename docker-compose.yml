@@ -1,22 +1,4 @@
 services:
-  traefik:
-    image: traefik:v3.0
-    container_name: synaro-traefik
-    restart: unless-stopped
-    command:
-      - --providers.file.filename=/traefik/dynamic.yml
-      - --providers.file.watch=true
-      - --entrypoints.web.address=:80
-      - --entrypoints.websecure.address=:443
-      - --entrypoints.web.http.redirections.entryPoint.to=websecure
-      - --entrypoints.web.http.redirections.entryPoint.scheme=https
-    ports:
-      - '80:80'
-      - '443:443'
-    volumes:
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-      - ./traefik/dynamic.yml:/traefik/dynamic.yml:ro
-
   app:
     build:
       context: ./app
@@ -34,6 +16,8 @@ services:
       ENVIRONMENT_SERVICE_URL: http://environment-service:3002
       AI_ORCHESTRATION_URL: http://ai-orchestration-service:3003
       NODE_ENV: production
+    ports:
+      - '3001:3000'
     depends_on:
       postgresql:
         condition: service_healthy

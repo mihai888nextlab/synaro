@@ -57,6 +57,10 @@ interface SignInPageProps {
   oauthCallbackUrl?: string;
   onResetPassword?: () => void;
   onCreateAccount?: () => void;
+  /** Shown inside the form below the checkbox row. */
+  error?: string | null;
+  /** Legacy loading flag (currently unused in the form UI). */
+  loading?: boolean;
   /** Shown under the form (e.g. API or sign-in errors). */
   formError?: string | null;
   /** Disables the primary submit button while the parent handles signup/sign-in. */

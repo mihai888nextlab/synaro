@@ -1,4 +1,53 @@
 services:
+  traefik:
+    image: traefik:v3.0
+    container_name: synaro-traefik
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.web.http.redirections.entryPoint.to=websecure
+      - --entrypoints.web.http.redirections.entryPoint.scheme=https
+      - --certificatesresolvers.letsencrypt.acme.tlsChallenge=true
+      - --certificatesresolvers.letsencrypt.acme.email=admin@synaro.tech
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_certs:/letsencrypt
+
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile.prod
+    container_name: synaro-app
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://synaro_user:synaro_local_password@postgresql:5432/synaro
+      NEXTAUTH_URL: https://synaro.tech
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      ENVIRONMENT_SERVICE_URL: http://environment-service:3002
+      AI_ORCHESTRATION_URL: http://ai-orchestration-service:3003
+      NODE_ENV: production
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.app.rule=Host(`synaro.tech`) || Host(`www.synaro.tech`)
+      - traefik.http.routers.app.entrypoints=websecure
+      - traefik.http.routers.app.tls=true
+      - traefik.http.routers.app.tls.certresolver=letsencrypt
+      - traefik.http.services.app.loadbalancer.server.port=3000
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
   postgresql:
     image: postgres:16-alpine
     container_name: synaro-postgres
@@ -18,7 +67,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Isolated DB for environment-service (Prisma enums + migrations must not clash with the app schema on `synaro`.)
   postgresql-env:
     image: postgres:16-alpine
     container_name: synaro-postgres-env
@@ -50,7 +98,7 @@ services:
       NODE_ENV: development
       PORT: 3001
       LOG_LEVEL: info
-      ALLOWED_ORIGINS: http://localhost:3000
+      ALLOWED_ORIGINS: https://synaro.tech
     volumes:
       - ./services/project-service/src:/app/src
       - ./services/project-service/prisma:/app/prisma
@@ -64,8 +112,6 @@ services:
       dockerfile: Dockerfile.dev
     container_name: synaro-environment-service
     restart: unless-stopped
-    # Prisma schema is bind-mounted; client in node_modules must be regenerated on each start.
-    # Do not rely on image-baked package.json "dev" script — recreate container after compose changes.
     command:
       [
         'sh',
@@ -79,7 +125,7 @@ services:
       NODE_ENV: development
       PORT: 3002
       LOG_LEVEL: info
-      ALLOWED_ORIGINS: http://localhost:3000
+      ALLOWED_ORIGINS: https://synaro.tech
     volumes:
       - ./services/environment-service/src:/app/src
       - ./services/environment-service/prisma:/app/prisma
@@ -103,7 +149,7 @@ services:
       NODE_ENV: development
       PORT: 3003
       LOG_LEVEL: info
-      ALLOWED_ORIGINS: http://localhost:3000
+      ALLOWED_ORIGINS: https://synaro.tech
       KIMI_API_KEY: ${KIMI_API_KEY}
       ENVIRONMENT_SERVICE_URL: http://environment-service:3002
     volumes:
@@ -141,3 +187,4 @@ volumes:
   postgres_data:
   postgres_env_data:
   projects_data:
+  traefik_certs:

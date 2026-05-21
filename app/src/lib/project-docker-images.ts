@@ -17,6 +17,6 @@ const ALLOWED_IMAGES = new Set(
 /** Maps UI/runtime select value to a Docker Hub image ref for environment-service. */
 export function resolveProjectDockerImage(value: string | undefined): string {
   if (!value || value === "automatic") return "node:20-alpine";
-  if (ALLOWED_IMAGES.has(value as ProjectDockerImageSelectValue)) return value;
+  if (ALLOWED_IMAGES.has(value as Exclude<ProjectDockerImageSelectValue, "automatic">)) return value;
   return "node:20-alpine";
 }

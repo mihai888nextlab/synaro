@@ -31,7 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     data: {
       email: cleanEmail,
       name: fullName.trim(),
-      password: hashedPassword,
+      passwordHash: hashedPassword,
     },
     select: { id: true, email: true, name: true },
   });

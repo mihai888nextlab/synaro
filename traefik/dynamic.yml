@@ -1,0 +1,6 @@
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/letsencrypt/live/synaro.tech/fullchain.pem
+        keyFile: /etc/letsencrypt/live/synaro.tech/privkey.pem

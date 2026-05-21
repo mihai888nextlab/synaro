@@ -6,19 +6,19 @@ services:
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
+      - --providers.file.filename=/traefik/dynamic.yml
+      - --providers.file.watch=true
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       - --entrypoints.web.http.redirections.entryPoint.to=websecure
       - --entrypoints.web.http.redirections.entryPoint.scheme=https
-      - --certificatesresolvers.letsencrypt.acme.tlsChallenge=true
-      - --certificatesresolvers.letsencrypt.acme.email=admin@synaro.tech
-      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
     ports:
       - '80:80'
       - '443:443'
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - traefik_certs:/letsencrypt
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./traefik/dynamic.yml:/traefik/dynamic.yml:ro
 
   app:
     build:
@@ -42,7 +42,6 @@ services:
       - traefik.http.routers.app.rule=Host(`synaro.tech`) || Host(`www.synaro.tech`)
       - traefik.http.routers.app.entrypoints=websecure
       - traefik.http.routers.app.tls=true
-      - traefik.http.routers.app.tls.certresolver=letsencrypt
       - traefik.http.services.app.loadbalancer.server.port=3000
     depends_on:
       postgresql:
@@ -187,4 +186,3 @@ volumes:
   postgres_data:
   postgres_env_data:
   projects_data:
-  traefik_certs:

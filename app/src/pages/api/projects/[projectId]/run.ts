@@ -19,8 +19,9 @@ type PackageJson = {
 function detectRunCommand(pkg: PackageJson | null): string {
   if (!pkg) return "node index.js";
   const scripts = pkg.scripts ?? {};
-  if (scripts.start) return "npm start";
+  // Prefer dev over start — containers run in dev mode; `npm start` often requires a prior build
   if (scripts.dev) return "npm run dev";
+  if (scripts.start) return "npm start";
   if (scripts.serve) return "npm run serve";
   if (pkg.main) return `node ${pkg.main}`;
   return "node index.js";
@@ -111,11 +112,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       'fi',
     ].join("\n");
 
+    // Strip distDir from next.config.* — cold containers have no pre-built artifacts,
+    // so a custom distDir causes Next.js dev mode to crash on the first request.
+    const patchNextConfig = [
+      'for _cfg in next.config.js next.config.mjs next.config.ts next.config.cjs; do',
+      '  [ -f "$_cfg" ] && sed -i "/distDir/d" "$_cfg" 2>/dev/null || true',
+      'done',
+    ].join("\n");
+
     // Use newlines — busybox sh rejects `&;` (ampersand followed by semicolon).
     const bgScript = [
       "rm -f /tmp/app.log",
       killPort3000,
-      `(cd /tmp/synaro-workspace/app 2>/dev/null || cd /tmp/synaro-workspace 2>/dev/null; ${installStep}echo "[synaro] Starting: ${runCommand}" >> /tmp/app.log && PORT=3000 ${runCommand} >> /tmp/app.log 2>&1) &`,
+      `(cd /tmp/synaro-workspace/app 2>/dev/null || cd /tmp/synaro-workspace 2>/dev/null; ${patchNextConfig} && ${installStep}echo "[synaro] Starting: ${runCommand}" >> /tmp/app.log && PORT=3000 ${runCommand} >> /tmp/app.log 2>&1) &`,
       "APP_PID=$!",
       "echo $APP_PID > /tmp/app.pid",
       'echo "SYNARO_PID:$APP_PID"',

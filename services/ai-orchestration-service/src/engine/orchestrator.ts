@@ -24,6 +24,10 @@ async function updateTask(id: string, status: TaskStatus, extra?: object) {
   return prisma.task.update({ where: { id }, data: { status, ...extra } })
 }
 
+async function updateProgress(id: string, progress: string) {
+  return prisma.task.update({ where: { id }, data: { progress } })
+}
+
 // Step 1 — cheap call to identify which files are relevant
 async function analyzeRelevantFiles(
   prompt: string,
@@ -85,7 +89,8 @@ Rules:
 - Create new files when needed (routes, modules, components, etc.)
 - Include all files required for the feature to work end-to-end
 - Wire new code into existing entry points (index.ts, app.ts, router, etc.) when needed
-- Return ONLY valid JSON — no explanation outside the JSON block`
+- Return ONLY valid JSON — no explanation outside the JSON block
+- For Next.js projects: do NOT set distDir in next.config.js/mjs (always use the default .next); do NOT set output: 'export' or output: 'standalone'; always include a dev script ("next dev") in package.json; the app must bind to process.env.PORT (default 3000)`
 
   const filesSection =
     existingFiles.length > 0
@@ -104,13 +109,27 @@ Rules:
   })
 
   const raw = response.choices[0]?.message?.content ?? '{}'
+  const finishReason = response.choices[0]?.finish_reason
+
   let parsed: { summary?: string; changes?: FileChange[] } = {}
+  let parseError: string | null = null
   try {
     // Strip potential markdown code fences around the JSON
     const cleaned = raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```$/m, '').trim()
     parsed = JSON.parse(cleaned) as typeof parsed
-  } catch {
-    parsed = {}
+  } catch (e) {
+    parseError = String(e)
+  }
+
+  if (finishReason === 'length') {
+    throw new Error(
+      `AI response was cut off (output token limit reached at ${TOKEN_BUDGETS.MAX_OUTPUT} tokens). ` +
+        'The generated project is too large for a single pass. Try a simpler prompt or fewer features.',
+    )
+  }
+
+  if (parseError) {
+    throw new Error(`AI returned invalid JSON — could not parse file changes. Parse error: ${parseError}`)
   }
 
   return {
@@ -144,8 +163,10 @@ export async function executeTask(taskId: string): Promise<void> {
     }
 
     // ── Step 2: List all workspace files ─────────────────────────────────
+    await updateProgress(taskId, 'Scanning your repository...')
     const allPaths = await listContainerFiles(env.id)
     const repoTree = buildRepoTree(allPaths.map((p) => ({ path: p, size: 0 })))
+    await updateProgress(taskId, `Found ${allPaths.length} file${allPaths.length === 1 ? '' : 's'} — identifying relevant ones...`)
 
     // ── Step 3: Identify relevant files ──────────────────────────────────
     const analysis = await analyzeRelevantFiles(task.prompt, repoTree)
@@ -153,6 +174,13 @@ export async function executeTask(taskId: string): Promise<void> {
     totalOutputTokens += analysis.outputTokens
 
     // ── Step 4: Read relevant files in parallel ───────────────────────────
+    const fileCount = analysis.files.length
+    await updateProgress(
+      taskId,
+      fileCount > 0
+        ? `Reading ${fileCount} relevant file${fileCount === 1 ? '' : 's'}...`
+        : 'No existing files — starting from scratch...',
+    )
     const fileContents = await Promise.all(
       analysis.files.map(async (filePath) => {
         const content = await readContainerFile(env.id, filePath)
@@ -163,6 +191,7 @@ export async function executeTask(taskId: string): Promise<void> {
 
     // ── Step 5: Generate changes ─────────────────────────────────────────
     await updateTask(taskId, 'GENERATING')
+    await updateProgress(taskId, 'AI is writing your code...')
 
     const generation = await generateChanges(task.prompt, existingFiles)
     totalInputTokens += generation.inputTokens
@@ -170,6 +199,16 @@ export async function executeTask(taskId: string): Promise<void> {
 
     // ── Step 6: Write files into the container ────────────────────────────
     await updateTask(taskId, 'APPLYING')
+
+    if (generation.result.changes.length === 0) {
+      throw new Error(
+        'AI did not produce any file changes. The response may have been empty or malformed. ' +
+          'Please try again with a more specific prompt.',
+      )
+    }
+
+    const changeCount = generation.result.changes.length
+    await updateProgress(taskId, `Writing ${changeCount} file${changeCount === 1 ? '' : 's'} to your project...`)
     await writeContainerFiles(env.id, generation.result.changes)
 
     // ── Done ──────────────────────────────────────────────────────────────

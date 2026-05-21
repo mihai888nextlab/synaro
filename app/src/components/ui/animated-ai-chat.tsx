@@ -7,6 +7,7 @@ import {
   CheckCircleIcon,
   Command,
   Figma,
+  HelpCircleIcon,
   ImageIcon,
   LoaderIcon,
   MonitorIcon,
@@ -29,6 +30,7 @@ type TaskResult = {
 type RemoteTask = {
   id: string;
   status: TaskStatus;
+  progress?: string | null;
   result?: TaskResult | null;
   errorMessage?: string | null;
 };
@@ -37,8 +39,11 @@ type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** When set, this assistant message is a clarification prompt — not a task result. */
+  questions?: string[];
   taskId?: string;
   taskStatus?: TaskStatus;
+  taskProgress?: string | null;
   taskResult?: TaskResult | null;
   taskError?: string | null;
 };
@@ -48,6 +53,11 @@ type CommandSuggestion = {
   label: string;
   description: string;
   prefix: string;
+};
+
+type PendingClarification = {
+  originalPrompt: string;
+  questions: string[];
 };
 
 function useAutoResizeTextarea(minHeight: number, maxHeight = 200) {
@@ -83,11 +93,11 @@ function useAutoResizeTextarea(minHeight: number, maxHeight = 200) {
 
 function TypingDots() {
   return (
-    <div className="flex items-center">
+    <div className="flex items-center gap-0.5">
       {[1, 2, 3].map((dot) => (
         <motion.div
           key={dot}
-          className="mx-0.5 h-1.5 w-1.5 rounded-full bg-foreground/80"
+          className="h-1.5 w-1.5 rounded-full bg-current"
           initial={{ opacity: 0.3 }}
           animate={{ opacity: [0.3, 0.9, 0.3], scale: [0.85, 1.1, 0.85] }}
           transition={{ duration: 1.2, repeat: Infinity, delay: dot * 0.15, ease: "easeInOut" }}
@@ -97,25 +107,22 @@ function TypingDots() {
   );
 }
 
-function taskStatusLabel(status: TaskStatus): string {
-  switch (status) {
-    case "PENDING":
-      return "Starting…";
-    case "ANALYZING":
-      return "Analyzing your repository…";
-    case "GENERATING":
-      return "Generating code changes…";
-    case "APPLYING":
-      return "Applying changes to files…";
-    case "DONE":
-      return "Done";
-    case "FAILED":
-      return "Failed";
-  }
+function ProgressBar() {
+  return (
+    <div className="h-0.5 w-full overflow-hidden rounded-full bg-border/60">
+      <motion.div
+        className="h-full rounded-full bg-primary/60"
+        initial={{ x: "-100%" }}
+        animate={{ x: "100%" }}
+        transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+      />
+    </div>
+  );
 }
 
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
+  const isClarification = Boolean(message.questions && message.questions.length > 0);
   const isRunning =
     message.taskStatus &&
     message.taskStatus !== "DONE" &&
@@ -134,34 +141,73 @@ function MessageBubble({ message }: { message: Message }) {
         </div>
       )}
 
-      <div className={cn("max-w-[80%] space-y-1.5", isUser ? "items-end" : "items-start")}>
+      <div className={cn("max-w-[80%] space-y-2", isUser ? "items-end" : "items-start")}>
+        {/* Main bubble */}
         <div
           className={cn(
-            "rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+            "rounded-2xl px-4 py-3 text-sm leading-relaxed",
             isUser
               ? "bg-foreground text-background"
-              : "border border-border/70 bg-card text-foreground",
+              : isClarification
+                ? "border border-primary/30 bg-primary/5 text-foreground"
+                : "border border-border/70 bg-card text-foreground",
           )}
         >
-          {message.content}
+          {isClarification ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 font-medium text-foreground">
+                <HelpCircleIcon className="h-4 w-4 text-primary" />
+                Before I start, a few quick questions:
+              </div>
+              <ol className="space-y-2 pl-1">
+                {message.questions!.map((q, i) => (
+                  <li key={i} className="flex gap-2 text-sm text-muted-foreground">
+                    <span className="shrink-0 font-mono text-xs font-medium text-primary/70 mt-0.5">
+                      {i + 1}.
+                    </span>
+                    <span>{q}</span>
+                  </li>
+                ))}
+              </ol>
+              <p className="text-xs text-muted-foreground/70 italic">
+                Answer below and press Enter — or press Enter to skip and generate now.
+              </p>
+            </div>
+          ) : (
+            message.content
+          )}
         </div>
 
-        {isRunning && message.taskStatus && (
-          <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
-            <LoaderIcon className="h-3 w-3 animate-spin" />
-            {taskStatusLabel(message.taskStatus)}
+        {/* In-progress state */}
+        {isRunning && (
+          <div className="space-y-2 rounded-xl border border-border/60 bg-muted/40 p-3">
+            <ProgressBar />
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <LoaderIcon className="h-3 w-3 shrink-0 animate-spin" />
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={message.taskProgress ?? message.taskStatus}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {message.taskProgress ?? statusLabel(message.taskStatus!)}
+                </motion.span>
+              </AnimatePresence>
+            </div>
           </div>
         )}
 
+        {/* Done state */}
         {message.taskStatus === "DONE" && message.taskResult && (
-          <div className="space-y-1.5 rounded-xl border border-border/70 bg-muted/50 p-3 text-xs">
+          <div className="space-y-2 rounded-xl border border-border/70 bg-muted/40 p-3 text-xs">
             <div className="flex items-center gap-1.5 font-medium text-foreground">
               <CheckCircleIcon className="h-3.5 w-3.5 text-green-500" />
-              Changes applied
+              {message.taskResult.summary}
             </div>
-            <p className="text-muted-foreground">{message.taskResult.summary}</p>
             {message.taskResult.changes.length > 0 && (
-              <div className="space-y-0.5 pt-1">
+              <div className="space-y-0.5 pt-0.5">
                 {message.taskResult.changes.map((c) => (
                   <p key={c.path} className="font-mono text-[0.65rem] text-muted-foreground">
                     {c.path}
@@ -172,8 +218,9 @@ function MessageBubble({ message }: { message: Message }) {
           </div>
         )}
 
+        {/* Error state */}
         {message.taskStatus === "FAILED" && (
-          <div className="flex items-start gap-1.5 px-1 text-xs text-destructive">
+          <div className="flex items-start gap-1.5 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
             <AlertCircleIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>{message.taskError ?? "Task failed"}</span>
           </div>
@@ -189,6 +236,17 @@ function MessageBubble({ message }: { message: Message }) {
   );
 }
 
+function statusLabel(status: TaskStatus): string {
+  switch (status) {
+    case "PENDING": return "Starting…";
+    case "ANALYZING": return "Analyzing repository…";
+    case "GENERATING": return "Generating code…";
+    case "APPLYING": return "Applying changes…";
+    case "DONE": return "Done";
+    case "FAILED": return "Failed";
+  }
+}
+
 export function AnimatedAIChat({
   className,
   projectId,
@@ -200,16 +258,10 @@ export function AnimatedAIChat({
 
   const [value, setValue] = React.useState("");
   const [attachments, setAttachments] = React.useState<File[]>([]);
-  const [messages, setMessages] = React.useState<Message[]>(() => {
-    if (typeof window === "undefined" || !projectId) return [];
-    try {
-      const saved = localStorage.getItem(`synaro:chat:${projectId}`);
-      return saved ? (JSON.parse(saved) as Message[]) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [messages, setMessages] = React.useState<Message[]>([]);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [isAsking, setIsAsking] = React.useState(false);
+  const [pendingClarification, setPendingClarification] = React.useState<PendingClarification | null>(null);
   const [activeSuggestion, setActiveSuggestion] = React.useState<number>(-1);
   const paletteRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -217,21 +269,29 @@ export function AnimatedAIChat({
   const pollTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const { textareaRef, adjustHeight } = useAutoResizeTextarea(56, 180);
 
+  // Restore persisted messages after hydration
+  React.useEffect(() => {
+    if (!projectId) return;
+    try {
+      const saved = localStorage.getItem(`synaro:chat:${projectId}`);
+      if (saved) setMessages(JSON.parse(saved) as Message[]);
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Persist chat history to localStorage (keep last 100 messages, skip in-flight tasks)
+  // Persist chat history (skip in-flight tasks)
   React.useEffect(() => {
     if (!storageKey) return;
     try {
       const toSave = messages
-        .filter((m) => m.taskStatus === undefined || m.taskStatus === "DONE" || m.taskStatus === "FAILED")
+        .filter((m) => !m.taskStatus || m.taskStatus === "DONE" || m.taskStatus === "FAILED")
         .slice(-100);
       localStorage.setItem(storageKey, JSON.stringify(toSave));
-    } catch {
-      // localStorage full or unavailable
-    }
+    } catch {}
   }, [messages, storageKey]);
 
   const commandSuggestions: CommandSuggestion[] = React.useMemo(
@@ -307,6 +367,7 @@ export function AnimatedAIChat({
                   ? {
                       ...m,
                       taskStatus: task.status,
+                      taskProgress: task.progress ?? null,
                       taskResult: task.result ?? null,
                       taskError: task.errorMessage ?? null,
                     }
@@ -318,17 +379,87 @@ export function AnimatedAIChat({
               setIsSubmitting(false);
             }
           } catch {
-            /* ignore transient poll errors */
+            /* ignore transient errors */
           }
         })();
-      }, 2000);
+      }, 1500);
     },
     [stopPolling],
   );
 
+  /** Start the actual code generation task with a (possibly combined) prompt. */
+  const submitGeneration = React.useCallback(
+    async (prompt: string) => {
+      if (!projectId) return;
+
+      const asstMsgId = `asst-${Date.now()}`;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: asstMsgId,
+          role: "assistant",
+          content: "Working on your request…",
+          taskStatus: "PENDING",
+          taskProgress: "Starting…",
+        },
+      ]);
+
+      try {
+        const res = await fetch(
+          `/api/projects/${encodeURIComponent(projectId)}/ai-task`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt }),
+          },
+        );
+        if (!res.ok) {
+          const data = (await res.json()) as { error?: string };
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === asstMsgId
+                ? {
+                    ...m,
+                    content: "Task submission failed.",
+                    taskStatus: "FAILED",
+                    taskError: data.error ?? `Error ${res.status}`,
+                    taskProgress: null,
+                  }
+                : m,
+            ),
+          );
+          setIsSubmitting(false);
+          return;
+        }
+        const task = (await res.json()) as RemoteTask;
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === asstMsgId ? { ...m, taskId: task.id, taskStatus: task.status } : m,
+          ),
+        );
+        pollTask(task.id, asstMsgId);
+      } catch {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === asstMsgId
+              ? {
+                  ...m,
+                  content: "Network error — could not reach the AI service.",
+                  taskStatus: "FAILED",
+                  taskProgress: null,
+                }
+              : m,
+          ),
+        );
+        setIsSubmitting(false);
+      }
+    },
+    [projectId, pollTask],
+  );
+
   const handleSend = React.useCallback(async () => {
     const prompt = value.trim();
-    if (!prompt || isSubmitting) return;
+    if (!prompt || isSubmitting || isAsking) return;
 
     setValue("");
     adjustHeight(true);
@@ -342,73 +473,69 @@ export function AnimatedAIChat({
         {
           id: `asst-${Date.now()}`,
           role: "assistant",
-          content:
-            "No project is connected. Open a project workspace to use AI coding assistance.",
+          content: "No project is connected. Open a project workspace to use AI coding assistance.",
         },
       ]);
       return;
     }
 
     setIsSubmitting(true);
-    const asstMsgId = `asst-${Date.now()}`;
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: asstMsgId,
-        role: "assistant",
-        content: "Working on your request…",
-        taskStatus: "PENDING",
-      },
-    ]);
+
+    // If the user is answering a clarification, combine and generate
+    if (pendingClarification) {
+      const combined =
+        pendingClarification.originalPrompt +
+        "\n\nAdditional context from the user:\n" +
+        prompt;
+      setPendingClarification(null);
+      await submitGeneration(combined);
+      return;
+    }
+
+    // Otherwise, ask clarifying questions first
+    setIsAsking(true);
 
     try {
-      const res = await fetch(
-        `/api/projects/${encodeURIComponent(projectId)}/ai-task`,
+      const clarifyRes = await fetch(
+        `/api/projects/${encodeURIComponent(projectId)}/ai-clarify`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt }),
         },
       );
-      if (!res.ok) {
-        const data = (await res.json()) as { error?: string };
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === asstMsgId
-              ? {
-                  ...m,
-                  content: "Task submission failed.",
-                  taskStatus: "FAILED",
-                  taskError: data.error ?? `Error ${res.status}`,
-                }
-              : m,
-          ),
-        );
-        setIsSubmitting(false);
+      const clarifyData = clarifyRes.ok
+        ? ((await clarifyRes.json()) as { questions?: string[] })
+        : { questions: [] };
+
+      const questions = clarifyData.questions ?? [];
+
+      if (questions.length === 0) {
+        // No questions — generate directly
+        setIsAsking(false);
+        await submitGeneration(prompt);
         return;
       }
-      const task = (await res.json()) as RemoteTask;
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === asstMsgId ? { ...m, taskId: task.id, taskStatus: task.status } : m,
-        ),
-      );
-      pollTask(task.id, asstMsgId);
-    } catch {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === asstMsgId
-            ? {
-                ...m,
-                content: "Network error — could not reach the AI service.",
-                taskStatus: "FAILED",
-              }
-            : m,
-        ),
-      );
+
+      // Show questions and wait for user's answer
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `asst-${Date.now()}`,
+          role: "assistant",
+          content: "clarification",
+          questions,
+        },
+      ]);
+      setPendingClarification({ originalPrompt: prompt, questions });
+      setIsAsking(false);
       setIsSubmitting(false);
+    } catch {
+      // On error, fall back to direct generation
+      setIsAsking(false);
+      await submitGeneration(prompt);
     }
-  }, [value, isSubmitting, projectId, adjustHeight, pollTask]);
+  }, [value, isSubmitting, isAsking, projectId, pendingClarification, adjustHeight, submitGeneration]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showCommandPalette) {
@@ -464,6 +591,10 @@ export function AnimatedAIChat({
   };
 
   const hasMessages = messages.length > 0;
+  const isBusy = isSubmitting || isAsking;
+  const placeholder = pendingClarification
+    ? "Answer the questions above, or press Enter to skip…"
+    : "Ask Synaro a question…";
 
   return (
     <div className={cn("lab-bg relative flex h-full w-full flex-col overflow-hidden", className)}>
@@ -486,11 +617,11 @@ export function AnimatedAIChat({
           >
             <div className="text-center">
               <h2 className="text-2xl font-medium tracking-tight text-foreground sm:text-3xl">
-                Let&apos;s run your idea!
+                Let&apos;s build your idea!
               </h2>
               <div className="mx-auto mt-2 h-px w-56 bg-gradient-to-r from-transparent via-foreground/15 to-transparent" />
               <p className="mt-3 text-sm text-muted-foreground">
-                Type a command or ask a question
+                Describe what you want to build — I&apos;ll ask a few questions, then generate it.
               </p>
             </div>
 
@@ -519,6 +650,21 @@ export function AnimatedAIChat({
             {messages.map((msg) => (
               <MessageBubble key={msg.id} message={msg} />
             ))}
+            {/* Typing indicator while fetching clarification questions */}
+            {isAsking && (
+              <motion.div
+                className="flex w-full gap-3 justify-start"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/70 bg-muted text-[10px] font-medium text-foreground">
+                  syn
+                </div>
+                <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-card px-4 py-2.5 text-sm text-muted-foreground">
+                  <TypingDots />
+                </div>
+              </motion.div>
+            )}
             <div ref={messagesEndRef} />
           </div>
         )}
@@ -576,10 +722,12 @@ export function AnimatedAIChat({
                 adjustHeight();
               }}
               onKeyDown={handleKeyDown}
-              placeholder="Ask Synaro a question…"
+              placeholder={placeholder}
+              disabled={isBusy}
               className={cn(
                 "min-h-[56px] w-full resize-none bg-transparent px-1 py-1 text-sm text-foreground",
                 "placeholder:text-muted-foreground/60 focus:outline-none",
+                isBusy && "opacity-50 cursor-not-allowed",
               )}
               style={{ overflow: "hidden" }}
             />
@@ -644,6 +792,24 @@ export function AnimatedAIChat({
               >
                 <Command className="h-4 w-4" />
               </motion.button>
+
+              {/* Skip clarification shortcut */}
+              {pendingClarification && !isSubmitting && (
+                <motion.button
+                  type="button"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  onClick={() => {
+                    const prompt = pendingClarification.originalPrompt;
+                    setPendingClarification(null);
+                    setIsSubmitting(true);
+                    void submitGeneration(prompt);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-border/70 bg-card px-3 py-2 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                >
+                  Skip questions
+                </motion.button>
+              )}
             </div>
 
             <motion.button
@@ -651,46 +817,25 @@ export function AnimatedAIChat({
               onClick={() => void handleSend()}
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.98 }}
-              disabled={isSubmitting || !value.trim()}
+              disabled={isBusy || !value.trim()}
               className={cn(
                 "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition",
-                value.trim() && !isSubmitting
+                value.trim() && !isBusy
                   ? "bg-foreground text-background shadow-sm shadow-black/5"
                   : "border border-border/70 bg-muted text-muted-foreground",
               )}
             >
-              {isSubmitting ? (
+              {isAsking ? (
+                <LoaderIcon className="h-4 w-4 animate-spin" />
+              ) : isSubmitting ? (
                 <LoaderIcon className="h-4 w-4 animate-spin" />
               ) : (
                 <SendIcon className="h-4 w-4" />
               )}
-              Send
+              {isAsking ? "Thinking…" : isSubmitting ? "Building…" : "Send"}
             </motion.button>
           </div>
         </motion.div>
-
-        {/* "Thinking" toast — shown while a task is in flight */}
-        <AnimatePresence>
-          {isSubmitting && (
-            <motion.div
-              className="pointer-events-none fixed bottom-8 left-1/2 z-40 -translate-x-1/2 rounded-full border border-border/70 bg-card/70 px-4 py-2 text-xs text-muted-foreground shadow-[0_30px_90px_rgba(0,0,0,0.22)] backdrop-blur-2xl"
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 16 }}
-              transition={{ duration: 0.18 }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full border border-border/70 bg-muted text-[10px] font-medium text-foreground">
-                  syn
-                </div>
-                <div className="flex items-center gap-2">
-                  <span>Thinking</span>
-                  <TypingDots />
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
     </div>
   );

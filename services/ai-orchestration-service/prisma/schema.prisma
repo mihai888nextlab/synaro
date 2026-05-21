@@ -12,6 +12,7 @@ model Task {
   projectId    String
   prompt       String
   status       TaskStatus @default(PENDING)
+  progress     String?
   result       Json?
   errorMessage String?
   inputTokens  Int        @default(0)

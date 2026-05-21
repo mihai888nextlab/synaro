@@ -18,6 +18,6 @@ export const TOKEN_BUDGETS = {
   ANALYZE_MAX_INPUT: 16_000,
   // Enough to hold many source files as context
   GENERATE_MAX_INPUT: 100_000,
-  // ~8000 tokens ≈ ~600 lines of code per response
-  MAX_OUTPUT: 8_000,
+  // 32k tokens ≈ ~2400 lines of code — enough for a full multi-file project
+  MAX_OUTPUT: 32_000,
 } as const

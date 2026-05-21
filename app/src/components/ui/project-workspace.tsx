@@ -91,10 +91,16 @@ function LiveExplorerTree({
   loadState,
 }: LiveExplorerTreeProps) {
   /** Restore from localStorage on every mount (tab switches remount this tree via `treeKey`). */
-  const [expandedItems, setExpandedItems] = React.useState<string[]>(() =>
-    typeof window !== "undefined" && projectId ? readWorkspaceTreeExpanded(projectId) ?? [] : [],
-  );
+  const [expandedItems, setExpandedItems] = React.useState<string[]>([]);
   const initialHydratedRef = React.useRef(false);
+
+  // Restore persisted expanded items after hydration (localStorage not available on server)
+  React.useEffect(() => {
+    if (!projectId) return;
+    const saved = readWorkspaceTreeExpanded(projectId);
+    if (saved && saved.length > 0) setExpandedItems(saved);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const allowPersistExpandedRef = React.useRef(false);
   const prevProjectIdForExpandedRef = React.useRef<string | undefined>(undefined);
 
@@ -741,10 +747,15 @@ export function ProjectWorkspace({
   initialEnvironmentStatus = "INACTIVE",
   canManageInvites = false,
 }: ProjectWorkspaceProps) {
-  const [tab, setTab] = React.useState<TabKey>(() => {
-    if (typeof window === "undefined" || !projectSlug) return "tree";
-    return readProjectTab(projectSlug) ?? "tree";
-  });
+  const [tab, setTab] = React.useState<TabKey>("tree");
+
+  // Restore persisted tab after hydration (localStorage not available on server)
+  React.useEffect(() => {
+    if (!projectSlug) return;
+    const saved = readProjectTab(projectSlug);
+    if (saved) setTab(saved);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   React.useEffect(() => {
     if (projectSlug) writeProjectTab(projectSlug, tab);

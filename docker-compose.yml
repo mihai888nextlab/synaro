@@ -15,6 +15,7 @@ services:
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
       ENVIRONMENT_SERVICE_URL: http://environment-service:3002
       AI_ORCHESTRATION_URL: http://ai-orchestration-service:3003
+      AI_SERVICE_URL: http://ai-orchestration-service:3003
       NODE_ENV: production
     ports:
       - '3080:3000'

@@ -8,7 +8,7 @@ export class PrismaClient {
   project = {
     findFirst: jest.fn(),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    update: jest.fn().mockResolvedValue({} as any),
+    update: (jest.fn() as jest.MockedFunction<any>).mockResolvedValue({}),
   };
   account = {
     findFirst: jest.fn().mockResolvedValue(null),

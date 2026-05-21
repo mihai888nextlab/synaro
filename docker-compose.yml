@@ -17,7 +17,7 @@ services:
       AI_ORCHESTRATION_URL: http://ai-orchestration-service:3003
       NODE_ENV: production
     ports:
-      - '3001:3000'
+      - '3080:3000'
     depends_on:
       postgresql:
         condition: service_healthy

@@ -96,6 +96,7 @@ export async function latestEnvironmentStatusByProjectId(
   const sum = await latestEnvironmentSummariesByProjectId(projectIds);
   const out: Partial<Record<string, EnvironmentStatus>> = {};
   for (const [pid, s] of Object.entries(sum)) {
+    if (!s) continue;
     const p = parseEnvironmentStatusFromService(s.status);
     if (p) out[pid] = p;
   }

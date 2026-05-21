@@ -7,7 +7,8 @@ import { jest } from "@jest/globals";
 export class PrismaClient {
   project = {
     findFirst: jest.fn(),
-    update: jest.fn().mockResolvedValue({}),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    update: jest.fn().mockResolvedValue({} as any),
   };
   account = {
     findFirst: jest.fn().mockResolvedValue(null),

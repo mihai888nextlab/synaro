@@ -1,3 +1,18 @@
+http:
+  routers:
+    app:
+      rule: "Host(`synaro.tech`) || Host(`www.synaro.tech`)"
+      entryPoints:
+        - websecure
+      service: app-svc
+      tls: {}
+
+  services:
+    app-svc:
+      loadBalancer:
+        servers:
+          - url: "http://synaro-app:3000"
+
 tls:
   stores:
     default:

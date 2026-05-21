@@ -49,8 +49,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const envs = await fetchEnvironmentsForProject(projectId).catch(() => []);
   const env = pickActiveRuntimeEnvironment(envs);
   if (!env) return res.status(400).json({ error: "No running environment. Start the runtime first." });
-  const previewUrl = env.publicUrl ?? (env.port ? `http://localhost:${env.port}` : null);
-  if (!previewUrl) return res.status(400).json({ error: "Environment has no port or public URL assigned." });
+  if (!env.port && !env.publicUrl) return res.status(400).json({ error: "Environment has no port assigned." });
+  const previewUrl = `/api/preview/${env.id}`;
 
   if (req.method === "GET") {
     const action = typeof req.query.action === "string" ? req.query.action : null;

@@ -19,6 +19,8 @@ services:
       NODE_ENV: production
     ports:
       - '3080:3000'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgresql:
         condition: service_healthy

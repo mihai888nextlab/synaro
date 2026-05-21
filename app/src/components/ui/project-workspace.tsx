@@ -8,6 +8,7 @@ import {
   MessageSquareText,
   FolderTree,
   PlayIcon,
+  Rocket,
   ScrollText,
   TerminalSquare,
   X,
@@ -1009,6 +1010,19 @@ export function ProjectWorkspace({
                   <TerminalSquare className="size-4" />
                   Terminal
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("deployments")}
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs transition sm:gap-2 sm:px-3 sm:text-sm",
+                    tab === "deployments"
+                      ? "bg-muted text-foreground"
+                      : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <Rocket className="size-4" />
+                  Deployments
+                </button>
                 {projectId && environmentStatus === "RUNNING" ? (
                   <>
                     <button
@@ -1120,6 +1134,69 @@ export function ProjectWorkspace({
                 className="h-full w-full max-xl:max-w-none xl:max-w-3xl"
                 projectId={projectId}
               />
+            </div>
+            <div
+              className={cn(
+                "absolute inset-0 flex min-h-0 flex-col overflow-auto p-4",
+                tab !== "deployments" && "pointer-events-none invisible",
+              )}
+              aria-hidden={tab !== "deployments"}
+            >
+              <div className="mx-auto w-full max-w-lg space-y-6 py-4">
+                <div>
+                  <h2 className="text-base font-semibold text-foreground">Deployments</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Preview your running app or deploy it for permanent public access.
+                  </p>
+                </div>
+
+                {/* Preview */}
+                <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <PlayIcon className="size-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">Preview</span>
+                    <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[0.7rem] text-muted-foreground">Temporary</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Start your project and preview it live in the browser. Preview runs while the container is active.
+                  </p>
+                  {runStatus === "running" && previewUrl ? (
+                    <a
+                      href={previewUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-border/60 bg-muted px-3 py-2 text-xs text-foreground transition hover:bg-accent"
+                    >
+                      <ExternalLink className="size-3.5" />
+                      Open preview
+                    </a>
+                  ) : (
+                    <p className="text-xs text-muted-foreground/60 italic">
+                      {environmentStatus === "RUNNING" ? "Click Run to start the app preview." : "Start the container first, then click Run."}
+                    </p>
+                  )}
+                </div>
+
+                {/* Deploy */}
+                <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Rocket className="size-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">Deploy</span>
+                    <span className="ml-auto rounded-full bg-violet-500/10 px-2 py-0.5 text-[0.7rem] text-violet-500">Coming soon</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Deploy your project to a permanent public URL like <span className="font-mono text-foreground/80">{projectSlug}.synaro.tech</span>. Custom domains supported.
+                  </p>
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-border/40 bg-muted px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed"
+                  >
+                    <Rocket className="size-3.5" />
+                    Deploy to production
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 

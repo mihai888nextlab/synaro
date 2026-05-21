@@ -12,9 +12,9 @@ export const WORKFLOW_STORAGE_KEYS = {
   workspaceTreeExpanded: (projectId: string) => `${PREFIX}treeExpanded.${projectId}`,
 } as const;
 
-export type ProjectWorkspaceTab = "tree" | "chat" | "terminal";
+export type ProjectWorkspaceTab = "tree" | "chat" | "terminal" | "deployments";
 
-const TAB_VALUES: ProjectWorkspaceTab[] = ["tree", "chat", "terminal"];
+const TAB_VALUES: ProjectWorkspaceTab[] = ["tree", "chat", "terminal", "deployments"];
 
 function canUseStorage(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";

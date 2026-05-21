@@ -22,7 +22,7 @@ export function MinimalFooter() {
 
   const resources = [
     { title: "Blog", href: "#" },
-    { title: "Help Center", href: "#" },
+    { title: "Documentation", href: "/documentation" },
     { title: "Contact Support", href: "#" },
     { title: "Community", href: "#" },
     { title: "Security", href: "#" },

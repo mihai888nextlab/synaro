@@ -172,10 +172,16 @@ export function ProjectContainerTerminal({
           setErrorText("WebSocket connection failed");
         };
 
-        ws.onclose = () => {
+        ws.onclose = (event) => {
           if (cancelled) return;
           setConnection("closed");
-          setErrorText(null);
+          if (event.code === 4401) {
+            setErrorText(
+              "Terminal session was rejected (auth mismatch). Restart environment-service after changing NEXTAUTH_SECRET, then refresh this page.",
+            );
+          } else {
+            setErrorText(null);
+          }
         };
 
         dataDisposableRef.current = term.onData((data) => {

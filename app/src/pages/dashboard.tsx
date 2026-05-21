@@ -1,10 +1,8 @@
 import type { GetServerSideProps } from "next";
 import { getServerSession } from "next-auth/next";
-import Link from "next/link";
-
 import type { SynaroProjectCardModel } from "@/components/ui/project-cards-grid";
-import { Button } from "@/components/ui/button";
 import { DashboardKpiStrip, type DashboardKpiItem } from "@/components/ui/dashboard-kpi-strip";
+import { DashboardSectionLink } from "@/components/ui/dashboard-section-link";
 import { DashboardLogsTable, type DashboardLogRow } from "@/components/ui/dashboard-logs-table";
 import { DashboardProjectsShowcase } from "@/components/ui/dashboard-projects-showcase";
 import { authOptions } from "@/lib/next-auth-options";
@@ -18,18 +16,14 @@ type DashboardPageProps = {
 
 export default function DashboardPage({ projects, kpiItems, activityLogs }: DashboardPageProps) {
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 sm:gap-10">
+    <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-6 sm:gap-10">
       <DashboardKpiStrip items={kpiItems} />
 
       <DashboardProjectsShowcase projects={projects} />
 
       <DashboardLogsTable
         logs={activityLogs}
-        headerEnd={
-          <Button variant="outline" size="sm" className="rounded-xl text-muted-foreground" asChild>
-            <Link href="/logs">View logs</Link>
-          </Button>
-        }
+        headerEnd={<DashboardSectionLink href="/logs" label="View logs" />}
       />
     </div>
   );

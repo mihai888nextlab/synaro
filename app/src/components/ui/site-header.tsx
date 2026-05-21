@@ -18,6 +18,7 @@ type DropdownData = {
   links: {
     title: string;
     icon: React.ComponentType<{ className?: string }>;
+    href?: string;
   }[];
   cards: DropdownCard[];
 };
@@ -50,7 +51,7 @@ const dropdowns: DropdownData[] = [
     key: "resources",
     label: "Resources",
     links: [
-      { title: "Documentation", icon: Cloud },
+      { title: "Documentation", icon: Cloud, href: "/documentation" },
       { title: "Guides", icon: ShieldCheck },
       { title: "Status", icon: Waypoints },
       { title: "Changelog", icon: Cloud },
@@ -133,16 +134,27 @@ export function SiteHeader() {
                     <div className="grid grid-cols-[1fr_208px] gap-3">
                       <div className="rounded-xl border border-white/6 bg-black/30 p-3">
                         <div className="flex flex-col gap-1">
-                          {menu.links.map((item) => (
-                            <a
-                              key={item.title}
-                              href="#"
-                              className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-zinc-300 transition hover:bg-white/[0.04] hover:text-white"
-                            >
-                              <item.icon className="size-3.5 text-zinc-400" />
-                              {item.title}
-                            </a>
-                          ))}
+                          {menu.links.map((item) =>
+                            item.href ? (
+                              <Link
+                                key={item.title}
+                                href={item.href}
+                                className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-zinc-300 transition hover:bg-white/[0.04] hover:text-white"
+                              >
+                                <item.icon className="size-3.5 text-zinc-400" />
+                                {item.title}
+                              </Link>
+                            ) : (
+                              <a
+                                key={item.title}
+                                href="#"
+                                className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-zinc-300 transition hover:bg-white/[0.04] hover:text-white"
+                              >
+                                <item.icon className="size-3.5 text-zinc-400" />
+                                {item.title}
+                              </a>
+                            ),
+                          )}
                         </div>
                       </div>
 
@@ -175,9 +187,9 @@ export function SiteHeader() {
               </div>
             ))}
 
-            <a href="#" className="text-sm font-medium text-zinc-300 transition hover:text-white">
+            <Link href="/documentation" className="text-sm font-medium text-zinc-300 transition hover:text-white">
               Docs
-            </a>
+            </Link>
             <Link href="/pricing" className="text-sm font-medium text-zinc-300 transition hover:text-white">
               Pricing
             </Link>
@@ -241,17 +253,29 @@ export function SiteHeader() {
                       {isOpen && (
                         <div className="pb-4">
                           <div className="flex flex-col gap-1">
-                            {menu.links.map((item) => (
-                              <a
-                                key={item.title}
-                                href="#"
-                                onClick={() => setMobileOpen(false)}
-                                className="inline-flex items-center gap-2 rounded-md px-2 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.04] hover:text-white"
-                              >
-                                <item.icon className="size-3.5 text-zinc-400" />
-                                {item.title}
-                              </a>
-                            ))}
+                            {menu.links.map((item) =>
+                              item.href ? (
+                                <Link
+                                  key={item.title}
+                                  href={item.href}
+                                  onClick={() => setMobileOpen(false)}
+                                  className="inline-flex items-center gap-2 rounded-md px-2 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.04] hover:text-white"
+                                >
+                                  <item.icon className="size-3.5 text-zinc-400" />
+                                  {item.title}
+                                </Link>
+                              ) : (
+                                <a
+                                  key={item.title}
+                                  href="#"
+                                  onClick={() => setMobileOpen(false)}
+                                  className="inline-flex items-center gap-2 rounded-md px-2 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.04] hover:text-white"
+                                >
+                                  <item.icon className="size-3.5 text-zinc-400" />
+                                  {item.title}
+                                </a>
+                              ),
+                            )}
                           </div>
                           <div className="mt-3 grid grid-cols-2 gap-2">
                             {menu.cards.map((card) => (
@@ -285,9 +309,13 @@ export function SiteHeader() {
             </div>
 
             <div className="mt-4 flex flex-col gap-3">
-            <a href="#" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-zinc-200">
-                Docs
-              </a>
+            <Link
+              href="/documentation"
+              onClick={() => setMobileOpen(false)}
+              className="text-sm font-medium text-zinc-200"
+            >
+              Docs
+            </Link>
             <Link
               href="/pricing"
               onClick={() => setMobileOpen(false)}

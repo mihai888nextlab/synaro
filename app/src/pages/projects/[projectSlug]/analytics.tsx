@@ -47,13 +47,13 @@ export default function ProjectAnalyticsPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 sm:gap-10">
+    <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-6 sm:gap-10">
         <section
           aria-label="Project analytics"
           className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-5 xl:gap-6"
         >
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap gap-4">
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <div className="flex min-w-0 flex-wrap gap-4">
               <CampaignAreaChartCard />
             </div>
           </div>
@@ -62,10 +62,10 @@ export default function ProjectAnalyticsPage() {
             aria-label="Key metrics"
             className={cn(
               "mx-auto flex min-h-0 w-full max-w-sm shrink-0 flex-col",
-              "lg:mx-0 lg:max-w-none lg:w-[min(100%,22rem)] xl:w-96",
+              "max-lg:max-w-none lg:mx-0 lg:max-w-none lg:w-[min(100%,22rem)] xl:w-96",
             )}
           >
-            <div className="grid min-h-0 flex-1 grid-cols-2 grid-rows-[1fr_1fr] gap-3 xl:gap-3.5">
+            <div className="grid min-h-0 flex-1 grid-cols-2 grid-rows-[auto_auto] gap-2.5 sm:gap-3 lg:grid-rows-[1fr_1fr] xl:gap-3.5">
               {PLACEHOLDER_METRICS.map((m) => (
                 <MetricCell key={m.label} metric={m} />
               ))}

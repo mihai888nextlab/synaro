@@ -82,12 +82,12 @@ export function ProjectIframePreview({
         className,
       )}
     >
-      <div className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+      <div className="flex shrink-0 flex-col gap-2 px-2 py-2 sm:px-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Globe className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           <p className="truncate text-xs font-medium text-foreground">{title}</p>
         </div>
-        <div className="flex w-full flex-1 items-center gap-2 sm:max-w-md sm:min-w-[200px]">
+        <div className="flex min-w-0 w-full flex-1 items-center gap-1.5 sm:max-w-md sm:min-w-[200px] sm:gap-2">
           <Input
             type="url"
             value={urlInput}

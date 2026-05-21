@@ -151,11 +151,15 @@ export function SynaroProjectDockerPill({
   interactive = false,
   busy = false,
   onPress,
+  className: classNameProp,
+  labelClassName,
 }: {
   environmentStatus: SynaroProjectEnvironmentStatus;
   interactive?: boolean;
   busy?: boolean;
   onPress?: (action: "start" | "stop") => void;
+  className?: string;
+  labelClassName?: string;
 }) {
   const { dot, label, className } = dockerPillVisual(environmentStatus);
   const nextAction: "start" | "stop" = environmentStatus === "RUNNING" ? "stop" : "start";
@@ -166,11 +170,13 @@ export function SynaroProjectDockerPill({
         ? "Retry: remove failed environment and start a new container"
         : "Start Docker container";
 
+  const pillLabel = <span className={labelClassName}>{label}</span>;
+
   if (!interactive || !onPress) {
     return (
-      <span className={className}>
+      <span className={cn(className, classNameProp)} title={label}>
         {dot}
-        {label}
+        {pillLabel}
       </span>
     );
   }
@@ -188,6 +194,7 @@ export function SynaroProjectDockerPill({
       }}
       className={cn(
         className,
+        classNameProp,
         "cursor-pointer transition hover:brightness-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring/70 disabled:cursor-not-allowed disabled:opacity-60",
       )}
     >
@@ -197,12 +204,12 @@ export function SynaroProjectDockerPill({
             className="size-3 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
             aria-hidden
           />
-          <span>working…</span>
+          <span className={labelClassName}>working…</span>
         </span>
       ) : (
         <>
           {dot}
-          {label}
+          {pillLabel}
         </>
       )}
     </button>
@@ -255,7 +262,7 @@ export function SynaroProjectCard({
       className={cn(
         "group flex flex-col rounded-xl text-left transition-colors",
         variant === "embedded"
-          ? "border-0 bg-muted/20 p-4 shadow-none sm:p-[1.125rem] hover:bg-muted/30 dark:bg-muted/10 dark:hover:bg-muted/20"
+          ? "overflow-hidden border-0 bg-muted/20 p-4 shadow-none max-sm:p-3 hover:bg-muted/30 dark:bg-muted/10 dark:hover:bg-muted/20 sm:p-[1.125rem]"
           : "border border-border/70 bg-card p-4 shadow-sm shadow-black/[0.06] sm:p-[1.125rem] hover:border-border hover:shadow-black/[0.08] dark:border-border/55 dark:bg-card/90 dark:shadow-black/20 dark:hover:border-border/70",
       )}
     >
@@ -264,10 +271,11 @@ export function SynaroProjectCard({
           className={cn(
             "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-card text-muted-foreground transition group-hover:bg-muted",
             "dark:border-border/60 dark:bg-muted/60",
+            variant === "embedded" && "max-sm:h-8 max-sm:w-8",
           )}
           aria-hidden
         >
-          <Icon className="size-4 shrink-0" />
+          <Icon className={cn("size-4 shrink-0", variant === "embedded" && "max-sm:size-3.5")} />
         </div>
         <div className="flex shrink-0 items-center justify-end gap-1.5" dir="ltr">
           <div className="flex shrink-0 items-center">
@@ -337,17 +345,47 @@ export function SynaroProjectCard({
       <Link
         href={href}
         aria-label={`Open project: ${project.title}`}
-        className="mt-4 block min-w-0 flex-1 rounded-lg outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70"
+        className={cn(
+          "mt-4 block min-w-0 flex-1 rounded-lg outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70",
+          variant === "embedded" && "max-sm:mt-2",
+        )}
       >
-        <span className="block text-[1.0625rem] font-semibold leading-snug tracking-tight text-foreground">
+        <span
+          className={cn(
+            "block font-semibold leading-snug tracking-tight text-foreground",
+            variant === "embedded"
+              ? "truncate text-[0.9375rem] sm:text-[1.0625rem]"
+              : "text-[1.0625rem]",
+          )}
+        >
           {project.title}
         </span>
-        <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{project.description}</p>
+        {variant === "embedded" ? (
+          <p className="mt-1 text-[0.65rem] text-muted-foreground sm:hidden">{project.updatedRelative}</p>
+        ) : null}
+        <p
+          className={cn(
+            "mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground",
+            variant === "embedded" && "hidden sm:block",
+          )}
+        >
+          {project.description}
+        </p>
 
-        <hr className="my-4 border-0 border-t border-border/60 dark:border-border/45" />
+        <hr
+          className={cn(
+            "my-4 border-0 border-t border-border/60 dark:border-border/45",
+            variant === "embedded" && "hidden sm:block",
+          )}
+        />
 
-        <div className="flex items-end justify-between gap-3 text-xs">
-          <span className="min-w-0 text-muted-foreground">
+        <div
+          className={cn(
+            "flex items-end justify-between gap-3 text-xs",
+            variant === "embedded" && "hidden sm:flex",
+          )}
+        >
+          <span className="min-w-0 truncate text-muted-foreground">
             {project.stack} · updated {project.updatedRelative}
           </span>
           <span className="inline-flex shrink-0 items-center gap-0.5 text-muted-foreground transition group-hover:text-foreground">
@@ -407,6 +445,7 @@ export function SynaroProjectsCardsGrid({
   onProjectDelete,
   cardVariant = "default",
   className,
+  newProjectClassName,
 }: {
   projects?: SynaroProjectCardModel[];
   showNewProject?: boolean;
@@ -420,6 +459,7 @@ export function SynaroProjectsCardsGrid({
   /** Lighter project tiles for dashboard-style panels. */
   cardVariant?: "default" | "embedded";
   className?: string;
+  newProjectClassName?: string;
 }) {
   return (
     <div
@@ -467,6 +507,7 @@ export function SynaroProjectsCardsGrid({
           href={newProjectHref}
           onClick={onNewProjectClick}
           variant={cardVariant}
+          className={newProjectClassName}
         />
       ) : null}
     </div>

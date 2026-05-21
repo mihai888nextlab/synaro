@@ -31,17 +31,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { prompt } = req.body as { prompt?: string };
   if (!prompt?.trim()) return res.status(400).json({ error: "prompt is required" });
 
+  const clarifyUrl = `${aiServiceBaseUrl()}/api/tasks/clarify`;
+
   try {
-    const upstream = await fetch(`${aiServiceBaseUrl()}/api/tasks/clarify`, {
+    const upstream = await fetch(clarifyUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt }),
       signal: AbortSignal.timeout(20_000),
     });
-    const data = (await upstream.json()) as unknown;
-    return res.status(upstream.status).json(data);
-  } catch {
-    // If clarification fails, return empty questions so the frontend falls back to direct generation
+
+    if (!upstream.ok) {
+      if (process.env.NODE_ENV === "development") {
+        console.warn(
+          `[ai-clarify] upstream ${upstream.status} from ${clarifyUrl} — restart ai-orchestration-service if clarify was recently added`,
+        );
+      }
+      return res.json({ questions: [] });
+    }
+
+    const data = (await upstream.json()) as { questions?: string[] };
+    return res.json({ questions: data.questions ?? [] });
+  } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[ai-clarify] could not reach AI service at", clarifyUrl, err);
+    }
     return res.json({ questions: [] });
   }
 }

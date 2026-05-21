@@ -108,6 +108,36 @@ const LOG_PAGE_EXTRA_ROWS: DashboardLogRow[] = [
 /** Extended sample used on `/logs` (includes dashboard rows plus more history). */
 export const LOG_PAGE_PLACEHOLDER_LOGS: DashboardLogRow[] = [...DASHBOARD_PLACEHOLDER_LOGS, ...LOG_PAGE_EXTRA_ROWS];
 
+function LogRowCard({
+  row,
+  frameless,
+}: {
+  row: DashboardLogRow;
+  frameless: boolean;
+}) {
+  return (
+    <article
+      className={cn(
+        "border-b border-border/50 transition-colors last:border-b-0 hover:bg-muted/25 dark:hover:bg-muted/10",
+        frameless ? "px-3 py-3.5 sm:px-4" : "px-4 py-3.5 sm:px-5",
+      )}
+    >
+      <p className="text-sm font-medium leading-snug text-foreground">{row.action}</p>
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        <span className="min-w-0 truncate text-xs text-muted-foreground">{row.project}</span>
+        <StatusPill status={row.status} />
+        <time
+          className="ms-auto shrink-0 text-xs tabular-nums text-muted-foreground"
+          dateTime={row.occurredAt}
+          title={row.timeTitle}
+        >
+          {row.time}
+        </time>
+      </div>
+    </article>
+  );
+}
+
 function StatusPill({ status }: { status: DashboardLogRow["status"] }) {
   const map = {
     done: {
@@ -175,11 +205,9 @@ export function DashboardLogsTable({
       )}
     >
       {!hideHeader ? (
-        <div className="flex flex-col gap-3 border-b border-border/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">{title}</h2>
-          {headerEnd ? (
-            <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">{headerEnd}</div>
-          ) : null}
+        <div className="flex items-center justify-between gap-3 border-b border-border/60 px-5 py-4 max-lg:px-4 max-lg:py-3.5 sm:px-6">
+          <h2 className="min-w-0 text-lg font-semibold tracking-tight text-foreground max-lg:text-base">{title}</h2>
+          {headerEnd ? <div className="flex shrink-0 items-center">{headerEnd}</div> : null}
         </div>
       ) : null}
 
@@ -187,14 +215,20 @@ export function DashboardLogsTable({
         <div
           className={cn(
             "flex min-h-0 flex-1 flex-col items-center justify-center text-center",
-            hideHeader ? "px-4 py-16 sm:py-24" : "px-5 py-12 sm:px-6 sm:py-16",
+            hideHeader ? "px-4 py-16 max-lg:py-12 sm:py-24" : "px-5 py-12 max-lg:px-4 max-lg:py-10 sm:px-6 sm:py-16",
           )}
         >
           <p className="text-base font-medium text-foreground">There are no logs</p>
-          <p className="mt-2 max-w-md text-sm text-muted-foreground">{emptyMessage}</p>
+          <p className="mt-2 max-w-md text-sm text-muted-foreground max-lg:px-2">{emptyMessage}</p>
         </div>
       ) : (
-      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+        <>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:hidden">
+            {logs.map((row) => (
+              <LogRowCard key={row.id} row={row} frameless={frameless} />
+            ))}
+          </div>
+          <div className="hidden min-h-0 flex-1 overflow-x-auto overflow-y-auto lg:block">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead>
             <tr className="border-b border-border/60">
@@ -270,7 +304,8 @@ export function DashboardLogsTable({
             ))}
           </tbody>
         </table>
-      </div>
+          </div>
+        </>
       )}
     </section>
   );

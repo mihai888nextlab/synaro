@@ -51,12 +51,9 @@ const indent = 20;
 /** Outer padding for the explorer grid (tree + detail) — reuse for the terminal tab shell. */
 const workspaceExplorerTabPaddingClass = "px-3 pb-3 pt-0";
 
-/**
- * Height behavior for the “Project files” card and the terminal card: capped on small
- * viewports, full column height from `lg` up.
- */
+/** Explorer / terminal card: capped on small viewports, full column height from `lg` up. */
 const workspaceExplorerPrimaryCardSizeClass =
-  "max-h-[min(50vh,28rem)] min-h-0 lg:h-full lg:max-h-none";
+  "min-h-[12rem] max-h-[min(58vh,32rem)] min-h-0 lg:min-h-0 lg:max-h-none lg:h-full";
 
 function placeholderTreeItems(message: string): Record<string, WorkspaceExplorerItem> {
   const hint = "syn:status";
@@ -276,7 +273,9 @@ function LiveExplorerTree({
       className={cn(
         "grid min-h-0 flex-1 grid-cols-1 gap-3 lg:h-full lg:grid-rows-1 lg:gap-3",
         workspaceExplorerTabPaddingClass,
-        showSelectionPanel ? "lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]" : "lg:grid-cols-1",
+        showSelectionPanel
+          ? "max-lg:grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]"
+          : "lg:grid-cols-1",
       )}
     >
       <div
@@ -285,16 +284,16 @@ function LiveExplorerTree({
           workspaceExplorerPrimaryCardSizeClass,
         )}
       >
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
+        <div className="flex shrink-0 flex-col gap-2 border-b border-border/60 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
           <p className="text-xs font-medium text-muted-foreground">
             Project files
             {loadState === "loading" ? (
               <span className="ms-2 font-normal text-muted-foreground">· loading…</span>
             ) : null}
           </p>
-          <div className="flex items-center gap-2">
-            <p className="text-xs text-muted-foreground">{visibleItems.length} items</p>
-            <div className="w-[120px] sm:w-[140px]">
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="shrink-0 text-xs text-muted-foreground">{visibleItems.length} items</p>
+            <div className="min-w-0 flex-1 sm:w-[140px] sm:flex-none">
               <Input
                 type="search"
                 value={query}
@@ -339,15 +338,15 @@ function LiveExplorerTree({
       </div>
 
       {showSelectionPanel ? (
-        <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card">
-          <div className="flex items-center justify-between px-3 py-2.5">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">
+        <div className="flex max-h-[min(52vh,28rem)] min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card lg:max-h-none lg:flex-1">
+          <div className="flex items-start justify-between gap-2 px-3 py-2.5">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-foreground">
                 {selectedItem ? selectedItem.getItemName() : selectedPath}
               </p>
               <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{selectedPath}</p>
             </div>
-            <div className="hidden sm:block">
+            <div className="shrink-0 max-sm:mt-0.5">
               {truncated ? (
                 <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs text-amber-700 dark:text-amber-400">
                   List truncated
@@ -960,99 +959,102 @@ export function ProjectWorkspace({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div
         className={cn(
-          "grid min-h-0 flex-1 gap-0",
-          "grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)]",
-          "xl:grid-cols-[minmax(0,1fr)_minmax(280px,38%)] xl:grid-rows-1",
+          "flex min-h-0 flex-1 flex-col gap-3",
+          "xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(280px,38%)] xl:grid-rows-1 xl:gap-0",
         )}
       >
-        <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-background/40">
-          <div className="flex shrink-0 flex-wrap items-center gap-2 px-3 py-2.5 sm:px-4">
-            <button
-              type="button"
-              onClick={() => setTab("tree")}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition",
-                tab === "tree"
-                  ? "bg-muted text-foreground"
-                  : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-            >
-              <FolderTree className="size-4" />
-              File tree
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("chat")}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition",
-                tab === "chat"
-                  ? "bg-muted text-foreground"
-                  : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-            >
-              <MessageSquareText className="size-4" />
-              AI chat
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("terminal")}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition",
-                tab === "terminal"
-                  ? "bg-muted text-foreground"
-                  : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-            >
-              <TerminalSquare className="size-4" />
-              Terminal
-            </button>
-            {projectId && environmentStatus === "RUNNING" ? (
-              <>
+        <div className="flex min-h-0 min-w-0 flex-[1_1_75vh] flex-col overflow-hidden rounded-2xl bg-background/40 max-xl:min-h-[min(78vh,100%)] xl:min-h-0 xl:h-full xl:flex-none">
+          <div className="flex shrink-0 flex-col gap-2 px-2 py-2 sm:px-3 sm:py-2.5 xl:flex-row xl:items-center xl:gap-2 xl:px-4 xl:py-2.5">
+            <div className="flex min-w-0 flex-col gap-2 xl:flex-1 xl:flex-row xl:flex-wrap xl:items-center xl:gap-2">
+              <div className="-mx-1 flex gap-1 overflow-x-auto overscroll-x-contain px-1 pb-0.5 [scrollbar-width:none] xl:mx-0 xl:overflow-visible xl:pb-0 [&::-webkit-scrollbar]:hidden">
                 <button
                   type="button"
-                  onClick={() => void handleRun()}
-                  disabled={runStatus === "starting"}
+                  onClick={() => setTab("tree")}
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition",
-                    runStatus === "running"
-                      ? "bg-green-500/15 text-green-600 dark:text-green-400"
-                      : runStatus === "error"
-                        ? "bg-destructive/10 text-destructive"
-                        : runStatus === "starting"
-                          ? "bg-muted text-muted-foreground"
-                          : "bg-muted text-muted-foreground hover:bg-green-500/10 hover:text-green-600 dark:hover:text-green-400",
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs transition sm:gap-2 sm:px-3 sm:text-sm",
+                    tab === "tree"
+                      ? "bg-muted text-foreground"
+                      : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
                 >
-                  {runStatus === "starting" ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <PlayIcon className="size-4" />
-                  )}
-                  {runStatus === "starting" ? "Starting…" : runStatus === "running" ? "Running" : "Run"}
+                  <FolderTree className="size-4" />
+                  File tree
                 </button>
-                {runStatus === "running" ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowLogs((v) => !v)}
-                    className={cn(
-                      "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition",
-                      showLogs
-                        ? "bg-muted text-foreground"
-                        : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    <ScrollText className="size-4" />
-                    Logs
-                  </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("chat")}
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs transition sm:gap-2 sm:px-3 sm:text-sm",
+                    tab === "chat"
+                      ? "bg-muted text-foreground"
+                      : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <MessageSquareText className="size-4" />
+                  AI chat
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("terminal")}
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs transition sm:gap-2 sm:px-3 sm:text-sm",
+                    tab === "terminal"
+                      ? "bg-muted text-foreground"
+                      : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <TerminalSquare className="size-4" />
+                  Terminal
+                </button>
+                {projectId && environmentStatus === "RUNNING" ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void handleRun()}
+                      disabled={runStatus === "starting"}
+                      className={cn(
+                        "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-medium transition sm:gap-2 sm:px-3 sm:text-sm",
+                        runStatus === "running"
+                          ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                          : runStatus === "error"
+                            ? "bg-destructive/10 text-destructive"
+                            : runStatus === "starting"
+                              ? "bg-muted text-muted-foreground"
+                              : "bg-muted text-muted-foreground hover:bg-green-500/10 hover:text-green-600 dark:hover:text-green-400",
+                      )}
+                    >
+                      {runStatus === "starting" ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <PlayIcon className="size-4" />
+                      )}
+                      {runStatus === "starting" ? "Starting…" : runStatus === "running" ? "Running" : "Run"}
+                    </button>
+                    {runStatus === "running" ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowLogs((v) => !v)}
+                        className={cn(
+                          "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs transition sm:gap-2 sm:px-3 sm:text-sm",
+                          showLogs
+                            ? "bg-muted text-foreground"
+                            : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
+                        )}
+                      >
+                        <ScrollText className="size-4" />
+                        Logs
+                      </button>
+                    ) : null}
+                  </>
                 ) : null}
-              </>
-            ) : null}
+              </div>
+            </div>
             {projectId ? (
-              <div className="ms-auto flex max-w-[min(100%,16rem)] flex-col items-end gap-1 sm:max-w-xs">
-                <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex flex-col gap-1 border-t border-border/40 px-1 pt-2 xl:ms-auto xl:shrink-0 xl:border-0 xl:pt-0">
+                <div className="flex flex-wrap items-center justify-start gap-1.5 sm:justify-end sm:gap-2">
                   {canManageInvites ? <ProjectShareInvite projectId={projectId} /> : null}
                   <SynaroProjectDockerPill
                     environmentStatus={environmentStatus}
@@ -1061,16 +1063,16 @@ export function ProjectWorkspace({
                     onPress={handleDockerPress}
                   />
                 </div>
-                {dockerError ? (
-                  <p className="text-right text-[0.65rem] leading-snug text-destructive sm:text-xs">
-                    {dockerError}
-                  </p>
-                ) : null}
-                {runError ? (
-                  <p className="text-right text-[0.65rem] leading-snug text-destructive sm:text-xs">
-                    {runError}
-                  </p>
-                ) : null}
+                {(dockerError || runError) && (
+                  <div className="flex flex-col gap-0.5 sm:items-end xl:flex-row xl:gap-3">
+                    {dockerError ? (
+                      <p className="text-[0.65rem] leading-snug text-destructive sm:text-xs">{dockerError}</p>
+                    ) : null}
+                    {runError ? (
+                      <p className="text-[0.65rem] leading-snug text-destructive sm:text-xs">{runError}</p>
+                    ) : null}
+                  </div>
+                )}
               </div>
             ) : null}
           </div>
@@ -1106,18 +1108,24 @@ export function ProjectWorkspace({
             </div>
             <div
               className={cn(
-                "absolute inset-0 flex min-h-0 flex-1 items-center justify-center overflow-auto p-4",
+                "absolute inset-0 flex min-h-0 flex-col overflow-hidden",
                 tab !== "chat" && "pointer-events-none invisible",
+                tab === "chat"
+                  ? "max-xl:items-stretch max-xl:justify-start max-xl:p-2 xl:items-center xl:justify-center xl:overflow-auto xl:p-4"
+                  : "",
               )}
               aria-hidden={tab !== "chat"}
             >
-              <AnimatedAIChat className="w-full max-w-3xl" projectId={projectId} />
+              <AnimatedAIChat
+                className="h-full w-full max-xl:max-w-none xl:max-w-3xl"
+                projectId={projectId}
+              />
             </div>
           </div>
 
           {/* Log panel — shown when app is running and user toggles Logs */}
           {showLogs ? (
-            <div className="flex h-48 shrink-0 flex-col border-t border-border/60">
+            <div className="flex h-40 shrink-0 flex-col border-t border-border/60 sm:h-48">
               <div className="flex shrink-0 items-center justify-between px-3 py-1.5">
                 <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                   <ScrollText className="size-3.5" />
@@ -1152,7 +1160,7 @@ export function ProjectWorkspace({
         </div>
 
         <ProjectIframePreview
-          className="h-full min-h-[40vh] xl:min-h-0"
+          className="order-last max-xl:max-h-[28vh] max-xl:min-h-[11rem] max-xl:shrink-0 xl:order-none xl:h-full xl:max-h-none xl:min-h-0"
           title={projectSlug ? `Preview — ${humanizeProjectSlug(projectSlug)}` : "Preview"}
           previewUrl={previewUrl}
         />

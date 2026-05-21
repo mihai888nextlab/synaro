@@ -11,7 +11,7 @@ type LogsPageProps = {
 
 export default function LogsPage({ logs }: LogsPageProps) {
   return (
-    <div className="mx-auto flex w-full min-h-0 max-w-7xl flex-1 flex-col overflow-hidden">
+    <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-1 flex-col overflow-hidden">
       <DashboardLogsTable
         hideHeader
         frameless

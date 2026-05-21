@@ -113,8 +113,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
         )}
       >
         <header className="sticky top-0 z-40 border-b border-border/70 bg-background/75 backdrop-blur-xl">
-          <div className="flex h-14 items-center justify-between px-4 sm:px-6">
-            <div className="flex items-center gap-3">
+          <div className="flex h-14 min-w-0 items-center justify-between gap-2 px-3 sm:px-6">
+            <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
               <button
                 type="button"
                 onClick={() => setMobileOpen(true)}
@@ -123,8 +123,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
               >
                 <Menu className="size-4" />
               </button>
-              <Breadcrumb>
-                <BreadcrumbList className="text-muted-foreground">
+              <Breadcrumb className="min-w-0 flex-1">
+                <BreadcrumbList className="flex-nowrap text-muted-foreground">
                   {isHome ? (
                     <BreadcrumbItem>
                       <BreadcrumbPage className="flex items-center gap-2 font-medium text-foreground">
@@ -158,12 +158,12 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                               {!isLast && crumb.href ? (
                                 <BreadcrumbLink
                                   asChild
-                                  className="text-muted-foreground hover:text-foreground"
+                                  className="max-w-[8rem] truncate text-muted-foreground hover:text-foreground sm:max-w-none sm:overflow-visible sm:whitespace-normal"
                                 >
                                   <Link href={crumb.href}>{crumb.label}</Link>
                                 </BreadcrumbLink>
                               ) : (
-                                <BreadcrumbPage className="font-medium text-foreground">
+                                <BreadcrumbPage className="max-w-[10rem] truncate font-medium text-foreground sm:max-w-none sm:overflow-visible sm:whitespace-normal">
                                   {crumb.label}
                                 </BreadcrumbPage>
                               )}
@@ -193,7 +193,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col px-4 py-6 sm:px-6">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col px-3 py-4 sm:px-6 sm:py-6">
           <div className="flex min-h-0 w-full flex-1 flex-col">{children}</div>
         </main>
       </div>

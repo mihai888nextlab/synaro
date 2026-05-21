@@ -1,15 +1,9 @@
-import * as React from "react";
-
-import { cn } from "@/lib/utils";
-
-export function SynaroLogo({ className }: { className?: string }) {
-  return (
-    <svg
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
       viewBox="0 0 1920 1080"
       xmlns="http://www.w3.org/2000/svg"
-      className={cn("block shrink-0", className)}
-      aria-hidden="true"
-      focusable="false"
+      
+      
     >
       {/* Background removed so the mark inherits color cleanly */}
       <path
@@ -53,22 +47,3 @@ export function SynaroLogo({ className }: { className?: string }) {
         opacity="0.85"
       />
     </svg>
-  );
-}
-
-/** Circular avatar for Synaro assistant messages — logo uses `currentColor` for theme. */
-export function SynaroAssistantAvatar({ className }: { className?: string }) {
-  return (
-    <div
-      className={cn(
-        "relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border/70 bg-muted",
-        className,
-      )}
-      aria-hidden
-    >
-      {/* Full SVG is 16:9 — render larger than the circle so the mark fills the avatar. */}
-      <SynaroLogo className="size-10 text-foreground" />
-    </div>
-  );
-}
-

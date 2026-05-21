@@ -10,6 +10,7 @@ import {
   HelpCircleIcon,
   ImageIcon,
   LoaderIcon,
+  Mic,
   MonitorIcon,
   Paperclip,
   SendIcon,
@@ -18,6 +19,11 @@ import {
   XIcon,
 } from "lucide-react";
 
+import { SpeechWaveform } from "@/components/ui/speech-waveform";
+import { SynaroAssistantAvatar } from "@/components/ui/synaro-logo";
+import { canUseMicrophone, supportsSpeechRecognition } from "@/lib/speech/capabilities";
+import { useMicrophoneLevels } from "@/lib/speech/use-microphone-levels";
+import { useSpeechInput } from "@/lib/speech/use-speech-input";
 import { cn } from "@/lib/utils";
 
 type TaskStatus = "PENDING" | "ANALYZING" | "GENERATING" | "APPLYING" | "DONE" | "FAILED";
@@ -135,17 +141,18 @@ function MessageBubble({ message }: { message: Message }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
     >
-      {!isUser && (
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/70 bg-muted text-[10px] font-medium text-foreground">
-          syn
-        </div>
-      )}
+      {!isUser && <SynaroAssistantAvatar />}
 
-      <div className={cn("max-w-[80%] space-y-2", isUser ? "items-end" : "items-start")}>
+      <div
+        className={cn(
+          "max-w-[80%] space-y-2 max-xl:max-w-[min(100%,20rem)]",
+          isUser ? "items-end" : "items-start",
+        )}
+      >
         {/* Main bubble */}
         <div
           className={cn(
-            "rounded-2xl px-4 py-3 text-sm leading-relaxed",
+            "rounded-2xl px-4 py-3 text-sm leading-relaxed max-xl:px-3 max-xl:py-2.5 max-xl:text-[0.8125rem]",
             isUser
               ? "bg-foreground text-background"
               : isClarification
@@ -267,7 +274,19 @@ export function AnimatedAIChat({
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const pollTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
-  const { textareaRef, adjustHeight } = useAutoResizeTextarea(56, 180);
+  const [compactInput, setCompactInput] = React.useState(false);
+  React.useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1279px)");
+    const sync = () => setCompactInput(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+  const { textareaRef, adjustHeight } = useAutoResizeTextarea(compactInput ? 40 : 56, compactInput ? 120 : 180);
+
+  React.useEffect(() => {
+    adjustHeight(true);
+  }, [compactInput, adjustHeight]);
 
   // Restore persisted messages after hydration
   React.useEffect(() => {
@@ -457,8 +476,8 @@ export function AnimatedAIChat({
     [projectId, pollTask],
   );
 
-  const handleSend = React.useCallback(async () => {
-    const prompt = value.trim();
+  const handleSend = React.useCallback(async (promptOverride?: string) => {
+    const prompt = (promptOverride ?? value).trim();
     if (!prompt || isSubmitting || isAsking) return;
 
     setValue("");
@@ -537,6 +556,40 @@ export function AnimatedAIChat({
     }
   }, [value, isSubmitting, isAsking, projectId, pendingClarification, adjustHeight, submitGeneration]);
 
+  const handleSendRef = React.useRef(handleSend);
+  handleSendRef.current = handleSend;
+
+  const isBusy = isSubmitting || isAsking;
+
+  const [voiceSupported, setVoiceSupported] = React.useState(false);
+  const [voiceError, setVoiceError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setVoiceSupported(supportsSpeechRecognition() && canUseMicrophone());
+  }, []);
+
+  const { isListening, toggle: toggleVoice, stop: stopVoice } = useSpeechInput({
+    disabled: isBusy || !voiceSupported,
+    onInterim: (text) => {
+      setValue(text);
+      adjustHeight();
+    },
+    onUtteranceEnd: (text) => {
+      if (!text.trim()) return;
+      void handleSendRef.current(text);
+    },
+    onError: (msg) => {
+      setVoiceError(msg);
+      window.setTimeout(() => setVoiceError(null), 4000);
+    },
+  });
+
+  const micLevels = useMicrophoneLevels(isListening);
+
+  React.useEffect(() => {
+    if (isBusy && isListening) stopVoice();
+  }, [isBusy, isListening, stopVoice]);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showCommandPalette) {
       if (e.key === "ArrowDown") {
@@ -591,7 +644,6 @@ export function AnimatedAIChat({
   };
 
   const hasMessages = messages.length > 0;
-  const isBusy = isSubmitting || isAsking;
   const placeholder = pendingClarification
     ? "Answer the questions above, or press Enter to skip…"
     : "Ask Synaro a question…";
@@ -606,31 +658,37 @@ export function AnimatedAIChat({
         onChange={(e) => onFilesSelected(e.target.files)}
       />
 
-      <div className="relative mx-auto flex h-full w-full max-w-3xl flex-col px-4 py-6 sm:px-6">
-        {/* Empty state */}
+      <div
+        className={cn(
+          "relative mx-auto flex h-full w-full max-w-3xl flex-col px-4 py-6 sm:px-6",
+          "max-xl:min-h-0 max-xl:px-3 max-xl:py-4",
+          !hasMessages ? "justify-center gap-6 max-xl:gap-4" : "min-h-0",
+        )}
+      >
+        {/* Empty state — centered with the input when there are no messages yet */}
         {!hasMessages && (
           <motion.div
-            className="relative z-10 mb-8 space-y-6"
+            className="relative z-10 w-full space-y-6"
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease: "easeOut" }}
           >
             <div className="text-center">
-              <h2 className="text-2xl font-medium tracking-tight text-foreground sm:text-3xl">
+              <h2 className="text-2xl font-medium tracking-tight text-foreground sm:text-3xl max-xl:text-xl max-xl:sm:text-xl">
                 Let&apos;s build your idea!
               </h2>
-              <div className="mx-auto mt-2 h-px w-56 bg-gradient-to-r from-transparent via-foreground/15 to-transparent" />
-              <p className="mt-3 text-sm text-muted-foreground">
+              <div className="mx-auto mt-2 h-px w-56 max-w-full bg-gradient-to-r from-transparent via-foreground/15 to-transparent max-xl:w-40" />
+              <p className="mt-3 hidden text-sm text-muted-foreground xl:block">
                 Describe what you want to build — I&apos;ll ask a few questions, then generate it.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center justify-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-2 max-xl:gap-1.5">
               {commandSuggestions.map((s, idx) => (
                 <motion.button
                   key={s.prefix}
                   onClick={() => pickSuggestion(idx)}
-                  className="relative inline-flex items-center gap-2 rounded-xl border border-border/70 bg-card/40 px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  className="relative inline-flex items-center gap-2 rounded-xl border border-border/70 bg-card/40 px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground max-xl:gap-1.5 max-xl:px-2.5 max-xl:py-1.5 max-xl:text-xs"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.07 }}
@@ -646,7 +704,7 @@ export function AnimatedAIChat({
 
         {/* Message list */}
         {hasMessages && (
-          <div className="mb-4 flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto">
+          <div className="mb-4 flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto max-xl:mb-3 max-xl:space-y-3 max-xl:pb-1">
             {messages.map((msg) => (
               <MessageBubble key={msg.id} message={msg} />
             ))}
@@ -657,9 +715,7 @@ export function AnimatedAIChat({
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
               >
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/70 bg-muted text-[10px] font-medium text-foreground">
-                  syn
-                </div>
+                <SynaroAssistantAvatar />
                 <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-card px-4 py-2.5 text-sm text-muted-foreground">
                   <TypingDots />
                 </div>
@@ -671,7 +727,10 @@ export function AnimatedAIChat({
 
         {/* Input box */}
         <motion.div
-          className="relative overflow-visible rounded-2xl border border-border/70 bg-card/70 shadow-[0_30px_90px_rgba(0,0,0,0.22)] backdrop-blur-2xl"
+          className={cn(
+            "relative w-full shrink-0 overflow-visible rounded-2xl border border-border/70 bg-card/70 shadow-[0_30px_90px_rgba(0,0,0,0.22)] backdrop-blur-2xl",
+            !hasMessages && "z-10",
+          )}
           initial={{ scale: 0.99 }}
           animate={{ scale: 1 }}
           transition={{ duration: 0.25 }}
@@ -680,7 +739,7 @@ export function AnimatedAIChat({
             {showCommandPalette && (
               <motion.div
                 ref={paletteRef}
-                className="absolute bottom-full left-4 right-4 z-50 mb-2 overflow-hidden rounded-xl border border-border/70 bg-popover/95 shadow-[0_30px_90px_rgba(0,0,0,0.22)] backdrop-blur-xl"
+                className="absolute bottom-full left-2 right-2 z-50 mb-2 overflow-hidden rounded-xl border border-border/70 bg-popover/95 shadow-[0_30px_90px_rgba(0,0,0,0.22)] backdrop-blur-xl max-xl:left-1 max-xl:right-1 xl:left-4 xl:right-4"
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 6 }}
@@ -711,7 +770,27 @@ export function AnimatedAIChat({
             )}
           </AnimatePresence>
 
-          <div className="p-4">
+          <AnimatePresence>
+            {isListening ? (
+              <motion.div
+                className="border-b border-border/70 bg-primary/5 px-3 py-2 xl:px-4 xl:py-3"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+              >
+                <SpeechWaveform levels={micLevels} />
+                <p className="mt-1 text-center text-xs text-muted-foreground">
+                  Listening… stops after 3s of silence (tap mic to cancel)
+                </p>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+
+          {voiceError ? (
+            <p className="border-b border-border/70 px-4 py-2 text-center text-xs text-destructive">{voiceError}</p>
+          ) : null}
+
+          <div className="px-3 pt-3 pb-1 sm:px-4 sm:pt-4 sm:pb-0 xl:px-4 xl:pb-0 xl:pt-4">
             <textarea
               ref={textareaRef}
               value={value}
@@ -722,12 +801,12 @@ export function AnimatedAIChat({
                 adjustHeight();
               }}
               onKeyDown={handleKeyDown}
-              placeholder={placeholder}
-              disabled={isBusy}
+              placeholder={isListening ? "Listening…" : placeholder}
+              disabled={isBusy || isListening}
               className={cn(
-                "min-h-[56px] w-full resize-none bg-transparent px-1 py-1 text-sm text-foreground",
+                "w-full resize-none bg-transparent px-0.5 py-0.5 text-sm leading-snug text-foreground",
                 "placeholder:text-muted-foreground/60 focus:outline-none",
-                isBusy && "opacity-50 cursor-not-allowed",
+                isBusy && "cursor-not-allowed opacity-50",
               )}
               style={{ overflow: "hidden" }}
             />
@@ -766,13 +845,31 @@ export function AnimatedAIChat({
             )}
           </AnimatePresence>
 
-          <div className="flex items-center justify-between gap-4 border-t border-border/70 p-4">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between gap-2 border-t border-border/70 px-2 py-2 sm:gap-3 sm:px-3 sm:py-2.5 xl:gap-4 xl:p-4">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 sm:gap-2 xl:gap-3">
+              {voiceSupported ? (
+                <motion.button
+                  type="button"
+                  onClick={toggleVoice}
+                  disabled={isBusy}
+                  whileTap={{ scale: 0.94 }}
+                  className={cn(
+                    "relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground xl:h-10 xl:w-10",
+                    isListening && "border-primary/50 bg-primary/10 text-primary",
+                    isBusy && "pointer-events-none opacity-50",
+                  )}
+                  aria-label={isListening ? "Stop voice input" : "Start voice input"}
+                  aria-pressed={isListening}
+                >
+                  <Mic className={cn("h-4 w-4", isListening && "animate-pulse")} />
+                </motion.button>
+              ) : null}
               <motion.button
                 type="button"
                 onClick={openFilePicker}
                 whileTap={{ scale: 0.94 }}
-                className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                disabled={isListening}
+                className="relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-50 xl:h-10 xl:w-10"
                 aria-label="Attach file"
               >
                 <Paperclip className="h-4 w-4" />
@@ -785,7 +882,7 @@ export function AnimatedAIChat({
                 }}
                 whileTap={{ scale: 0.94 }}
                 className={cn(
-                  "relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground",
+                  "relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground xl:h-10 xl:w-10",
                   showCommandPalette && "bg-muted text-foreground",
                 )}
                 aria-label="Toggle command palette"
@@ -814,12 +911,16 @@ export function AnimatedAIChat({
 
             <motion.button
               type="button"
-              onClick={() => void handleSend()}
+              onClick={() => void handleSend(undefined)}
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.98 }}
               disabled={isBusy || !value.trim()}
+              aria-label={
+                isAsking ? "Thinking" : isSubmitting ? "Building" : "Send message"
+              }
               className={cn(
-                "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition",
+                "inline-flex shrink-0 items-center justify-center rounded-xl transition",
+                "h-9 w-9 sm:h-10 sm:w-10 xl:h-auto xl:w-auto xl:gap-2 xl:px-4 xl:py-2 xl:text-sm xl:font-medium",
                 value.trim() && !isBusy
                   ? "bg-foreground text-background shadow-sm shadow-black/5"
                   : "border border-border/70 bg-muted text-muted-foreground",
@@ -832,7 +933,9 @@ export function AnimatedAIChat({
               ) : (
                 <SendIcon className="h-4 w-4" />
               )}
-              {isAsking ? "Thinking…" : isSubmitting ? "Building…" : "Send"}
+              <span className="hidden xl:inline">
+                {isAsking ? "Thinking…" : isSubmitting ? "Building…" : "Send"}
+              </span>
             </motion.button>
           </div>
         </motion.div>

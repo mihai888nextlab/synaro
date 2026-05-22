@@ -747,7 +747,7 @@ export function ProjectWorkspace({
   initialEnvironmentStatus = "INACTIVE",
   canManageInvites = false,
 }: ProjectWorkspaceProps) {
-  const [tab, setTab] = React.useState<TabKey>("tree");
+  const [tab, setTab] = React.useState<TabKey>("chat");
 
   // Restore persisted tab after hydration (localStorage not available on server)
   React.useEffect(() => {
@@ -973,19 +973,6 @@ export function ProjectWorkspace({
               <div className="-mx-1 flex gap-1 overflow-x-auto overscroll-x-contain px-1 pb-0.5 [scrollbar-width:none] xl:mx-0 xl:overflow-visible xl:pb-0 [&::-webkit-scrollbar]:hidden">
                 <button
                   type="button"
-                  onClick={() => setTab("tree")}
-                  className={cn(
-                    "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs transition sm:gap-2 sm:px-3 sm:text-sm",
-                    tab === "tree"
-                      ? "bg-muted text-foreground"
-                      : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
-                  )}
-                >
-                  <FolderTree className="size-4" />
-                  File tree
-                </button>
-                <button
-                  type="button"
                   onClick={() => setTab("chat")}
                   className={cn(
                     "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs transition sm:gap-2 sm:px-3 sm:text-sm",
@@ -996,6 +983,19 @@ export function ProjectWorkspace({
                 >
                   <MessageSquareText className="size-4" />
                   AI chat
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("tree")}
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs transition sm:gap-2 sm:px-3 sm:text-sm",
+                    tab === "tree"
+                      ? "bg-muted text-foreground"
+                      : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <FolderTree className="size-4" />
+                  File tree
                 </button>
                 <button
                   type="button"

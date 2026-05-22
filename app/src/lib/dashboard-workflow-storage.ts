@@ -14,7 +14,7 @@ export const WORKFLOW_STORAGE_KEYS = {
 
 export type ProjectWorkspaceTab = "tree" | "chat" | "terminal" | "deployments";
 
-const TAB_VALUES: ProjectWorkspaceTab[] = ["tree", "chat", "terminal", "deployments"];
+const TAB_VALUES: ProjectWorkspaceTab[] = ["chat", "tree", "terminal", "deployments"];
 
 function canUseStorage(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";

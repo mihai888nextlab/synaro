@@ -161,6 +161,16 @@ services:
       postgresql:
         condition: service_healthy
 
+  adminer:
+    image: adminer:latest
+    container_name: synaro-adminer
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   postgres_env_data:

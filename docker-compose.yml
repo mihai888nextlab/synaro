@@ -103,6 +103,7 @@ services:
       PORT: 3002
       LOG_LEVEL: info
       ALLOWED_ORIGINS: https://synaro.tech
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
     volumes:
       - ./services/environment-service/src:/app/src
       - ./services/environment-service/prisma:/app/prisma

@@ -64,6 +64,13 @@ export function verifyTerminalWsToken(token: string): TerminalWsTokenPayload | n
 }
 
 export function environmentServiceTerminalWsUrl(environmentId: string): string {
+  // In production, route WebSockets through the public domain so the browser can reach them.
+  // Nginx proxies /api/environments/* to the environment service on port 3004.
+  const publicBase = process.env.NEXTAUTH_URL?.trim();
+  if (publicBase) {
+    const wsBase = publicBase.replace(/^https:\/\//i, "wss://").replace(/^http:\/\//i, "ws://");
+    return `${wsBase}/api/environments/${encodeURIComponent(environmentId)}/terminal/ws`;
+  }
   const base = process.env.ENVIRONMENT_SERVICE_URL?.trim() || "http://localhost:3004";
   const wsBase = base.replace(/^http:\/\//i, "ws://").replace(/^https:\/\//i, "wss://");
   return `${wsBase}/api/environments/${encodeURIComponent(environmentId)}/terminal/ws`;

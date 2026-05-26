@@ -61,6 +61,105 @@ export async function writeContainerFiles(
   }
 }
 
+export type GitPushResult = {
+  ok: boolean
+  output: string
+  branch: string
+  commitSha: string | null
+  noChanges?: boolean
+}
+
+export async function getGitWorkspaceChangesSummary(envId: string): Promise<string> {
+  const res = await fetch(
+    `${ENV_SERVICE_URL}/api/environments/${encodeURIComponent(envId)}/git/changes-summary`,
+    { signal: AbortSignal.timeout(60_000) },
+  )
+  const text = await res.text()
+  if (!res.ok) {
+    throw new Error(text || `Failed to read git changes (${res.status})`)
+  }
+  try {
+    const data = JSON.parse(text) as { summary?: string }
+    return typeof data.summary === 'string' ? data.summary : ''
+  } catch {
+    return text
+  }
+}
+
+export async function gitPushWorkspace(
+  envId: string,
+  body: {
+    accessToken: string
+    gitRemoteUrl: string
+    commitMessage: string
+    authorName: string
+    authorEmail: string
+    initIfNeeded?: boolean
+  },
+): Promise<GitPushResult> {
+  const res = await fetch(
+    `${ENV_SERVICE_URL}/api/environments/${encodeURIComponent(envId)}/git/push`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(180_000),
+    },
+  )
+  const text = await res.text()
+  let data: GitPushResult & { error?: string } = {
+    ok: false,
+    output: text,
+    branch: 'main',
+    commitSha: null,
+  }
+  try {
+    data = JSON.parse(text) as typeof data
+  } catch {
+    /* plain text error */
+  }
+  if (!res.ok) {
+    throw new Error(formatGitPushFailure(data, res.status))
+  }
+  return data
+}
+
+function formatGitPushFailure(
+  data: GitPushResult & { error?: string },
+  status: number,
+): string {
+  const out = typeof data.output === 'string' ? data.output.trim() : ''
+  if (out.includes('NO_GIT_REPO')) {
+    return (
+      'No git repository found in the workspace. ' +
+      'Import from GitHub or ask the AI to initialize git in this project.'
+    )
+  }
+  if (/returned error: 403/i.test(out)) {
+    return (
+      'GitHub rejected the push (HTTP 403). This is not about the repo being public — your OAuth token ' +
+      'cannot write to this repository. Open Settings → Profile, disconnect GitHub, connect again and approve ' +
+      'repository access. Use the same GitHub account that owns the repo or has push permission; for org repos, ' +
+      'authorize SSO for Synaro under github.com → Settings → Applications.'
+    )
+  }
+  const lines = out
+    .split('\n')
+    .map((line) => line.replace(/\x1b\[[0-9;]*m/g, '').trim())
+    .filter(Boolean)
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i]!
+    if (
+      /^(error|fatal):/i.test(line) ||
+      /rejected|denied|authentication failed|permission denied/i.test(line)
+    ) {
+      return line.length > 500 ? `${line.slice(0, 497)}...` : line
+    }
+  }
+  if (out) return out.length > 1500 ? out.slice(-1500) : out
+  return data.error ?? `Git push failed (${status})`
+}
+
 // ---------------------------------------------------------------------------
 // Minimal POSIX tar builder — no external dependencies needed.
 // Each entry: 512-byte ustar header + data padded to 512-byte blocks.

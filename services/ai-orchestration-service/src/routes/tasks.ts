@@ -3,10 +3,20 @@ import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
 import { executeTask } from '../engine/orchestrator.js'
 import { kimi, MODELS } from '../lib/kimi.js'
+import type { TaskGitContext } from '../lib/task-intent.js'
 
 const createTaskSchema = z.object({
   projectId: z.string().uuid(),
   prompt: z.string().min(1).max(2000),
+  projectSlug: z.string().min(1).max(80).optional(),
+  git: z
+    .object({
+      accessToken: z.string().min(1),
+      cloneRepositoryUrl: z.union([z.string().url(), z.null()]).optional(),
+      authorName: z.string().min(1).max(120),
+      authorEmail: z.string().email().max(200),
+    })
+    .optional(),
 })
 
 export const taskRoutes: FastifyPluginAsync = async (app) => {
@@ -85,8 +95,20 @@ If the request is already very detailed and specific, return: {"questions": []}`
       },
     })
 
-    // Execute asynchronously — don't await, return task ID immediately
-    executeTask(task.id).catch((err) => {
+    const gitContext: TaskGitContext | undefined = result.data.git
+      ? {
+          accessToken: result.data.git.accessToken,
+          cloneRepositoryUrl: result.data.git.cloneRepositoryUrl ?? null,
+          authorName: result.data.git.authorName,
+          authorEmail: result.data.git.authorEmail,
+        }
+      : undefined
+
+    // Execute asynchronously — don't await, return task ID immediately (git token never persisted)
+    executeTask(task.id, {
+      gitContext,
+      projectSlug: result.data.projectSlug,
+    }).catch((err) => {
       app.log.error({ taskId: task.id, err }, 'Task execution failed')
     })
 

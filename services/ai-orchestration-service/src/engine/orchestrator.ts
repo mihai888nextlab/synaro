@@ -2,10 +2,19 @@ import { kimi, MODELS, TOKEN_BUDGETS } from '../lib/kimi.js'
 import { buildRepoTree } from '../lib/filesystem.js'
 import {
   getActiveEnvironment,
+  getGitWorkspaceChangesSummary,
+  gitPushWorkspace,
   listContainerFiles,
   readContainerFile,
   writeContainerFiles,
 } from '../lib/environment-client.js'
+import { generateConventionalCommitMessage } from '../lib/generate-commit-message.js'
+import { createGithubRepository, verifyGithubPushAccess } from '../lib/github.js'
+import {
+  classifyTaskIntent,
+  type TaskGitContext,
+  type TaskIntent,
+} from '../lib/task-intent.js'
 import { prisma } from '../lib/prisma.js'
 
 type TaskStatus = 'PENDING' | 'ANALYZING' | 'GENERATING' | 'APPLYING' | 'DONE' | 'FAILED'
@@ -15,9 +24,23 @@ interface FileChange {
   content: string
 }
 
+interface TaskGitOutcome {
+  action: string
+  branch?: string
+  commitSha?: string | null
+  commitMessage?: string
+  remoteUrl?: string
+  htmlUrl?: string
+  noChanges?: boolean
+  output?: string
+}
+
 interface TaskResult {
   changes: FileChange[]
   summary: string
+  git?: TaskGitOutcome
+  /** Set when a new GitHub repo was linked — app should persist on Project.cloneRepositoryUrl */
+  linkedCloneRepositoryUrl?: string
 }
 
 async function updateTask(id: string, status: TaskStatus, extra?: object) {
@@ -142,13 +165,85 @@ Rules:
   }
 }
 
+function formatTaskError(err: unknown): string {
+  if (err instanceof Error) {
+    if (err.message.includes('Connection error') || err.message.includes('EAI_AGAIN')) {
+      return 'Could not reach the AI provider (Moonshot). Check your network and KIMI_API_KEY, then try again.'
+    }
+    return err.message
+  }
+  return String(err)
+}
+
 /** Main orchestration function — reads from and writes to the running environment container. */
-export async function executeTask(taskId: string): Promise<void> {
+export async function executeTask(
+  taskId: string,
+  opts?: { gitContext?: TaskGitContext | null; projectSlug?: string },
+): Promise<void> {
+  const gitContext = opts?.gitContext
+  const projectSlug = opts?.projectSlug
   const task = await prisma.task.findUnique({ where: { id: taskId } })
   if (!task) throw new Error(`Task ${taskId} not found`)
 
   let totalInputTokens = 0
   let totalOutputTokens = 0
+
+  const runGitPush = async (
+    envId: string,
+    intent: TaskIntent,
+    remoteUrl: string,
+    initIfNeeded: boolean,
+    gitMessageContext?: {
+      userPrompt: string
+      codeSummary?: string
+      changedPaths?: string[]
+    },
+  ): Promise<TaskGitOutcome> => {
+    if (!gitContext?.accessToken) {
+      throw new Error('Connect your GitHub account in Settings to commit and push from AI chat.')
+    }
+    await updateProgress(taskId, 'Verifying GitHub push access...')
+    await verifyGithubPushAccess(gitContext.accessToken, remoteUrl)
+
+    let message = intent.commitMessage
+    if (!message) {
+      await updateProgress(taskId, 'Writing Conventional Commit message...')
+      const changesSummary = await getGitWorkspaceChangesSummary(envId)
+      const generated = await generateConventionalCommitMessage({
+        userPrompt: gitMessageContext?.userPrompt ?? task.prompt,
+        changesSummary,
+        codeSummary: gitMessageContext?.codeSummary,
+        changedPaths: gitMessageContext?.changedPaths,
+        isInitialCommit: initIfNeeded,
+        projectSlug,
+      })
+      totalInputTokens += generated.inputTokens
+      totalOutputTokens += generated.outputTokens
+      message = generated.message
+    }
+
+    await updateProgress(taskId, 'Committing and pushing to GitHub...')
+    const push = await gitPushWorkspace(envId, {
+      accessToken: gitContext.accessToken,
+      gitRemoteUrl: remoteUrl,
+      commitMessage: message,
+      authorName: gitContext.authorName,
+      authorEmail: gitContext.authorEmail,
+      initIfNeeded,
+    })
+    if (!push.ok) {
+      throw new Error(push.output || 'Git push failed')
+    }
+    return {
+      action: intent.gitAction ?? 'commit_push',
+      branch: push.branch,
+      commitSha: push.commitSha,
+      commitMessage: message,
+      remoteUrl,
+      noChanges: push.noChanges,
+      output: push.output,
+    }
+  }
 
   try {
     // ── Step 1: Find the running environment ──────────────────────────────
@@ -161,6 +256,66 @@ export async function executeTask(taskId: string): Promise<void> {
           'Start the environment using the runtime pill before sending AI tasks.',
       )
     }
+
+    const hasLinkedRepo = Boolean(gitContext?.cloneRepositoryUrl?.trim())
+    const intent = await classifyTaskIntent(task.prompt, hasLinkedRepo)
+
+    // ── Git-only tasks (no code generation) ───────────────────────────────
+    if (intent.mode === 'git_only') {
+      if (!gitContext?.accessToken) {
+        throw new Error('Connect your GitHub account in Settings to use Git commands from AI chat.')
+      }
+
+      let remoteUrl = gitContext.cloneRepositoryUrl?.trim() ?? ''
+      let linkedCloneRepositoryUrl: string | undefined
+      let htmlUrl: string | undefined
+
+      if (intent.gitAction === 'create_repo_push' || (!remoteUrl && intent.gitAction !== 'commit_push')) {
+        await updateProgress(taskId, 'Creating GitHub repository...')
+        const repoName = intent.repoName ?? projectSlug ?? 'synaro-project'
+        const created = await createGithubRepository(gitContext.accessToken, {
+          name: repoName,
+          private: intent.privateRepo,
+          description: 'Created from Synaro',
+        })
+        remoteUrl = created.cloneRepositoryUrl
+        htmlUrl = created.htmlUrl
+        linkedCloneRepositoryUrl = created.cloneRepositoryUrl
+      }
+
+      if (!remoteUrl) {
+        throw new Error(
+          'This project has no GitHub repository linked. Ask to create a new repo or import a project from GitHub first.',
+        )
+      }
+
+      const gitOutcome = await runGitPush(
+        env.id,
+        intent,
+        remoteUrl,
+        intent.gitAction === 'init_push' || intent.gitAction === 'create_repo_push',
+        { userPrompt: task.prompt },
+      )
+      if (htmlUrl) gitOutcome.htmlUrl = htmlUrl
+
+      const summary = gitOutcome.noChanges
+        ? 'Working tree is clean — nothing new to commit.'
+        : `Committed and pushed to GitHub (${gitOutcome.branch ?? 'main'}): ${gitOutcome.commitMessage?.split('\n')[0] ?? 'done'}.`
+
+      await updateTask(taskId, 'DONE', {
+        result: {
+          summary,
+          changes: [],
+          git: gitOutcome,
+          linkedCloneRepositoryUrl,
+        },
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+      })
+      return
+    }
+
+    const shouldGitAfterCode = intent.mode === 'code_then_git'
 
     // ── Step 2: List all workspace files ─────────────────────────────────
     await updateProgress(taskId, 'Scanning your repository...')
@@ -211,15 +366,61 @@ export async function executeTask(taskId: string): Promise<void> {
     await updateProgress(taskId, `Writing ${changeCount} file${changeCount === 1 ? '' : 's'} to your project...`)
     await writeContainerFiles(env.id, generation.result.changes)
 
+    const result: TaskResult = { ...generation.result, changes: generation.result.changes }
+    let linkedCloneRepositoryUrl: string | undefined
+
+    if (shouldGitAfterCode && gitContext?.accessToken) {
+      let remoteUrl = gitContext.cloneRepositoryUrl?.trim() ?? ''
+      if (
+        intent.gitAction === 'create_repo_push' ||
+        (!remoteUrl && intent.gitAction !== 'commit_push')
+      ) {
+        await updateProgress(taskId, 'Creating GitHub repository...')
+        const repoName = intent.repoName ?? projectSlug ?? 'synaro-project'
+        const created = await createGithubRepository(gitContext.accessToken, {
+          name: repoName,
+          private: intent.privateRepo,
+          description: 'Created from Synaro',
+        })
+        remoteUrl = created.cloneRepositoryUrl
+        linkedCloneRepositoryUrl = created.cloneRepositoryUrl
+        result.git = { action: 'create_repo_push', htmlUrl: created.htmlUrl, remoteUrl }
+      }
+
+      if (remoteUrl) {
+        const gitOutcome = await runGitPush(
+          env.id,
+          intent,
+          remoteUrl,
+          intent.gitAction === 'init_push' || intent.gitAction === 'create_repo_push',
+          {
+            userPrompt: task.prompt,
+            codeSummary: result.summary,
+            changedPaths: result.changes.map((c) => c.path),
+          },
+        )
+        result.git = { ...gitOutcome, ...(result.git?.htmlUrl ? { htmlUrl: result.git.htmlUrl } : {}) }
+        if (!gitOutcome.noChanges) {
+          const subject = gitOutcome.commitMessage?.split('\n')[0] ?? 'changes'
+          result.summary = `${result.summary} Pushed to GitHub (${gitOutcome.branch ?? 'main'}): ${subject}.`
+        }
+      }
+    }
+
+    if (linkedCloneRepositoryUrl) {
+      result.linkedCloneRepositoryUrl = linkedCloneRepositoryUrl
+    }
+
     // ── Done ──────────────────────────────────────────────────────────────
     await updateTask(taskId, 'DONE', {
-      result: generation.result,
+      result,
       inputTokens: totalInputTokens,
       outputTokens: totalOutputTokens,
     })
   } catch (err) {
+    const errorMessage = formatTaskError(err)
     await updateTask(taskId, 'FAILED', {
-      errorMessage: String(err),
+      errorMessage,
       inputTokens: totalInputTokens,
       outputTokens: totalOutputTokens,
     })

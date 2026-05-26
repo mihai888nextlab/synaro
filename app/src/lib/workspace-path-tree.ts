@@ -113,6 +113,32 @@ export function filePathsToTreeItems(
   return items;
 }
 
+/**
+ * Folder item ids to expand so the main project directory is open in the file tree.
+ * Headless Tree does not render `root` in the flat list — only its children — so we expand
+ * top-level folders (e.g. `dir:itecify` when the repo lives under one directory).
+ */
+export function defaultExpandedWorkspaceFolderIds(
+  items: Record<string, WorkspaceExplorerItem>,
+): string[] {
+  const children = items.root?.children ?? [];
+  if (children.length === 0) return [];
+  const first = children[0];
+  if (typeof first === "string" && first.startsWith("syn:")) return [];
+
+  const folderIds = children.filter((id) => (items[id]?.children?.length ?? 0) > 0);
+  if (folderIds.length === 0) return [];
+
+  const rootName = items.root?.name?.trim();
+  if (rootName) {
+    const named = folderIds.filter((id) => items[id]?.name === rootName);
+    if (named.length > 0) return named;
+  }
+
+  if (folderIds.length === 1) return folderIds;
+  return [folderIds[0]];
+}
+
 /** Relative path for display from a tree item id. */
 export function relativePathFromTreeItemId(id: string): string | null {
   if (id === "root" || id.startsWith("syn:")) return null;

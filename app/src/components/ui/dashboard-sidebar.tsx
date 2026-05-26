@@ -5,7 +5,7 @@ import { useRouter } from "next/router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutDashboard,
-  FolderKanban,
+  Folder,
   ScrollText,
   Settings,
   PanelLeftClose,
@@ -32,7 +32,7 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Projects", href: "/projects", icon: FolderKanban },
+  { label: "Projects", href: "/projects", icon: Folder },
   { label: "Logs", href: "/logs", icon: ScrollText },
   { label: "Settings", href: "/settings", icon: Settings },
 ];

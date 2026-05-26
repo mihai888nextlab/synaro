@@ -1,5 +1,6 @@
 import * as React from "react";
 import {
+  Download,
   ExternalLink,
   FileIcon,
   FolderIcon,
@@ -37,6 +38,7 @@ import {
 } from "@/lib/dashboard-workflow-storage";
 import { humanizeProjectSlug } from "@/lib/project-slug";
 import {
+  defaultExpandedWorkspaceFolderIds,
   filePathsToTreeItems,
   relativePathFromTreeItemId,
   type WorkspaceExplorerItem,
@@ -72,6 +74,8 @@ type LiveExplorerTreeProps = {
   items: Record<string, WorkspaceExplorerItem>;
   truncated: boolean;
   loadState: "idle" | "loading" | "ready" | "hint";
+  /** True while the File tree tab is visible — used to auto-expand the root folder on each visit. */
+  treeTabActive: boolean;
 };
 
 function formatShortDate(iso: string): string {
@@ -87,6 +91,7 @@ function LiveExplorerTree({
   items,
   truncated,
   loadState,
+  treeTabActive,
 }: LiveExplorerTreeProps) {
   /** Restore from localStorage on every mount (tab switches remount this tree via `treeKey`). */
   const [expandedItems, setExpandedItems] = React.useState<string[]>([]);
@@ -132,8 +137,9 @@ function LiveExplorerTree({
     if (!initialHydratedRef.current) {
       initialHydratedRef.current = true;
       setExpandedItems((prev) => {
-        const next = prev.filter((id) => keys.has(id));
-        return next;
+        const filtered = prev.filter((id) => keys.has(id));
+        const auto = treeTabActive ? defaultExpandedWorkspaceFolderIds(items) : [];
+        return [...new Set([...filtered, ...auto])];
       });
       allowPersistExpandedRef.current = true;
       return;
@@ -143,15 +149,44 @@ function LiveExplorerTree({
       if (next.length === prev.length && next.every((v, i) => v === prev[i])) return prev;
       return next;
     });
-  }, [projectId, loadState, items]);
+  }, [projectId, loadState, items, treeTabActive]);
+
+  const prevTreeTabActiveRef = React.useRef(false);
+  const expandMainFolderOnTreeTabRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (treeTabActive && !prevTreeTabActiveRef.current) {
+      expandMainFolderOnTreeTabRef.current = true;
+    }
+    if (!treeTabActive) {
+      expandMainFolderOnTreeTabRef.current = false;
+    }
+    prevTreeTabActiveRef.current = treeTabActive;
+  }, [treeTabActive]);
 
   const handleTreeSetState = React.useCallback(
     (updaterOrValue: Updater<Partial<TreeState<WorkspaceExplorerItem>>>) => {
-      if (typeof updaterOrValue === "function") return;
-      if (!Array.isArray(updaterOrValue.expandedItems)) return;
-      setExpandedItems(updaterOrValue.expandedItems);
-      if (allowPersistExpandedRef.current && projectId) {
-        writeWorkspaceTreeExpanded(projectId, updaterOrValue.expandedItems);
+      const applyExpanded = (nextExpanded: string[]) => {
+        setExpandedItems(nextExpanded);
+        if (allowPersistExpandedRef.current && projectId) {
+          writeWorkspaceTreeExpanded(projectId, nextExpanded);
+        }
+      };
+
+      if (typeof updaterOrValue === "function") {
+        setExpandedItems((prev) => {
+          const partial = updaterOrValue({ expandedItems: prev, focusedItem: null });
+          if (!Array.isArray(partial?.expandedItems)) return prev;
+          if (allowPersistExpandedRef.current && projectId) {
+            writeWorkspaceTreeExpanded(projectId, partial.expandedItems);
+          }
+          return partial.expandedItems;
+        });
+        return;
+      }
+
+      if (Array.isArray(updaterOrValue.expandedItems)) {
+        applyExpanded(updaterOrValue.expandedItems);
       }
     },
     [projectId],
@@ -183,6 +218,43 @@ function LiveExplorerTree({
   // deps do not change after that effect would keep returning the initial empty list forever.
   const q = query.trim().toLowerCase();
   const list = tree.getItems();
+
+  /** Expand top-level project folder(s) after headless-tree has built visible rows (root itself is not listed). */
+  React.useLayoutEffect(() => {
+    if (!expandMainFolderOnTreeTabRef.current || !treeTabActive || loadState !== "ready") return;
+
+    const expandIds = defaultExpandedWorkspaceFolderIds(items);
+    if (expandIds.length === 0) return;
+    if (list.length === 0) return;
+
+    let anyTargetReady = false;
+    for (const id of expandIds) {
+      try {
+        const inst = tree.getItemInstance(id);
+        anyTargetReady = true;
+        if (inst.isFolder() && !inst.isExpanded()) {
+          inst.expand();
+        }
+      } catch {
+        /* row not registered yet */
+      }
+    }
+    if (!anyTargetReady) return;
+
+    setExpandedItems((prev) => {
+      const next = [...new Set([...prev, ...expandIds])];
+      if (next.length === prev.length && expandIds.every((id) => prev.includes(id))) {
+        return prev;
+      }
+      if (allowPersistExpandedRef.current && projectId) {
+        writeWorkspaceTreeExpanded(projectId, next);
+      }
+      return next;
+    });
+
+    expandMainFolderOnTreeTabRef.current = false;
+  }, [treeTabActive, loadState, items, list.length, tree, projectId]);
+
   const visibleItems = !q ? list : list.filter((it) => it.getItemName().toLowerCase().includes(q));
 
   const selectedItem = React.useMemo(() => {
@@ -535,9 +607,16 @@ type TreePanelProps = {
   projectHasGitRemote: boolean;
   environmentStatus: SynaroProjectEnvironmentStatus;
   treeRefreshKey: number;
+  treeTabActive: boolean;
 };
 
-function TreePanel({ projectId, projectHasGitRemote, environmentStatus, treeRefreshKey }: TreePanelProps) {
+function TreePanel({
+  projectId,
+  projectHasGitRemote,
+  environmentStatus,
+  treeRefreshKey,
+  treeTabActive,
+}: TreePanelProps) {
   const [items, setItems] = React.useState<Record<string, WorkspaceExplorerItem>>(() =>
     placeholderTreeItems("Connect to a project to load the repository tree."),
   );
@@ -719,6 +798,7 @@ function TreePanel({ projectId, projectHasGitRemote, environmentStatus, treeRefr
         items={items}
         truncated={truncated}
         loadState={loadState}
+        treeTabActive={treeTabActive}
       />
     </div>
   );
@@ -764,6 +844,8 @@ export function ProjectWorkspace({
     React.useState<SynaroProjectEnvironmentStatus>(initialEnvironmentStatus);
   const [dockerBusy, setDockerBusy] = React.useState(false);
   const [dockerError, setDockerError] = React.useState<string | null>(null);
+  const [downloadBusy, setDownloadBusy] = React.useState(false);
+  const [downloadError, setDownloadError] = React.useState<string | null>(null);
   const [treeRefreshKey, setTreeRefreshKey] = React.useState(0);
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
   const [runStatus, setRunStatus] = React.useState<"idle" | "starting" | "running" | "error">("idle");
@@ -959,53 +1041,108 @@ export function ProjectWorkspace({
     [projectId],
   );
 
+  const handleDownloadWorkspace = React.useCallback(async () => {
+    if (!projectId || environmentStatus !== "RUNNING") return;
+    setDownloadBusy(true);
+    setDownloadError(null);
+    try {
+      const res = await fetch(
+        `/api/projects/${encodeURIComponent(projectId)}/workspace-download`,
+      );
+      if (!res.ok) {
+        const text = await res.text();
+        let message = `Download failed (${res.status})`;
+        try {
+          const j = JSON.parse(text) as { error?: string };
+          if (j.error) message = j.error;
+        } catch {
+          if (text) message = text;
+        }
+        setDownloadError(message);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${(projectSlug ?? "project").replace(/[^a-zA-Z0-9._-]+/g, "-")}-workspace.tar.gz`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setDownloadError("Could not download the workspace. Check your connection and try again.");
+    } finally {
+      setDownloadBusy(false);
+    }
+  }, [projectId, projectSlug, environmentStatus]);
+
+  const showPreviewPanel = runStatus === "running" && Boolean(previewUrl);
+
+  React.useEffect(() => {
+    if (environmentStatus === "RUNNING") return;
+    setRunStatus("idle");
+    setPreviewUrl(null);
+    setShowLogs(false);
+    if (runPollRef.current) {
+      clearInterval(runPollRef.current);
+      runPollRef.current = null;
+    }
+  }, [environmentStatus]);
+
+  const tabButtonClass = (active: boolean) =>
+    cn(
+      "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs transition sm:gap-2 sm:px-3 sm:text-sm",
+      active
+        ? "bg-muted text-foreground"
+        : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
+    );
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div
         className={cn(
           "flex min-h-0 flex-1 flex-col gap-3",
-          "xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(280px,38%)] xl:grid-rows-1 xl:gap-0",
+          showPreviewPanel &&
+            "xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(280px,38%)] xl:grid-rows-1 xl:gap-0",
         )}
       >
-        <div className="flex min-h-0 min-w-0 flex-[1_1_75vh] flex-col overflow-hidden rounded-2xl bg-background/40 max-xl:min-h-[min(78vh,100%)] xl:min-h-0 xl:h-full xl:flex-none">
-          <div className="flex shrink-0 flex-col gap-2 px-2 py-2 sm:px-3 sm:py-2.5 xl:flex-row xl:items-center xl:gap-2 xl:px-4 xl:py-2.5">
-            <div className="flex min-w-0 flex-col gap-2 xl:flex-1 xl:flex-row xl:flex-wrap xl:items-center xl:gap-2">
-              <div className="-mx-1 flex gap-1 overflow-x-auto overscroll-x-contain px-1 pb-0.5 [scrollbar-width:none] xl:mx-0 xl:overflow-visible xl:pb-0 [&::-webkit-scrollbar]:hidden">
-                <button
-                  type="button"
-                  onClick={() => setTab("chat")}
-                  className={cn(
-                    "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs transition sm:gap-2 sm:px-3 sm:text-sm",
-                    tab === "chat"
-                      ? "bg-muted text-foreground"
-                      : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
-                  )}
-                >
+        <div
+          className={cn(
+            "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-background/40",
+            showPreviewPanel
+              ? "flex-[1_1_75vh] max-xl:min-h-[min(78vh,100%)] xl:min-h-0 xl:h-full xl:flex-none"
+              : "min-h-0 flex-1",
+          )}
+        >
+          <div
+            className={cn(
+              "flex shrink-0 flex-col gap-2 px-2 py-2 sm:px-3 sm:py-2.5",
+              !showPreviewPanel && "xl:flex-row xl:items-center xl:gap-2 xl:px-4",
+            )}
+          >
+            <div
+              className={cn(
+                "flex min-w-0 flex-col gap-2",
+                !showPreviewPanel && "xl:flex-1 xl:flex-row xl:flex-wrap xl:items-center xl:gap-2",
+              )}
+            >
+              <div
+                className={cn(
+                  "-mx-1 flex gap-1 overflow-x-auto overscroll-x-contain px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+                  !showPreviewPanel && "xl:mx-0 xl:overflow-visible xl:pb-0",
+                )}
+              >
+                <button type="button" onClick={() => setTab("chat")} className={tabButtonClass(tab === "chat")}>
                   <MessageSquareText className="size-4" />
                   AI chat
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setTab("tree")}
-                  className={cn(
-                    "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs transition sm:gap-2 sm:px-3 sm:text-sm",
-                    tab === "tree"
-                      ? "bg-muted text-foreground"
-                      : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
-                  )}
-                >
+                <button type="button" onClick={() => setTab("tree")} className={tabButtonClass(tab === "tree")}>
                   <FolderTree className="size-4" />
                   File tree
                 </button>
                 <button
                   type="button"
                   onClick={() => setTab("terminal")}
-                  className={cn(
-                    "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs transition sm:gap-2 sm:px-3 sm:text-sm",
-                    tab === "terminal"
-                      ? "bg-muted text-foreground"
-                      : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
-                  )}
+                  className={tabButtonClass(tab === "terminal")}
                 >
                   <TerminalSquare className="size-4" />
                   Terminal
@@ -1013,17 +1150,12 @@ export function ProjectWorkspace({
                 <button
                   type="button"
                   onClick={() => setTab("deployments")}
-                  className={cn(
-                    "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs transition sm:gap-2 sm:px-3 sm:text-sm",
-                    tab === "deployments"
-                      ? "bg-muted text-foreground"
-                      : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
-                  )}
+                  className={tabButtonClass(tab === "deployments")}
                 >
                   <Rocket className="size-4" />
                   Deployments
                 </button>
-                {projectId && environmentStatus === "RUNNING" ? (
+                {!showPreviewPanel && projectId && environmentStatus === "RUNNING" ? (
                   <>
                     <button
                       type="button"
@@ -1051,12 +1183,7 @@ export function ProjectWorkspace({
                       <button
                         type="button"
                         onClick={() => setShowLogs((v) => !v)}
-                        className={cn(
-                          "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs transition sm:gap-2 sm:px-3 sm:text-sm",
-                          showLogs
-                            ? "bg-muted text-foreground"
-                            : "bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground",
-                        )}
+                        className={tabButtonClass(showLogs)}
                       >
                         <ScrollText className="size-4" />
                         Logs
@@ -1066,19 +1193,133 @@ export function ProjectWorkspace({
                 ) : null}
               </div>
             </div>
+
             {projectId ? (
-              <div className="flex flex-col gap-1 border-t border-border/40 px-1 pt-2 xl:ms-auto xl:shrink-0 xl:border-0 xl:pt-0">
-                <div className="flex flex-wrap items-center justify-start gap-1.5 sm:justify-end sm:gap-2">
-                  {canManageInvites ? <ProjectShareInvite projectId={projectId} /> : null}
-                  <SynaroProjectDockerPill
-                    environmentStatus={environmentStatus}
-                    interactive
-                    busy={dockerBusy}
-                    onPress={handleDockerPress}
-                  />
-                </div>
-                {(dockerError || runError) && (
-                  <div className="flex flex-col gap-0.5 sm:items-end xl:flex-row xl:gap-3">
+              <div
+                className={cn(
+                  "flex flex-col gap-1",
+                  !showPreviewPanel &&
+                    "border-t border-border/40 px-1 pt-2 xl:ms-auto xl:shrink-0 xl:border-0 xl:pt-0",
+                  showPreviewPanel && "border-t border-border/40 px-1 pt-2",
+                )}
+              >
+                {showPreviewPanel ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                      {environmentStatus === "RUNNING" ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => void handleRun()}
+                            disabled={runStatus === "starting"}
+                            className={cn(
+                              "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-medium transition sm:gap-2 sm:px-3 sm:text-sm",
+                              runStatus === "running"
+                                ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                                : runStatus === "error"
+                                  ? "bg-destructive/10 text-destructive"
+                                  : runStatus === "starting"
+                                    ? "bg-muted text-muted-foreground"
+                                    : "bg-muted text-muted-foreground hover:bg-green-500/10 hover:text-green-600 dark:hover:text-green-400",
+                            )}
+                          >
+                            {runStatus === "starting" ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <PlayIcon className="size-4" />
+                            )}
+                            {runStatus === "starting"
+                              ? "Starting…"
+                              : runStatus === "running"
+                                ? "Running"
+                                : "Run"}
+                          </button>
+                          {runStatus === "running" ? (
+                            <button
+                              type="button"
+                              onClick={() => setShowLogs((v) => !v)}
+                              className={tabButtonClass(showLogs)}
+                            >
+                              <ScrollText className="size-4" />
+                              Logs
+                            </button>
+                          ) : null}
+                        </>
+                      ) : null}
+                    </div>
+                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+                      {environmentStatus === "RUNNING" ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleDownloadWorkspace()}
+                          disabled={downloadBusy}
+                          title="Download project folder as .tar.gz"
+                          aria-label="Download project folder"
+                          className={cn(
+                            "inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/70",
+                            "bg-background/40 text-muted-foreground transition",
+                            "hover:bg-muted hover:text-foreground",
+                            "disabled:pointer-events-none disabled:opacity-50",
+                          )}
+                        >
+                          {downloadBusy ? (
+                            <Loader2 className="size-4 animate-spin" aria-hidden />
+                          ) : (
+                            <Download className="size-4" aria-hidden />
+                          )}
+                        </button>
+                      ) : null}
+                      {canManageInvites ? <ProjectShareInvite projectId={projectId} /> : null}
+                      <SynaroProjectDockerPill
+                        environmentStatus={environmentStatus}
+                        interactive
+                        busy={dockerBusy}
+                        onPress={handleDockerPress}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-start gap-1.5 sm:justify-end sm:gap-2">
+                    {environmentStatus === "RUNNING" ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleDownloadWorkspace()}
+                        disabled={downloadBusy}
+                        title="Download project folder as .tar.gz"
+                        aria-label="Download project folder"
+                        className={cn(
+                          "inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/70",
+                          "bg-background/40 text-muted-foreground transition",
+                          "hover:bg-muted hover:text-foreground",
+                          "disabled:pointer-events-none disabled:opacity-50",
+                        )}
+                      >
+                        {downloadBusy ? (
+                          <Loader2 className="size-4 animate-spin" aria-hidden />
+                        ) : (
+                          <Download className="size-4" aria-hidden />
+                        )}
+                      </button>
+                    ) : null}
+                    {canManageInvites ? <ProjectShareInvite projectId={projectId} /> : null}
+                    <SynaroProjectDockerPill
+                      environmentStatus={environmentStatus}
+                      interactive
+                      busy={dockerBusy}
+                      onPress={handleDockerPress}
+                    />
+                  </div>
+                )}
+                {dockerError || runError || downloadError ? (
+                  <div
+                    className={cn(
+                      "flex flex-col gap-0.5",
+                      !showPreviewPanel && "sm:items-end xl:flex-row xl:gap-3",
+                    )}
+                  >
+                    {downloadError ? (
+                      <p className="text-[0.65rem] leading-snug text-destructive sm:text-xs">{downloadError}</p>
+                    ) : null}
                     {dockerError ? (
                       <p className="text-[0.65rem] leading-snug text-destructive sm:text-xs">{dockerError}</p>
                     ) : null}
@@ -1086,7 +1327,7 @@ export function ProjectWorkspace({
                       <p className="text-[0.65rem] leading-snug text-destructive sm:text-xs">{runError}</p>
                     ) : null}
                   </div>
-                )}
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -1103,6 +1344,7 @@ export function ProjectWorkspace({
                 projectHasGitRemote={projectHasGitRemote}
                 environmentStatus={environmentStatus}
                 treeRefreshKey={treeRefreshKey}
+                treeTabActive={tab === "tree"}
               />
             </div>
             <div
@@ -1137,21 +1379,22 @@ export function ProjectWorkspace({
             </div>
             <div
               className={cn(
-                "absolute inset-0 flex min-h-0 flex-col overflow-auto p-4",
+                "absolute inset-0 flex min-h-0 flex-col overflow-auto p-4 sm:p-6",
                 tab !== "deployments" && "pointer-events-none invisible",
               )}
               aria-hidden={tab !== "deployments"}
             >
-              <div className="mx-auto w-full max-w-lg space-y-6 py-4">
-                <div>
-                  <h2 className="text-base font-semibold text-foreground">Deployments</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Preview your running app or deploy it for permanent public access.
-                  </p>
-                </div>
+              <div className="flex min-h-full w-full flex-col items-center justify-center py-4">
+                <div className="w-full max-w-lg space-y-6">
+                  <div>
+                    <h2 className="text-base font-semibold text-foreground">Deployments</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Preview your running app or deploy it for permanent public access.
+                    </p>
+                  </div>
 
-                {/* Preview */}
-                <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-3">
+                  {/* Preview */}
+                  <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-3">
                   <div className="flex items-center gap-2">
                     <PlayIcon className="size-4 text-muted-foreground" />
                     <span className="text-sm font-medium">Preview</span>
@@ -1196,6 +1439,7 @@ export function ProjectWorkspace({
                     Deploy to production
                   </button>
                 </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1236,11 +1480,13 @@ export function ProjectWorkspace({
           ) : null}
         </div>
 
-        <ProjectIframePreview
-          className="order-last max-xl:max-h-[28vh] max-xl:min-h-[11rem] max-xl:shrink-0 xl:order-none xl:h-full xl:max-h-none xl:min-h-0"
-          title={projectSlug ? `Preview — ${humanizeProjectSlug(projectSlug)}` : "Preview"}
-          previewUrl={previewUrl}
-        />
+        {showPreviewPanel ? (
+          <ProjectIframePreview
+            className="order-last max-xl:max-h-[28vh] max-xl:min-h-[11rem] max-xl:shrink-0 xl:order-none xl:h-full xl:max-h-none xl:min-h-0"
+            title={projectSlug ? `Preview — ${humanizeProjectSlug(projectSlug)}` : "Preview"}
+            previewUrl={previewUrl}
+          />
+        ) : null}
       </div>
     </div>
   );

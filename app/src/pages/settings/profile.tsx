@@ -130,7 +130,11 @@ export default function ProfilePage({
         );
         return;
       }
-      await signIn("github", { callbackUrl: "/settings/profile" });
+      await signIn("github", {
+        callbackUrl: "/settings/profile",
+        /** Force GitHub to re-prompt so upgraded scopes (e.g. `repo`) are granted. */
+        authorizationParams: { prompt: "consent" },
+      });
     } catch {
       setGithubMessage("Could not start GitHub sign-in.");
     } finally {
@@ -221,9 +225,19 @@ export default function ProfilePage({
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             {linkedGithub ? (
-              <span className="inline-flex items-center rounded-full border border-emerald-500/35 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                Connected
-              </span>
+              <>
+                <span className="inline-flex items-center rounded-full border border-emerald-500/35 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                  Connected
+                </span>
+                <button
+                  type="button"
+                  disabled={githubBusy}
+                  onClick={() => void handleConnectGithub()}
+                  className="text-sm text-muted-foreground underline-offset-4 transition hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {githubBusy ? "Redirecting…" : "Reconnect (refresh permissions)"}
+                </button>
+              </>
             ) : (
               <button
                 type="button"

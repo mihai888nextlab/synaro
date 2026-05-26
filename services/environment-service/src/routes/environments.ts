@@ -11,12 +11,24 @@ import {
   getWorkspaceSelection,
   reconcileDeadContainersForProject,
   uploadWorkspaceTar,
+  exportWorkspaceTarGzip,
   execTerminalCommand,
+  gitCommitAndPushWorkspace,
+  getGitWorkspaceChangesSummary,
   envPublicUrl,
 } from '../managers/docker.manager.js'
 
 const terminalExecSchema = z.object({
   command: z.string().max(8000),
+})
+
+const gitPushSchema = z.object({
+  accessToken: z.string().min(1),
+  gitRemoteUrl: z.string().url(),
+  commitMessage: z.string().min(1).max(4000),
+  authorName: z.string().min(1).max(120),
+  authorEmail: z.string().email().max(200),
+  initIfNeeded: z.boolean().optional(),
 })
 
 const createSchema = z.object({
@@ -73,6 +85,47 @@ export const environmentRoutes: FastifyPluginAsync = async (app) => {
       if (msg.includes('No container')) return reply.status(404).send({ error: msg })
       app.log.error(err)
       return reply.status(500).send({ error: 'Failed to list workspace files', detail: msg })
+    }
+  })
+
+  // GET /api/environments/:id/git/changes-summary — status + diff for commit message generation
+  app.get('/:id/git/changes-summary', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    try {
+      const summary = await getGitWorkspaceChangesSummary(id)
+      return reply.send({ summary })
+    } catch (err) {
+      const msg = String(err)
+      if (msg.includes('not active') || msg.includes('not running')) {
+        return reply.status(409).send({ error: msg })
+      }
+      if (msg.includes('No container')) return reply.status(404).send({ error: msg })
+      app.log.error(err)
+      return reply.status(500).send({ error: 'Failed to read git changes', detail: msg })
+    }
+  })
+
+  // POST /api/environments/:id/git/push — commit all workspace changes and push to GitHub
+  app.post('/:id/git/push', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const parsed = gitPushSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid git push payload', details: parsed.error.flatten() })
+    }
+    try {
+      const result = await gitCommitAndPushWorkspace(id, parsed.data)
+      if (!result.ok) {
+        return reply.status(422).send({ error: 'Git push failed', ...result })
+      }
+      return reply.send(result)
+    } catch (err) {
+      const msg = String(err)
+      if (msg.includes('not active') || msg.includes('not running')) {
+        return reply.status(409).send({ error: msg })
+      }
+      if (msg.includes('No container')) return reply.status(404).send({ error: msg })
+      app.log.error(err)
+      return reply.status(500).send({ error: 'Failed to run git push', detail: msg })
     }
   })
 
@@ -142,6 +195,27 @@ export const environmentRoutes: FastifyPluginAsync = async (app) => {
     } catch (err) {
       app.log.error(err)
       return reply.status(500).send({ error: 'Failed to create environment', detail: String(err) })
+    }
+  })
+
+  // GET /api/environments/:id/workspace-download — gzip tar of workspace (internal; Next.js proxies to browser)
+  app.get('/:id/workspace-download', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    try {
+      const stream = await exportWorkspaceTarGzip(id)
+      return reply
+        .header('Content-Type', 'application/gzip')
+        .header('Content-Disposition', 'attachment; filename="workspace.tar.gz"')
+        .send(stream)
+    } catch (err) {
+      const msg = String(err)
+      if (msg.includes('must be running') || msg.includes('not running') || msg.includes('not active')) {
+        return reply.status(409).send({ error: msg })
+      }
+      if (msg.includes('too large')) return reply.status(413).send({ error: msg })
+      if (msg.includes('No container')) return reply.status(404).send({ error: msg })
+      app.log.error(err)
+      return reply.status(500).send({ error: 'Failed to export workspace', detail: msg })
     }
   })
 

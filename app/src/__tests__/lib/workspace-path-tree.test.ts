@@ -1,6 +1,10 @@
 import { describe, expect, it } from "@jest/globals";
 
-import { filePathsToTreeItems, relativePathFromTreeItemId } from "@/lib/workspace-path-tree";
+import {
+  defaultExpandedWorkspaceFolderIds,
+  filePathsToTreeItems,
+  relativePathFromTreeItemId,
+} from "@/lib/workspace-path-tree";
 
 describe("filePathsToTreeItems", () => {
   it("builds a root with sorted children and nested dir: / file: ids", () => {
@@ -42,6 +46,23 @@ describe("filePathsToTreeItems", () => {
     expect(items["dir:packages/client"]).toBeDefined();
     expect(items["dir:packages/client/src"]).toBeDefined();
     expect(items["file:packages/client/src/index.tsx"]).toEqual({ name: "index.tsx" });
+  });
+});
+
+describe("defaultExpandedWorkspaceFolderIds", () => {
+  it("expands a single top-level directory (not root — root is hidden in the tree UI)", () => {
+    const items = filePathsToTreeItems(["itecify/README.md", "itecify/src/a.ts"], "repo");
+    expect(defaultExpandedWorkspaceFolderIds(items)).toEqual(["dir:itecify"]);
+  });
+
+  it("prefers the folder whose name matches the root label", () => {
+    const items = filePathsToTreeItems(["itecify/a.ts", "other/b.ts"], "itecify");
+    expect(defaultExpandedWorkspaceFolderIds(items)).toEqual(["dir:itecify"]);
+  });
+
+  it("returns nothing for placeholder / empty trees", () => {
+    const items = filePathsToTreeItems([], "empty");
+    expect(defaultExpandedWorkspaceFolderIds(items)).toEqual([]);
   });
 });
 

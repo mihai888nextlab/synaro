@@ -5,7 +5,7 @@ import { useRouter } from "next/router";
 import {
   CircleHelp,
   Command as CommandIcon,
-  FolderKanban,
+  Folder,
   LayoutDashboard,
   SearchIcon,
   ScrollText,
@@ -44,7 +44,7 @@ const baseEntries: SearchEntry[] = [
     description: "Open the projects workspace.",
     group: "Navigation",
     href: "/projects",
-    icon: FolderKanban,
+    icon: Folder,
     keywords: ["repos", "files"],
   },
   {

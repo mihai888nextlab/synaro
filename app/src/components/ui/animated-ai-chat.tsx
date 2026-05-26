@@ -24,13 +24,24 @@ import { SynaroAssistantAvatar } from "@/components/ui/synaro-logo";
 import { canUseMicrophone, supportsSpeechRecognition } from "@/lib/speech/capabilities";
 import { useMicrophoneLevels } from "@/lib/speech/use-microphone-levels";
 import { useSpeechInput } from "@/lib/speech/use-speech-input";
+import { isGitOnlyWorkflowPrompt } from "@/lib/git-workflow-prompt";
 import { cn } from "@/lib/utils";
 
 type TaskStatus = "PENDING" | "ANALYZING" | "GENERATING" | "APPLYING" | "DONE" | "FAILED";
 
+type TaskGitResult = {
+  action?: string;
+  branch?: string;
+  commitSha?: string | null;
+  remoteUrl?: string;
+  htmlUrl?: string;
+  noChanges?: boolean;
+};
+
 type TaskResult = {
   summary: string;
   changes: { path: string; content: string }[];
+  git?: TaskGitResult;
 };
 
 type RemoteTask = {
@@ -222,6 +233,30 @@ function MessageBubble({ message }: { message: Message }) {
                 ))}
               </div>
             )}
+            {message.taskResult.git?.htmlUrl ? (
+              <p className="text-muted-foreground">
+                Repository:{" "}
+                <a
+                  href={message.taskResult.git.htmlUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-foreground underline-offset-2 hover:underline"
+                >
+                  {message.taskResult.git.htmlUrl.replace(/^https:\/\//, "")}
+                </a>
+              </p>
+            ) : null}
+            {message.taskResult.git?.branch && !message.taskResult.git.noChanges ? (
+              <p className="text-muted-foreground">
+                Pushed to branch <span className="font-mono text-foreground">{message.taskResult.git.branch}</span>
+                {message.taskResult.git.commitSha ? (
+                  <>
+                    {" "}
+                    (<span className="font-mono">{message.taskResult.git.commitSha.slice(0, 7)}</span>)
+                  </>
+                ) : null}
+              </p>
+            ) : null}
           </div>
         )}
 
@@ -508,6 +543,12 @@ export function AnimatedAIChat({
         prompt;
       setPendingClarification(null);
       await submitGeneration(combined);
+      return;
+    }
+
+    // Git commit/push/create-repo — run immediately (clarify is for new feature builds only)
+    if (isGitOnlyWorkflowPrompt(prompt)) {
+      await submitGeneration(prompt);
       return;
     }
 

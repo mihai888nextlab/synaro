@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
 
 import { authOptions } from "@/lib/next-auth-options";
+import { isGitOnlyWorkflowPrompt } from "@/lib/git-workflow-prompt";
 import { prisma } from "@/lib/prisma";
 import { whereProjectByIdForUser } from "@/lib/project-access";
 
@@ -30,6 +31,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { prompt } = req.body as { prompt?: string };
   if (!prompt?.trim()) return res.status(400).json({ error: "prompt is required" });
+
+  if (isGitOnlyWorkflowPrompt(prompt)) {
+    return res.json({ questions: [] });
+  }
 
   const clarifyUrl = `${aiServiceBaseUrl()}/api/tasks/clarify`;
 

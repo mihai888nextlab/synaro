@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer'
+import { createGzip } from 'node:zlib'
 import { PassThrough, Readable } from 'node:stream'
 
 import { docker } from '../lib/docker.js'
@@ -242,7 +243,9 @@ export async function createEnvironment(
         'exec tail -f /dev/null'
     } else {
       // Same layout as git clone (`…/app`) so folder uploads and `putArchive` have a target directory.
-      cmd = 'mkdir -p /tmp/synaro-workspace/app && echo "Environment ready" && exec tail -f /dev/null'
+      cmd =
+        'apk add --no-cache git >/dev/null 2>&1 || true; ' +
+        'mkdir -p /tmp/synaro-workspace/app && echo "Environment ready" && exec tail -f /dev/null'
     }
 
     // Build Traefik labels when running behind the proxy (VPS / production mode).
@@ -342,6 +345,48 @@ export async function uploadWorkspaceTar(environmentId: string, tar: Buffer): Pr
 
   const stream = Readable.from(tar)
   await container.putArchive(stream, { path: WORKSPACE_ROOT })
+}
+
+const MAX_WORKSPACE_EXPORT_BYTES = 100 * 1024 * 1024
+
+/**
+ * Stream a gzip-compressed tar of the project workspace directory from the running container.
+ */
+export async function exportWorkspaceTarGzip(environmentId: string): Promise<Readable> {
+  const environment = await prisma.environment.findUnique({ where: { id: environmentId } })
+  if (!environment?.containerId) throw new Error('No container found for this environment')
+  if (environment.status !== 'RUNNING') {
+    throw new Error('Container must be running to download the workspace')
+  }
+
+  const container = docker.getContainer(environment.containerId)
+  let inspect: Awaited<ReturnType<typeof container.inspect>>
+  try {
+    inspect = await container.inspect()
+  } catch {
+    throw new Error('No container found for this environment')
+  }
+  if (!inspect.State?.Running) {
+    throw new Error('Container is not running')
+  }
+
+  const workspaceDir = await resolveTerminalWorkspaceDir(environment.containerId)
+  const sizeRaw = await execShellInContainer(
+    environment.containerId,
+    `du -sb "${workspaceDir}" 2>/dev/null | awk '{print $1}'`,
+  )
+  const bytes = parseInt(sizeRaw.trim(), 10)
+  if (Number.isFinite(bytes) && bytes > MAX_WORKSPACE_EXPORT_BYTES) {
+    throw new Error(
+      `Workspace is too large to download (${Math.ceil(bytes / (1024 * 1024))} MB). Limit is ${MAX_WORKSPACE_EXPORT_BYTES / (1024 * 1024)} MB.`,
+    )
+  }
+
+  const tarStream = await container.getArchive({ path: workspaceDir })
+  const gzip = createGzip()
+  tarStream.on('error', (err: Error) => gzip.destroy(err))
+  tarStream.pipe(gzip)
+  return gzip
 }
 
 export async function stopEnvironment(id: string) {
@@ -742,5 +787,137 @@ export async function execTerminalCommand(environmentId: string, command: string
     output: output.trimEnd(),
     exitCode: typeof exitInspect.ExitCode === 'number' ? exitInspect.ExitCode : null,
     cwd: workspaceDir,
+  }
+}
+
+export type GitWorkspacePushInput = {
+  accessToken: string
+  /** Canonical https://github.com/owner/repo (no credentials). */
+  gitRemoteUrl: string
+  commitMessage: string
+  authorName: string
+  authorEmail: string
+  /** Run `git init` when the workspace has no `.git` directory. */
+  initIfNeeded?: boolean
+}
+
+export type GitWorkspacePushResult = {
+  ok: boolean
+  output: string
+  branch: string
+  commitSha: string | null
+  noChanges?: boolean
+}
+
+function shellSingleQuoted(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`
+}
+
+/** Collect git status and diff text for AI commit message generation (does not stage or commit). */
+export async function getGitWorkspaceChangesSummary(environmentId: string): Promise<string> {
+  const environment = await prisma.environment.findUnique({ where: { id: environmentId } })
+  if (!environment?.containerId) {
+    throw new Error('No container found for this environment')
+  }
+  if (environment.status !== 'RUNNING') {
+    throw new Error('Container is not active')
+  }
+
+  const workspaceDir = await resolveTerminalWorkspaceDir(environment.containerId)
+  const script = [
+    'apk add --no-cache git >/dev/null 2>&1 || true',
+    `cd ${shellSingleQuoted(workspaceDir)}`,
+    'if GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null); then cd "$GIT_ROOT"; fi',
+    'if ! git rev-parse --git-dir >/dev/null 2>&1; then echo "NO_GIT_REPO"; exit 0; fi',
+    'echo "=== BRANCH ==="',
+    'git branch --show-current 2>/dev/null || echo "unknown"',
+    'echo "=== STATUS ==="',
+    'git status -sb',
+    'echo "=== DIFF STAT ==="',
+    'git diff --stat HEAD 2>/dev/null || git diff --stat 2>/dev/null || true',
+    'echo "=== UNTRACKED ==="',
+    'git ls-files --others --exclude-standard 2>/dev/null | head -100',
+    'echo "=== DIFF (truncated) ==="',
+    '(git diff HEAD 2>/dev/null || git diff 2>/dev/null || true) | head -c 12000',
+  ].join('\n')
+
+  return execShellInContainer(environment.containerId, script)
+}
+
+/**
+ * Stage all changes, commit, and push to GitHub using an OAuth token (non-interactive).
+ */
+export async function gitCommitAndPushWorkspace(
+  environmentId: string,
+  input: GitWorkspacePushInput,
+): Promise<GitWorkspacePushResult> {
+  const environment = await prisma.environment.findUnique({ where: { id: environmentId } })
+  if (!environment?.containerId) {
+    throw new Error('No container found for this environment')
+  }
+  if (environment.status !== 'RUNNING') {
+    throw new Error('Container is not active')
+  }
+
+  const workspaceDir = await resolveTerminalWorkspaceDir(environment.containerId)
+  const authRemote = toGithubAuthenticatedCloneUrl(input.gitRemoteUrl, input.accessToken)
+  const msgB64 = Buffer.from(input.commitMessage, 'utf8').toString('base64')
+  const allowInit = input.initIfNeeded ? '1' : '0'
+
+  const script = [
+    'apk add --no-cache git >/dev/null 2>&1 || true',
+    `cd ${shellSingleQuoted(workspaceDir)}`,
+    'export GIT_TERMINAL_PROMPT=0',
+    `ALLOW_INIT=${allowInit}`,
+    'if GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null); then',
+    '  cd "$GIT_ROOT" || exit 1',
+    'elif [ "$ALLOW_INIT" = "1" ]; then',
+    '  git init -b main',
+    'else',
+    '  echo "NO_GIT_REPO"; exit 2',
+    'fi',
+    `git config user.name ${shellSingleQuoted(input.authorName)}`,
+    `git config user.email ${shellSingleQuoted(input.authorEmail)}`,
+    'git add -A',
+    'if git diff --cached --quiet 2>/dev/null; then echo "NO_CHANGES"; exit 0; fi',
+    `git commit -m "$(printf %s ${shellSingleQuoted(msgB64)} | base64 -d)" || { echo "COMMIT_FAILED"; exit 1; }`,
+    'BRANCH=$(git symbolic-ref -q --short HEAD 2>/dev/null || true)',
+    'if [ -z "$BRANCH" ] || [ "$BRANCH" = "HEAD" ]; then',
+    '  BRANCH=$(git remote show origin 2>/dev/null | sed -n "s/.*HEAD branch: //p" | tr -d "\\r")',
+    'fi',
+    '[ -z "$BRANCH" ] && BRANCH=main',
+    `if git remote get-url origin >/dev/null 2>&1; then git remote set-url origin ${shellSingleQuoted(authRemote)}; else git remote add origin ${shellSingleQuoted(authRemote)}; fi`,
+    'if git rev-parse --is-shallow-repository 2>/dev/null | grep -q true; then git fetch --unshallow origin 2>/dev/null || git fetch origin 2>/dev/null || true; fi',
+    'if ! git push -u origin "$BRANCH" 2>&1; then',
+    '  git pull --rebase origin "$BRANCH" 2>&1 || true',
+    '  git push -u origin "$BRANCH" 2>&1',
+    'fi',
+    'echo "COMMIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo)"',
+    'echo "BRANCH=$BRANCH"',
+  ].join('\n')
+
+  const output = await execShellInContainer(environment.containerId, script)
+  const noChanges = output.includes('NO_CHANGES')
+  const noGit = output.includes('NO_GIT_REPO')
+  const branchMatch = output.match(/BRANCH=([^\n]+)/)
+  const shaMatch = output.match(/COMMIT_SHA=([a-f0-9]+)/i)
+  const branch = branchMatch?.[1]?.trim() || 'main'
+  const commitSha = shaMatch?.[1]?.trim() || null
+
+  if (noGit) {
+    return { ok: false, output, branch, commitSha: null }
+  }
+
+  const pushFailed =
+    /error:|fatal:|rejected|authentication failed|permission denied/i.test(output) &&
+    !noChanges &&
+    !output.includes('Everything up-to-date')
+
+  return {
+    ok: !pushFailed,
+    output,
+    branch,
+    commitSha,
+    noChanges,
   }
 }

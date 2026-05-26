@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
 
 import { authOptions } from "@/lib/next-auth-options";
+import { getGithubAccessTokenForUser } from "@/lib/github-account";
 import { prisma } from "@/lib/prisma";
 import { whereProjectByIdForUser } from "@/lib/project-access";
 
@@ -19,7 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const project = await prisma.project.findFirst({
     where: whereProjectByIdForUser(projectId, session.user.id),
-    select: { id: true },
+    select: { id: true, cloneRepositoryUrl: true, slug: true },
   });
   if (!project) return res.status(404).json({ error: "Project not found" });
 
@@ -27,11 +28,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { prompt } = req.body as { prompt?: string };
     if (!prompt?.trim()) return res.status(400).json({ error: "prompt is required" });
 
+    const githubToken = await getGithubAccessTokenForUser(session.user.id);
+    const authorName =
+      (typeof session.user.name === "string" && session.user.name.trim()) || "Synaro User";
+    const authorEmail =
+      (typeof session.user.email === "string" && session.user.email.trim()) ||
+      "synaro@users.noreply.github.com";
+
+    const payload: Record<string, unknown> = {
+      projectId,
+      prompt: prompt.trim(),
+      projectSlug: project.slug,
+    };
+    if (githubToken) {
+      payload.git = {
+        accessToken: githubToken,
+        cloneRepositoryUrl: project.cloneRepositoryUrl?.trim() || null,
+        authorName,
+        authorEmail,
+      };
+    }
+
     try {
       const upstream = await fetch(`${aiServiceBaseUrl()}/api/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, prompt }),
+        body: JSON.stringify(payload),
       });
       const data = (await upstream.json()) as unknown;
       return res.status(upstream.status).json(data);

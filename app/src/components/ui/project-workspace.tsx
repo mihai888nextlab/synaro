@@ -1364,18 +1364,12 @@ export function ProjectWorkspace({
             </div>
             <div
               className={cn(
-                "absolute inset-0 flex min-h-0 flex-col overflow-hidden",
+                "absolute inset-0 flex min-h-0 flex-col overflow-hidden p-2 sm:p-4",
                 tab !== "chat" && "pointer-events-none invisible",
-                tab === "chat"
-                  ? "max-xl:items-stretch max-xl:justify-start max-xl:p-2 xl:items-center xl:justify-center xl:overflow-auto xl:p-4"
-                  : "",
               )}
               aria-hidden={tab !== "chat"}
             >
-              <AnimatedAIChat
-                className="h-full w-full max-xl:max-w-none xl:max-w-3xl"
-                projectId={projectId}
-              />
+              <AnimatedAIChat className="h-full w-full min-w-0" projectId={projectId} />
             </div>
             <div
               className={cn(

@@ -5,7 +5,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertCircleIcon,
   CheckCircleIcon,
-  Command,
   Figma,
   HelpCircleIcon,
   ImageIcon,
@@ -13,12 +12,21 @@ import {
   Mic,
   MonitorIcon,
   Paperclip,
+  Plus,
   SendIcon,
   Sparkles,
   UserIcon,
   XIcon,
 } from "lucide-react";
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { SpeechWaveform } from "@/components/ui/speech-waveform";
 import { SynaroAssistantAvatar } from "@/components/ui/synaro-logo";
 import { canUseMicrophone, supportsSpeechRecognition } from "@/lib/speech/capabilities";
@@ -317,7 +325,7 @@ export function AnimatedAIChat({
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
   }, []);
-  const { textareaRef, adjustHeight } = useAutoResizeTextarea(compactInput ? 40 : 56, compactInput ? 120 : 180);
+  const { textareaRef, adjustHeight } = useAutoResizeTextarea(compactInput ? 36 : 40, compactInput ? 120 : 180);
 
   React.useEffect(() => {
     adjustHeight(true);
@@ -699,17 +707,17 @@ export function AnimatedAIChat({
         onChange={(e) => onFilesSelected(e.target.files)}
       />
 
+      {/* Scrollable chat — messages extend under the floating composer */}
       <div
         className={cn(
-          "relative mx-auto flex h-full w-full max-w-3xl flex-col px-4 py-6 sm:px-6",
-          "max-xl:min-h-0 max-xl:px-3 max-xl:py-4",
-          !hasMessages ? "justify-center gap-6 max-xl:gap-4" : "min-h-0",
+          "flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pt-4 sm:px-6 sm:pt-6",
+          "pb-28 sm:pb-32",
+          !hasMessages && "justify-center",
         )}
       >
-        {/* Empty state — centered with the input when there are no messages yet */}
         {!hasMessages && (
           <motion.div
-            className="relative z-10 w-full space-y-6"
+            className="w-full space-y-6 max-xl:gap-4"
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease: "easeOut" }}
@@ -743,13 +751,11 @@ export function AnimatedAIChat({
           </motion.div>
         )}
 
-        {/* Message list */}
         {hasMessages && (
-          <div className="mb-4 flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto max-xl:mb-3 max-xl:space-y-3 max-xl:pb-1">
+          <div className="flex flex-col space-y-4 max-xl:space-y-3">
             {messages.map((msg) => (
               <MessageBubble key={msg.id} message={msg} />
             ))}
-            {/* Typing indicator while fetching clarification questions */}
             {isAsking && (
               <motion.div
                 className="flex w-full gap-3 justify-start"
@@ -765,22 +771,28 @@ export function AnimatedAIChat({
             <div ref={messagesEndRef} />
           </div>
         )}
+      </div>
 
-        {/* Input box */}
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-28 bg-gradient-to-t from-background via-background/90 to-transparent sm:h-32"
+        aria-hidden
+      />
+
+      {/* Floating composer card overlay */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-3 sm:px-6 sm:pb-4">
         <motion.div
           className={cn(
-            "relative w-full shrink-0 overflow-visible rounded-2xl border border-border/70 bg-card/70 shadow-[0_30px_90px_rgba(0,0,0,0.22)] backdrop-blur-2xl",
-            !hasMessages && "z-10",
+            "pointer-events-auto relative mx-auto w-full max-w-3xl overflow-visible rounded-2xl border border-border/70 bg-card/95 shadow-[0_16px_48px_rgba(0,0,0,0.35)] backdrop-blur-xl max-xl:max-w-none",
           )}
-          initial={{ scale: 0.99 }}
-          animate={{ scale: 1 }}
+          initial={{ scale: 0.99, y: 8 }}
+          animate={{ scale: 1, y: 0 }}
           transition={{ duration: 0.25 }}
         >
           <AnimatePresence>
             {showCommandPalette && (
               <motion.div
                 ref={paletteRef}
-                className="absolute bottom-full left-2 right-2 z-50 mb-2 overflow-hidden rounded-xl border border-border/70 bg-popover/95 shadow-[0_30px_90px_rgba(0,0,0,0.22)] backdrop-blur-xl max-xl:left-1 max-xl:right-1 xl:left-4 xl:right-4"
+                className="absolute bottom-full left-3 z-50 mb-2 w-[min(100%,20rem)] overflow-hidden rounded-xl border border-border/70 bg-popover/95 shadow-[0_30px_90px_rgba(0,0,0,0.22)] backdrop-blur-xl sm:left-4"
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 6 }}
@@ -831,32 +843,10 @@ export function AnimatedAIChat({
             <p className="border-b border-border/70 px-4 py-2 text-center text-xs text-destructive">{voiceError}</p>
           ) : null}
 
-          <div className="px-3 pt-3 pb-1 sm:px-4 sm:pt-4 sm:pb-0 xl:px-4 xl:pb-0 xl:pt-4">
-            <textarea
-              ref={textareaRef}
-              value={value}
-              onChange={(e) => {
-                const next = e.target.value;
-                setValue(next);
-                if (!(next.startsWith("/") && !next.includes(" "))) setActiveSuggestion(-1);
-                adjustHeight();
-              }}
-              onKeyDown={handleKeyDown}
-              placeholder={isListening ? "Listening…" : placeholder}
-              disabled={isBusy || isListening}
-              className={cn(
-                "w-full resize-none bg-transparent px-0.5 py-0.5 text-sm leading-snug text-foreground",
-                "placeholder:text-muted-foreground/60 focus:outline-none",
-                isBusy && "cursor-not-allowed opacity-50",
-              )}
-              style={{ overflow: "hidden" }}
-            />
-          </div>
-
           <AnimatePresence>
             {attachments.length > 0 && (
               <motion.div
-                className="px-4 pb-3"
+                className="border-b border-border/70 px-3 py-2 sm:px-4 sm:py-3"
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
@@ -886,98 +876,146 @@ export function AnimatedAIChat({
             )}
           </AnimatePresence>
 
-          <div className="flex items-center justify-between gap-2 border-t border-border/70 px-2 py-2 sm:gap-3 sm:px-3 sm:py-2.5 xl:gap-4 xl:p-4">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 sm:gap-2 xl:gap-3">
-              {voiceSupported ? (
-                <motion.button
-                  type="button"
-                  onClick={toggleVoice}
-                  disabled={isBusy}
-                  whileTap={{ scale: 0.94 }}
-                  className={cn(
-                    "relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground xl:h-10 xl:w-10",
-                    isListening && "border-primary/50 bg-primary/10 text-primary",
-                    isBusy && "pointer-events-none opacity-50",
-                  )}
-                  aria-label={isListening ? "Stop voice input" : "Start voice input"}
-                  aria-pressed={isListening}
-                >
-                  <Mic className={cn("h-4 w-4", isListening && "animate-pulse")} />
-                </motion.button>
-              ) : null}
+          {pendingClarification && !isSubmitting ? (
+            <div className="flex justify-end border-b border-border/70 px-3 py-2 sm:px-4">
               <motion.button
                 type="button"
-                onClick={openFilePicker}
-                whileTap={{ scale: 0.94 }}
-                disabled={isListening}
-                className="relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-50 xl:h-10 xl:w-10"
-                aria-label="Attach file"
-              >
-                <Paperclip className="h-4 w-4" />
-              </motion.button>
-              <motion.button
-                type="button"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
                 onClick={() => {
-                  if (showCommandPalette) setActiveSuggestion(-1);
-                  else setActiveSuggestion(matchingSuggestionIndex);
+                  const prompt = pendingClarification.originalPrompt;
+                  setPendingClarification(null);
+                  setIsSubmitting(true);
+                  void submitGeneration(prompt);
                 }}
-                whileTap={{ scale: 0.94 }}
-                className={cn(
-                  "relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground xl:h-10 xl:w-10",
-                  showCommandPalette && "bg-muted text-foreground",
-                )}
-                aria-label="Toggle command palette"
+                className="inline-flex items-center rounded-lg border border-border/70 bg-card/80 px-2.5 py-1 text-[0.6875rem] text-muted-foreground transition hover:bg-muted hover:text-foreground sm:text-xs"
               >
-                <Command className="h-4 w-4" />
+                Skip questions
               </motion.button>
+            </div>
+          ) : null}
 
-              {/* Skip clarification shortcut */}
-              {pendingClarification && !isSubmitting && (
-                <motion.button
-                  type="button"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  onClick={() => {
-                    const prompt = pendingClarification.originalPrompt;
-                    setPendingClarification(null);
-                    setIsSubmitting(true);
-                    void submitGeneration(prompt);
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-border/70 bg-card px-3 py-2 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                >
-                  Skip questions
-                </motion.button>
-              )}
+          <div className="flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4">
+            <div className="flex min-w-0 flex-1 items-center self-stretch">
+              <textarea
+                ref={textareaRef}
+                value={value}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setValue(next);
+                  if (!(next.startsWith("/") && !next.includes(" "))) setActiveSuggestion(-1);
+                  adjustHeight();
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder={isListening ? "Listening…" : placeholder}
+                disabled={isBusy || isListening}
+                rows={1}
+                className={cn(
+                  "block w-full min-h-9 resize-none bg-transparent py-0 text-sm leading-9 text-foreground sm:min-h-10 sm:leading-10",
+                  "placeholder:text-muted-foreground/60 focus:outline-none",
+                  isBusy && "cursor-not-allowed opacity-50",
+                )}
+                style={{ overflow: "hidden" }}
+              />
             </div>
 
-            <motion.button
-              type="button"
-              onClick={() => void handleSend(undefined)}
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.98 }}
-              disabled={isBusy || !value.trim()}
-              aria-label={
-                isAsking ? "Thinking" : isSubmitting ? "Building" : "Send message"
-              }
-              className={cn(
-                "inline-flex shrink-0 items-center justify-center rounded-xl transition",
-                "h-9 w-9 sm:h-10 sm:w-10 xl:h-auto xl:w-auto xl:gap-2 xl:px-4 xl:py-2 xl:text-sm xl:font-medium",
-                value.trim() && !isBusy
-                  ? "bg-foreground text-background shadow-sm shadow-black/5"
-                  : "border border-border/70 bg-muted text-muted-foreground",
-              )}
-            >
-              {isAsking ? (
-                <LoaderIcon className="h-4 w-4 animate-spin" />
-              ) : isSubmitting ? (
-                <LoaderIcon className="h-4 w-4 animate-spin" />
-              ) : (
-                <SendIcon className="h-4 w-4" />
-              )}
-              <span className="hidden xl:inline">
-                {isAsking ? "Thinking…" : isSubmitting ? "Building…" : "Send"}
-              </span>
-            </motion.button>
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                {voiceSupported ? (
+                  <motion.button
+                    type="button"
+                    onClick={toggleVoice}
+                    disabled={isBusy}
+                    whileTap={{ scale: 0.94 }}
+                    className={cn(
+                      "relative inline-flex h-9 w-9 items-center justify-center rounded-[28%] border border-border/70 bg-card/80 text-muted-foreground transition hover:bg-muted hover:text-foreground sm:h-10 sm:w-10",
+                      isListening && "border-primary/50 bg-primary/10 text-primary",
+                      isBusy && "pointer-events-none opacity-50",
+                    )}
+                    aria-label={isListening ? "Stop voice input" : "Start voice input"}
+                    aria-pressed={isListening}
+                  >
+                    <Mic className={cn("h-4 w-4", isListening && "animate-pulse")} />
+                  </motion.button>
+                ) : null}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={isListening}
+                      className={cn(
+                        "inline-flex h-9 w-9 shrink-0 items-center justify-center border border-border/70 bg-card/80 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-50 sm:h-10 sm:w-10",
+                        "rounded-[28%] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                        showCommandPalette && "bg-muted text-foreground",
+                      )}
+                      aria-label="More actions"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    side="top"
+                    align="end"
+                    sideOffset={8}
+                    className="w-56 rounded-xl border-border/70 p-1.5 shadow-lg"
+                  >
+                    <DropdownMenuItem
+                      disabled={isListening}
+                      className="gap-2 rounded-lg py-2"
+                      onSelect={() => openFilePicker()}
+                    >
+                      <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span>Attach file</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="my-1" />
+                    <DropdownMenuLabel className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                      Commands
+                    </DropdownMenuLabel>
+                    {commandSuggestions.map((s, idx) => (
+                      <DropdownMenuItem
+                        key={s.prefix}
+                        className="gap-2 rounded-lg py-2"
+                        onSelect={() => pickSuggestion(idx)}
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border/70 bg-card text-muted-foreground">
+                          {s.icon}
+                        </span>
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <span className="text-sm font-medium leading-none">{s.label}</span>
+                          <span className="truncate text-xs text-muted-foreground">{s.description}</span>
+                        </span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <motion.button
+                  type="button"
+                  onClick={() => void handleSend(undefined)}
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
+                  disabled={isBusy || !value.trim()}
+                  aria-label={
+                    isAsking ? "Thinking" : isSubmitting ? "Building" : "Send message"
+                  }
+                  className={cn(
+                    "inline-flex shrink-0 items-center justify-center rounded-[28%] transition",
+                    "h-9 w-9 sm:h-10 sm:w-10 xl:h-10 xl:w-auto xl:min-w-[5.5rem] xl:rounded-2xl xl:gap-2 xl:px-4 xl:py-2 xl:text-sm xl:font-medium",
+                    value.trim() && !isBusy
+                      ? "bg-foreground text-background shadow-sm shadow-black/5"
+                      : "border border-border/70 bg-muted text-muted-foreground",
+                  )}
+                >
+                  {isAsking ? (
+                    <LoaderIcon className="h-4 w-4 animate-spin" />
+                  ) : isSubmitting ? (
+                    <LoaderIcon className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <SendIcon className="h-4 w-4" />
+                  )}
+                  <span className="hidden xl:inline">
+                    {isAsking ? "Thinking…" : isSubmitting ? "Building…" : "Send"}
+                  </span>
+                </motion.button>
+            </div>
           </div>
         </motion.div>
       </div>

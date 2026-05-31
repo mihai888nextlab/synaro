@@ -153,6 +153,48 @@ function ProgressBar() {
   );
 }
 
+const CLARIFY_PHASES = [
+  "Thinking about your request…",
+  "Reading your codebase…",
+  "Preparing clarifying questions…",
+];
+
+function ThinkingMessage() {
+  const [index, setIndex] = React.useState(0);
+  React.useEffect(() => {
+    const id = setInterval(() => setIndex((i) => (i + 1) % CLARIFY_PHASES.length), 2000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <TypingDots />
+      <AnimatePresence mode="wait">
+        <motion.span
+          key={index}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.3 }}
+        >
+          {CLARIFY_PHASES[index]}
+        </motion.span>
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function useElapsedSeconds(running: boolean): string {
+  const [secs, setSecs] = React.useState(0);
+  React.useEffect(() => {
+    if (!running) { setSecs(0); return; }
+    const id = setInterval(() => setSecs((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [running]);
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 function MessageBubble({
   message,
   onPlaybackComplete,
@@ -184,6 +226,7 @@ function MessageBubble({
   const hasActivityLog = (message.activityLog?.length ?? 0) > 0;
   const showActivityToggle = (isDone || isFailed) && hasActivityLog;
   const [activityLogOpen, setActivityLogOpen] = React.useState(false);
+  const elapsed = useElapsedSeconds(!!isRunning);
 
   const gitFooter =
     isDone &&
@@ -298,7 +341,10 @@ function MessageBubble({
                 </p>
               </div>
             ) : isRunning ? (
-              <p className="text-muted-foreground">Working on your request…</p>
+              <div className="flex items-center justify-between gap-3 text-muted-foreground">
+                <p>Working on your request…</p>
+                <span className="font-mono text-xs tabular-nums opacity-50">{elapsed}</span>
+              </div>
             ) : taskReplyContent ? (
               taskReplyContent
             ) : (
@@ -640,7 +686,7 @@ export function AnimatedAIChat({
             /* ignore transient errors */
           }
         })();
-      }, 1200);
+      }, 500);
     },
     [projectId, projectSlug, setActiveTask, stopPolling],
   );
@@ -1008,8 +1054,8 @@ export function AnimatedAIChat({
                 animate={{ opacity: 1, y: 0 }}
               >
                 <SynaroAssistantAvatar />
-                <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-card px-4 py-2.5 text-sm text-muted-foreground">
-                  <TypingDots />
+                <div className="rounded-2xl border border-border/70 bg-card px-4 py-2.5">
+                  <ThinkingMessage />
                 </div>
               </motion.div>
             )}

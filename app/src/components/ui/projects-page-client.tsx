@@ -620,6 +620,7 @@ export function ProjectsPageClient({
 
         <Dialog open={open} onOpenChange={handleOpenChange}>
           <DialogContent
+            data-onboarding="new-project-dialog"
             className={cn(
               "max-h-[min(90vh,720px)] w-[min(calc(100vw-1.5rem),36rem)] max-w-none overflow-y-auto rounded-2xl border-2 border-border bg-card p-0 shadow-2xl sm:w-[min(100%,36rem)]",
             )}

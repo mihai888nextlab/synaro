@@ -18,6 +18,7 @@ export function DashboardProjectsShowcase({
 }) {
   return (
     <section
+      data-onboarding="dashboard-projects"
       className={cn(
         "flex flex-col overflow-hidden rounded-2xl border-0 bg-muted/15 shadow-none dark:bg-muted/10",
         className,

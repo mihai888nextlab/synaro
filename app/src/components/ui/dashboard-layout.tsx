@@ -8,6 +8,7 @@ import { CircleHelp, HomeIcon, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DashboardSidebar, usePersistentSidebarCollapse } from "@/components/ui/dashboard-sidebar";
 import { DashboardNotifications } from "@/components/ui/dashboard-notifications";
+import { AiBackgroundTaskPill } from "@/components/ui/ai-background-task";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -16,6 +17,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { useOnboarding } from "@/components/ui/onboarding";
 import { humanizeProjectSlug } from "@/lib/project-slug";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +35,7 @@ const titles: Record<string, string> = {
 
 export function DashboardLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const { openOnboarding } = useOnboarding();
   const { collapsed, setCollapsed } = usePersistentSidebarCollapse();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -177,15 +180,17 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
               </Breadcrumb>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2" data-onboarding="header-actions">
+              <AiBackgroundTaskPill className="hidden md:inline-flex" />
               <DashboardNotifications />
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
                 className="h-9 w-9 rounded-xl border-border/70 bg-card text-muted-foreground shadow-sm shadow-black/5 hover:bg-muted hover:text-foreground"
-                aria-label="Open help"
-                title="Help"
+                aria-label="Open onboarding tour"
+                title="Help & onboarding"
+                onClick={() => openOnboarding()}
               >
                 <CircleHelp className="size-4" />
               </Button>

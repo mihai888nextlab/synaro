@@ -1,6 +1,8 @@
 "use client";
 
 import { Bell } from "lucide-react";
+import Link from "next/link";
+import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -9,30 +11,39 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  canUseBrowserNotifications,
+  requestBrowserNotificationPermission,
+  useNotifications,
+} from "@/components/ui/notifications";
 
-const notifications = [
-  {
-    title: "Deployment finished",
-    description: "Production rollout completed successfully.",
-    time: "2m ago",
-  },
-  {
-    title: "New project created",
-    description: "Core Platform was added to your workspace.",
-    time: "1h ago",
-  },
-  {
-    title: "Policy check passed",
-    description: "All rules validated for staging environment.",
-    time: "Yesterday",
-  },
-];
+function timeAgo(ms: number) {
+  const diff = Date.now() - ms;
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
 
 export function DashboardNotifications() {
-  const unreadCount = 3;
+  const { notifications, unreadCount, markAllRead, clearAll } = useNotifications();
+  const [open, setOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (open) markAllRead();
+  }, [open, markAllRead]);
+
+  const browserPermission =
+    typeof window !== "undefined" && canUseBrowserNotifications()
+      ? Notification.permission
+      : "denied";
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
@@ -53,21 +64,73 @@ export function DashboardNotifications() {
         sideOffset={8}
         align="end"
       >
-        <div className="max-h-[360px] overflow-auto py-1">
-          {notifications.map((n) => (
-            <DropdownMenuItem
-              key={n.title}
-              className="items-start rounded-lg px-2 py-2 focus:bg-accent"
+        <div className="flex items-center justify-between gap-2 px-1 py-1.5">
+          <span className="text-xs font-medium text-muted-foreground">
+            Notifications
+          </span>
+          <button
+            type="button"
+            onClick={() => clearAll()}
+            className="rounded-md px-2 py-1 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          >
+            Clear
+          </button>
+        </div>
+
+        {browserPermission !== "granted" ? (
+          <div className="px-1 pb-1">
+            <button
+              type="button"
+              onClick={() => void requestBrowserNotificationPermission()}
+              className="w-full rounded-lg border border-border/60 bg-muted/40 px-2 py-2 text-left text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
             >
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="truncate text-sm font-medium">{n.title}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{n.time}</span>
-                </div>
-                <span className="text-xs text-muted-foreground">{n.description}</span>
-              </div>
-            </DropdownMenuItem>
-          ))}
+              Enable browser notifications
+            </button>
+          </div>
+        ) : null}
+
+        <div className="max-h-[360px] overflow-auto py-1">
+          {notifications.length === 0 ? (
+            <div className="px-2 py-6 text-center text-xs text-muted-foreground">
+              No notifications yet.
+            </div>
+          ) : (
+            notifications.map((n) => (
+              <DropdownMenuItem
+                key={n.id}
+                className="items-start rounded-lg px-2 py-2 focus:bg-accent"
+                asChild={Boolean(n.href)}
+              >
+                {n.href ? (
+                  <Link href={n.href} className="flex w-full items-start">
+                    <div className="flex min-w-0 flex-1 flex-col gap-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="truncate text-sm font-medium">{n.title}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {timeAgo(n.createdAtMs)}
+                        </span>
+                      </div>
+                      {n.description ? (
+                        <span className="text-xs text-muted-foreground">{n.description}</span>
+                      ) : null}
+                    </div>
+                  </Link>
+                ) : (
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="truncate text-sm font-medium">{n.title}</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {timeAgo(n.createdAtMs)}
+                      </span>
+                    </div>
+                    {n.description ? (
+                      <span className="text-xs text-muted-foreground">{n.description}</span>
+                    ) : null}
+                  </div>
+                )}
+              </DropdownMenuItem>
+            ))
+          )}
         </div>
       </DropdownMenuContent>
     </DropdownMenu>

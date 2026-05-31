@@ -22,6 +22,8 @@ type TaskStatus = 'PENDING' | 'ANALYZING' | 'GENERATING' | 'APPLYING' | 'DONE' |
 interface FileChange {
   path: string
   content: string
+  /** Previous workspace content when the file existed before this task. */
+  previousContent?: string | null
 }
 
 interface TaskGitOutcome {
@@ -108,7 +110,8 @@ Return ONLY a JSON object in this exact format:
 }
 
 Rules:
-- Always return the FULL file content for every changed or created file
+- Always return the FULL file content for every changed or created file (never null or omit content)
+- Every item in changes must have path (string) and content (string)
 - Create new files when needed (routes, modules, components, etc.)
 - Include all files required for the feature to work end-to-end
 - Wire new code into existing entry points (index.ts, app.ts, router, etc.) when needed
@@ -155,10 +158,20 @@ Rules:
     throw new Error(`AI returned invalid JSON — could not parse file changes. Parse error: ${parseError}`)
   }
 
+  const changes = (parsed.changes ?? [])
+    .filter(
+      (c): c is FileChange =>
+        Boolean(c) &&
+        typeof c.path === 'string' &&
+        c.path.trim().length > 0 &&
+        typeof c.content === 'string',
+    )
+    .map((c) => ({ path: c.path.trim(), content: c.content }))
+
   return {
     result: {
       summary: parsed.summary ?? 'Changes applied.',
-      changes: parsed.changes ?? [],
+      changes,
     },
     inputTokens: response.usage?.prompt_tokens ?? 0,
     outputTokens: response.usage?.completion_tokens ?? 0,
@@ -219,7 +232,11 @@ export async function executeTask(
       })
       totalInputTokens += generated.inputTokens
       totalOutputTokens += generated.outputTokens
-      message = generated.message
+      message = generated.message?.trim() || 'chore: update project files'
+    }
+
+    if (!message?.trim()) {
+      throw new Error('Could not build a commit message for this push.')
     }
 
     await updateProgress(taskId, 'Committing and pushing to GitHub...')
@@ -362,11 +379,20 @@ export async function executeTask(
       )
     }
 
-    const changeCount = generation.result.changes.length
-    await updateProgress(taskId, `Writing ${changeCount} file${changeCount === 1 ? '' : 's'} to your project...`)
-    await writeContainerFiles(env.id, generation.result.changes)
+    const existingByPath = new Map(existingFiles.map((f) => [f.path, f.content]))
+    const enrichedChanges = generation.result.changes.map((c) => ({
+      ...c,
+      previousContent: existingByPath.get(c.path) ?? null,
+    }))
 
-    const result: TaskResult = { ...generation.result, changes: generation.result.changes }
+    const changeCount = enrichedChanges.length
+    await updateProgress(taskId, `Writing ${changeCount} file${changeCount === 1 ? '' : 's'} to your project...`)
+    await writeContainerFiles(
+      env.id,
+      enrichedChanges.map(({ path, content }) => ({ path, content })),
+    )
+
+    const result: TaskResult = { ...generation.result, changes: enrichedChanges }
     let linkedCloneRepositoryUrl: string | undefined
 
     if (shouldGitAfterCode && gitContext?.accessToken) {

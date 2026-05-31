@@ -861,7 +861,11 @@ export async function gitCommitAndPushWorkspace(
 
   const workspaceDir = await resolveTerminalWorkspaceDir(environment.containerId)
   const authRemote = toGithubAuthenticatedCloneUrl(input.gitRemoteUrl, input.accessToken)
-  const msgB64 = Buffer.from(input.commitMessage, 'utf8').toString('base64')
+  const commitMessage = input.commitMessage?.trim()
+  if (!commitMessage) {
+    throw new Error('Commit message is required')
+  }
+  const msgB64 = Buffer.from(commitMessage, 'utf8').toString('base64')
   const allowInit = input.initIfNeeded ? '1' : '0'
 
   const script = [

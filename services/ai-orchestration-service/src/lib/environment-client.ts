@@ -170,6 +170,9 @@ function buildTar(files: { path: string; content: string }[]): Buffer {
   const parts: Buffer[] = []
 
   for (const { path: filePath, content } of files) {
+    if (typeof content !== 'string') {
+      throw new Error(`Cannot upload "${filePath}": file content must be a string (got ${content === null ? 'null' : typeof content}).`)
+    }
     const data = Buffer.from(content, 'utf-8')
     const header = Buffer.alloc(512, 0)
 

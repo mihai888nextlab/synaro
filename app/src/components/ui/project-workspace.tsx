@@ -840,6 +840,17 @@ export function ProjectWorkspace({
   React.useEffect(() => {
     if (projectSlug) writeProjectTab(projectSlug, tab);
   }, [projectSlug, tab]);
+
+  React.useEffect(() => {
+    const onAction = (event: Event) => {
+      const detail = (event as CustomEvent<{ type?: string; tab?: TabKey }>).detail;
+      if (detail?.type === "workspace-tab" && detail.tab) {
+        setTab(detail.tab);
+      }
+    };
+    window.addEventListener("synaro:onboarding-action", onAction);
+    return () => window.removeEventListener("synaro:onboarding-action", onAction);
+  }, []);
   const [environmentStatus, setEnvironmentStatus] =
     React.useState<SynaroProjectEnvironmentStatus>(initialEnvironmentStatus);
   const [dockerBusy, setDockerBusy] = React.useState(false);
@@ -1126,21 +1137,33 @@ export function ProjectWorkspace({
               )}
             >
               <div
+                data-onboarding="workspace-tabs"
                 className={cn(
                   "-mx-1 flex gap-1 overflow-x-auto overscroll-x-contain px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
                   !showPreviewPanel && "xl:mx-0 xl:overflow-visible xl:pb-0",
                 )}
               >
-                <button type="button" onClick={() => setTab("chat")} className={tabButtonClass(tab === "chat")}>
+                <button
+                  type="button"
+                  data-onboarding="tab-chat"
+                  onClick={() => setTab("chat")}
+                  className={tabButtonClass(tab === "chat")}
+                >
                   <MessageSquareText className="size-4" />
                   AI chat
                 </button>
-                <button type="button" onClick={() => setTab("tree")} className={tabButtonClass(tab === "tree")}>
+                <button
+                  type="button"
+                  data-onboarding="tab-tree"
+                  onClick={() => setTab("tree")}
+                  className={tabButtonClass(tab === "tree")}
+                >
                   <FolderTree className="size-4" />
                   File tree
                 </button>
                 <button
                   type="button"
+                  data-onboarding="tab-terminal"
                   onClick={() => setTab("terminal")}
                   className={tabButtonClass(tab === "terminal")}
                 >
@@ -1149,6 +1172,7 @@ export function ProjectWorkspace({
                 </button>
                 <button
                   type="button"
+                  data-onboarding="tab-deployments"
                   onClick={() => setTab("deployments")}
                   className={tabButtonClass(tab === "deployments")}
                 >
@@ -1270,12 +1294,14 @@ export function ProjectWorkspace({
                         </button>
                       ) : null}
                       {canManageInvites ? <ProjectShareInvite projectId={projectId} /> : null}
-                      <SynaroProjectDockerPill
-                        environmentStatus={environmentStatus}
-                        interactive
-                        busy={dockerBusy}
-                        onPress={handleDockerPress}
-                      />
+                      <span data-onboarding="docker-pill">
+                        <SynaroProjectDockerPill
+                          environmentStatus={environmentStatus}
+                          interactive
+                          busy={dockerBusy}
+                          onPress={handleDockerPress}
+                        />
+                      </span>
                     </div>
                   </div>
                 ) : (
@@ -1302,12 +1328,14 @@ export function ProjectWorkspace({
                       </button>
                     ) : null}
                     {canManageInvites ? <ProjectShareInvite projectId={projectId} /> : null}
-                    <SynaroProjectDockerPill
-                      environmentStatus={environmentStatus}
-                      interactive
-                      busy={dockerBusy}
-                      onPress={handleDockerPress}
-                    />
+                    <span data-onboarding="docker-pill">
+                      <SynaroProjectDockerPill
+                        environmentStatus={environmentStatus}
+                        interactive
+                        busy={dockerBusy}
+                        onPress={handleDockerPress}
+                      />
+                    </span>
                   </div>
                 )}
                 {dockerError || runError || downloadError ? (
@@ -1369,7 +1397,11 @@ export function ProjectWorkspace({
               )}
               aria-hidden={tab !== "chat"}
             >
-              <AnimatedAIChat className="h-full w-full min-w-0" projectId={projectId} />
+              <AnimatedAIChat
+                className="h-full w-full min-w-0"
+                projectId={projectId}
+                projectSlug={projectSlug}
+              />
             </div>
             <div
               className={cn(

@@ -344,6 +344,7 @@ export function SynaroProjectCard({
 
       <Link
         href={href}
+        data-onboarding="project-card-link"
         aria-label={`Open project: ${project.title}`}
         className={cn(
           "mt-4 block min-w-0 flex-1 rounded-lg outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70",
@@ -420,14 +421,14 @@ export function SynaroNewProjectCard({
 
   if (onClick) {
     return (
-      <button type="button" onClick={onClick} className={styles}>
+      <button type="button" onClick={onClick} className={styles} data-onboarding="new-project">
         + New project
       </button>
     );
   }
 
   return (
-    <Link href={href} className={styles}>
+    <Link href={href} className={styles} data-onboarding="new-project">
       + New project
     </Link>
   );

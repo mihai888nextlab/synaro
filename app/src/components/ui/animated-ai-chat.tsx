@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertCircleIcon,
   CheckCircleIcon,
+  ChevronDown,
   Figma,
   HelpCircleIcon,
   ImageIcon,
@@ -27,6 +28,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { AiFileChangeCardList } from "@/components/ui/ai-file-change-card";
+import { TaskLivePreview, TypewriterMarkdown } from "@/components/ui/ai-task-live-preview";
 import { SpeechWaveform } from "@/components/ui/speech-waveform";
 import { SynaroAssistantAvatar } from "@/components/ui/synaro-logo";
 import { canUseMicrophone, supportsSpeechRecognition } from "@/lib/speech/capabilities";
@@ -34,6 +37,7 @@ import { useMicrophoneLevels } from "@/lib/speech/use-microphone-levels";
 import { useSpeechInput } from "@/lib/speech/use-speech-input";
 import { isGitOnlyWorkflowPrompt } from "@/lib/git-workflow-prompt";
 import { cn } from "@/lib/utils";
+import { useAiBackgroundTask } from "@/components/ui/ai-background-task";
 
 type TaskStatus = "PENDING" | "ANALYZING" | "GENERATING" | "APPLYING" | "DONE" | "FAILED";
 
@@ -48,7 +52,7 @@ type TaskGitResult = {
 
 type TaskResult = {
   summary: string;
-  changes: { path: string; content: string }[];
+  changes: { path: string; content: string; previousContent?: string | null }[];
   git?: TaskGitResult;
 };
 
@@ -71,6 +75,10 @@ type Message = {
   taskProgress?: string | null;
   taskResult?: TaskResult | null;
   taskError?: string | null;
+  /** Progress lines shown in the live preview while the task runs. */
+  activityLog?: string[];
+  /** When true, skip typewriter playback (e.g. restored from localStorage). */
+  playbackComplete?: boolean;
 };
 
 type CommandSuggestion = {
@@ -145,13 +153,101 @@ function ProgressBar() {
   );
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({
+  message,
+  onPlaybackComplete,
+}: {
+  message: Message;
+  onPlaybackComplete?: (messageId: string) => void;
+}) {
   const isUser = message.role === "user";
   const isClarification = Boolean(message.questions && message.questions.length > 0);
   const isRunning =
     message.taskStatus &&
     message.taskStatus !== "DONE" &&
     message.taskStatus !== "FAILED";
+  const isDone = message.taskStatus === "DONE";
+  const isFailed = message.taskStatus === "FAILED";
+  const shouldAnimateReply =
+    !isUser && !message.playbackComplete && (isDone || isFailed);
+  const activeFromLog =
+    message.activityLog && message.activityLog.length > 0
+      ? message.activityLog[message.activityLog.length - 1]
+      : null;
+
+  const activeLine =
+    activeFromLog && activeFromLog.length > 0
+      ? activeFromLog
+      : message.taskProgress?.trim() ||
+          (message.taskStatus ? statusLabel(message.taskStatus) : "Working…");
+
+  const hasActivityLog = (message.activityLog?.length ?? 0) > 0;
+  const showActivityToggle = (isDone || isFailed) && hasActivityLog;
+  const [activityLogOpen, setActivityLogOpen] = React.useState(false);
+
+  const gitFooter =
+    isDone &&
+    message.taskResult &&
+    (message.taskResult.git?.htmlUrl ||
+      (message.taskResult.git?.branch && !message.taskResult.git.noChanges));
+
+  const bubbleClassName = cn(
+    "rounded-2xl px-4 py-3 text-sm leading-relaxed max-xl:px-3 max-xl:py-2.5 max-xl:text-[0.8125rem]",
+    isUser
+      ? "bg-foreground text-background"
+      : isFailed
+        ? "border border-destructive/30 bg-destructive/5 text-foreground"
+        : isClarification
+          ? "border border-primary/30 bg-primary/5 text-foreground"
+          : "border border-border/70 bg-card text-foreground",
+    showActivityToggle &&
+      "w-full cursor-pointer text-left transition-colors hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+  );
+
+  const taskReplyContent =
+    (isDone || isFailed) && message.content ? (
+      <>
+        <div className="flex items-end gap-2">
+          <div className="min-w-0 flex-1">
+            <TypewriterMarkdown
+              text={message.content}
+              enabled={shouldAnimateReply}
+              onComplete={() => onPlaybackComplete?.(message.id)}
+            />
+          </div>
+          {showActivityToggle ? (
+            <ChevronDown
+              className={cn(
+                "mb-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                activityLogOpen && "rotate-180",
+              )}
+              aria-hidden
+            />
+          ) : null}
+        </div>
+        <AnimatePresence initial={false}>
+          {activityLogOpen && hasActivityLog ? (
+            <motion.div
+              key="activity-log"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+              className="overflow-hidden"
+            >
+              <div className="mt-3 max-h-40 space-y-0.5 overflow-y-auto border-t border-border/50 pt-3 font-mono text-[0.65rem] leading-relaxed text-muted-foreground/90 sm:text-xs">
+                {message.activityLog!.map((line, i) => (
+                  <p key={`${i}-${line.slice(0, 32)}`}>
+                    <span className="text-primary/40">› </span>
+                    {line}
+                  </p>
+                ))}
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </>
+    ) : null;
 
   return (
     <motion.div
@@ -168,80 +264,75 @@ function MessageBubble({ message }: { message: Message }) {
           isUser ? "items-end" : "items-start",
         )}
       >
-        {/* Main bubble */}
-        <div
-          className={cn(
-            "rounded-2xl px-4 py-3 text-sm leading-relaxed max-xl:px-3 max-xl:py-2.5 max-xl:text-[0.8125rem]",
-            isUser
-              ? "bg-foreground text-background"
-              : isClarification
-                ? "border border-primary/30 bg-primary/5 text-foreground"
-                : "border border-border/70 bg-card text-foreground",
-          )}
-        >
-          {isClarification ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 font-medium text-foreground">
-                <HelpCircleIcon className="h-4 w-4 text-primary" />
-                Before I start, a few quick questions:
+        {/* Main bubble — whole card toggles activity log when applicable */}
+        {showActivityToggle && taskReplyContent ? (
+          <button
+            type="button"
+            onClick={() => setActivityLogOpen((open) => !open)}
+            aria-expanded={activityLogOpen}
+            aria-label={activityLogOpen ? "Hide activity log" : "Show activity log"}
+            className={bubbleClassName}
+          >
+            {taskReplyContent}
+          </button>
+        ) : (
+          <div className={bubbleClassName}>
+            {isClarification ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 font-medium text-foreground">
+                  <HelpCircleIcon className="h-4 w-4 text-primary" />
+                  Before I start, a few quick questions:
+                </div>
+                <ol className="space-y-2 pl-1">
+                  {message.questions!.map((q, i) => (
+                    <li key={i} className="flex gap-2 text-sm text-muted-foreground">
+                      <span className="shrink-0 font-mono text-xs font-medium text-primary/70 mt-0.5">
+                        {i + 1}.
+                      </span>
+                      <span>{q}</span>
+                    </li>
+                  ))}
+                </ol>
+                <p className="text-xs text-muted-foreground/70 italic">
+                  Answer below and press Enter — or press Enter to skip and generate now.
+                </p>
               </div>
-              <ol className="space-y-2 pl-1">
-                {message.questions!.map((q, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-muted-foreground">
-                    <span className="shrink-0 font-mono text-xs font-medium text-primary/70 mt-0.5">
-                      {i + 1}.
-                    </span>
-                    <span>{q}</span>
-                  </li>
-                ))}
-              </ol>
-              <p className="text-xs text-muted-foreground/70 italic">
-                Answer below and press Enter — or press Enter to skip and generate now.
-              </p>
-            </div>
-          ) : (
-            message.content
-          )}
-        </div>
-
-        {/* In-progress state */}
-        {isRunning && (
-          <div className="space-y-2 rounded-xl border border-border/60 bg-muted/40 p-3">
-            <ProgressBar />
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <LoaderIcon className="h-3 w-3 shrink-0 animate-spin" />
-              <AnimatePresence mode="wait">
-                <motion.span
-                  key={message.taskProgress ?? message.taskStatus}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  {message.taskProgress ?? statusLabel(message.taskStatus!)}
-                </motion.span>
-              </AnimatePresence>
-            </div>
+            ) : isRunning ? (
+              <p className="text-muted-foreground">Working on your request…</p>
+            ) : taskReplyContent ? (
+              taskReplyContent
+            ) : (
+              message.content
+            )}
           </div>
         )}
 
-        {/* Done state */}
-        {message.taskStatus === "DONE" && message.taskResult && (
-          <div className="space-y-2 rounded-xl border border-border/70 bg-muted/40 p-3 text-xs">
-            <div className="flex items-center gap-1.5 font-medium text-foreground">
-              <CheckCircleIcon className="h-3.5 w-3.5 text-green-500" />
-              {message.taskResult.summary}
-            </div>
-            {message.taskResult.changes.length > 0 && (
-              <div className="space-y-0.5 pt-0.5">
-                {message.taskResult.changes.map((c) => (
-                  <p key={c.path} className="font-mono text-[0.65rem] text-muted-foreground">
-                    {c.path}
-                  </p>
-                ))}
-              </div>
-            )}
-            {message.taskResult.git?.htmlUrl ? (
+        {isRunning && message.activityLog && message.activityLog.length > 0 ? (
+          <div className="space-y-2">
+            <TaskLivePreview
+              activityLog={message.activityLog ?? []}
+              activeLine={activeLine}
+              animate={!message.playbackComplete}
+            />
+            <ProgressBar />
+          </div>
+        ) : null}
+
+        {isDone && message.taskResult && message.taskResult.changes.length > 0 ? (
+          <AiFileChangeCardList
+            changes={message.taskResult.changes}
+            animate={!message.playbackComplete}
+          />
+        ) : null}
+
+        {gitFooter && (message.playbackComplete || !shouldAnimateReply) ? (
+          <motion.div
+            className="space-y-1.5 rounded-xl border border-border/70 bg-muted/40 px-3 py-2 text-xs"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            {message.taskResult?.git?.htmlUrl ? (
               <p className="text-muted-foreground">
                 Repository:{" "}
                 <a
@@ -254,25 +345,23 @@ function MessageBubble({ message }: { message: Message }) {
                 </a>
               </p>
             ) : null}
-            {message.taskResult.git?.branch && !message.taskResult.git.noChanges ? (
-              <p className="text-muted-foreground">
-                Pushed to branch <span className="font-mono text-foreground">{message.taskResult.git.branch}</span>
+            {message.taskResult?.git?.branch && !message.taskResult.git.noChanges ? (
+              <p className="flex items-center gap-1.5 text-muted-foreground">
+                <CheckCircleIcon className="h-3.5 w-3.5 shrink-0 text-green-500" />
+                Pushed to{" "}
+                <span className="font-mono text-foreground">{message.taskResult.git.branch}</span>
                 {message.taskResult.git.commitSha ? (
-                  <>
-                    {" "}
-                    (<span className="font-mono">{message.taskResult.git.commitSha.slice(0, 7)}</span>)
-                  </>
+                  <span className="font-mono">({message.taskResult.git.commitSha.slice(0, 7)})</span>
                 ) : null}
               </p>
             ) : null}
-          </div>
-        )}
+          </motion.div>
+        ) : null}
 
-        {/* Error state */}
-        {message.taskStatus === "FAILED" && (
-          <div className="flex items-start gap-1.5 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
-            <AlertCircleIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span>{message.taskError ?? "Task failed"}</span>
+        {isFailed && (
+          <div className="flex items-center gap-1.5 text-xs text-destructive/90">
+            <AlertCircleIcon className="h-3.5 w-3.5 shrink-0" />
+            <span>Task failed</span>
           </div>
         )}
       </div>
@@ -297,14 +386,58 @@ function statusLabel(status: TaskStatus): string {
   }
 }
 
+function thinkingForStatus(status: TaskStatus): string | null {
+  switch (status) {
+    case "PENDING":
+      return "Thinking — preparing your task…";
+    case "ANALYZING":
+      return "Thinking — scanning the repo and choosing files to read…";
+    case "GENERATING":
+      return "Thinking — drafting code changes for your request…";
+    case "APPLYING":
+      return "Thinking — writing files into your workspace…";
+    default:
+      return null;
+  }
+}
+
+function appendActivityLine(log: string[], line: string, max = 16): string[] {
+  const trimmed = line.trim();
+  if (!trimmed) return log;
+  if (log[log.length - 1] === trimmed) return log;
+  return [...log, trimmed].slice(-max);
+}
+
+function buildActivityLog(
+  prev: string[] | undefined,
+  status: TaskStatus,
+  progress: string | null | undefined,
+  prevStatus?: TaskStatus,
+): string[] {
+  let log = prev ?? [];
+  if (status !== prevStatus) {
+    const thinking = thinkingForStatus(status);
+    if (thinking) log = appendActivityLine(log, thinking);
+  }
+  if (progress?.trim()) {
+    log = appendActivityLine(log, progress.trim());
+  } else if (status !== prevStatus) {
+    log = appendActivityLine(log, statusLabel(status));
+  }
+  return log;
+}
+
 export function AnimatedAIChat({
   className,
   projectId,
+  projectSlug,
 }: {
   className?: string;
   projectId?: string;
+  projectSlug?: string;
 }) {
   const storageKey = projectId ? `synaro:chat:${projectId}` : null;
+  const { setActiveTask } = useAiBackgroundTask();
 
   const [value, setValue] = React.useState("");
   const [attachments, setAttachments] = React.useState<File[]>([]);
@@ -336,7 +469,32 @@ export function AnimatedAIChat({
     if (!projectId) return;
     try {
       const saved = localStorage.getItem(`synaro:chat:${projectId}`);
-      if (saved) setMessages(JSON.parse(saved) as Message[]);
+      if (saved) {
+        const restored = JSON.parse(saved) as Message[];
+        setMessages(restored.map((m) => ({ ...m, playbackComplete: true })));
+        // If there's an in-flight task, resume polling immediately.
+        const running = [...restored]
+          .reverse()
+          .find(
+            (m) =>
+              typeof m.taskId === "string" &&
+              m.taskId.length > 0 &&
+              m.taskStatus &&
+              m.taskStatus !== "DONE" &&
+              m.taskStatus !== "FAILED",
+          );
+        if (running?.taskId && running.id) {
+          setIsSubmitting(true);
+          pollTask(running.taskId, running.id);
+          setActiveTask({
+            projectId,
+            projectSlug: projectSlug ?? null,
+            taskId: running.taskId,
+            status: running.taskStatus,
+            progress: running.taskProgress ?? null,
+          });
+        }
+      }
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -349,9 +507,17 @@ export function AnimatedAIChat({
   React.useEffect(() => {
     if (!storageKey) return;
     try {
-      const toSave = messages
-        .filter((m) => !m.taskStatus || m.taskStatus === "DONE" || m.taskStatus === "FAILED")
-        .slice(-100);
+      // Persist everything (including in-flight tasks) so switching tabs/pages is seamless.
+      // Keep the payload small by dropping large transient fields for older messages.
+      const toSave = messages.slice(-100).map((m, idx, arr) => {
+        const isRecent = idx >= Math.max(0, arr.length - 6);
+        if (isRecent) return m;
+        return {
+          ...m,
+          // activity log can get large; keep only the tail for older messages
+          activityLog: m.activityLog ? m.activityLog.slice(-12) : undefined,
+        };
+      });
       localStorage.setItem(storageKey, JSON.stringify(toSave));
     } catch {}
   }, [messages, storageKey]);
@@ -414,6 +580,12 @@ export function AnimatedAIChat({
 
   React.useEffect(() => () => stopPolling(), [stopPolling]);
 
+  const markPlaybackComplete = React.useCallback((messageId: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === messageId ? { ...m, playbackComplete: true } : m)),
+    );
+  }, []);
+
   const pollTask = React.useCallback(
     (taskId: string, messageId: string) => {
       stopPolling();
@@ -424,30 +596,90 @@ export function AnimatedAIChat({
             if (!res.ok) return;
             const task = (await res.json()) as RemoteTask;
             setMessages((prev) =>
-              prev.map((m) =>
-                m.id === messageId
-                  ? {
-                      ...m,
-                      taskStatus: task.status,
-                      taskProgress: task.progress ?? null,
-                      taskResult: task.result ?? null,
-                      taskError: task.errorMessage ?? null,
-                    }
-                  : m,
-              ),
+              prev.map((m) => {
+                if (m.id !== messageId) return m;
+                const activityLog = buildActivityLog(
+                  m.activityLog,
+                  task.status,
+                  task.progress,
+                  m.taskStatus,
+                );
+                const isTerminal = task.status === "DONE" || task.status === "FAILED";
+                return {
+                  ...m,
+                  taskStatus: task.status,
+                  taskProgress: task.progress ?? null,
+                  taskResult: task.result ?? null,
+                  taskError: task.errorMessage ?? null,
+                  activityLog,
+                  content:
+                    task.status === "DONE" && task.result?.summary
+                      ? task.result.summary
+                      : task.status === "FAILED"
+                        ? task.errorMessage ?? "Task failed"
+                        : m.content,
+                  playbackComplete: isTerminal ? false : m.playbackComplete,
+                };
+              }),
             );
+            if (task.status !== "DONE" && task.status !== "FAILED") {
+              setActiveTask({
+                projectId: projectId ?? "",
+                projectSlug: projectSlug ?? null,
+                taskId: task.id,
+                status: task.status,
+                progress: task.progress ?? null,
+              });
+            }
             if (task.status === "DONE" || task.status === "FAILED") {
               stopPolling();
               setIsSubmitting(false);
+              setActiveTask(null);
             }
           } catch {
             /* ignore transient errors */
           }
         })();
-      }, 1500);
+      }, 1200);
     },
-    [stopPolling],
+    [projectId, projectSlug, setActiveTask, stopPolling],
   );
+
+  // If the global task pill says we have a running task for this project, but the chat
+  // has no running message (e.g. localStorage got cleared), recreate and resume polling.
+  const { activeTask } = useAiBackgroundTask();
+  React.useEffect(() => {
+    if (!projectId) return;
+    if (!activeTask?.taskId) return;
+    if (activeTask.projectId !== projectId) return;
+    if (!activeTask.status || activeTask.status === "DONE" || activeTask.status === "FAILED") return;
+
+    const hasRunningMessage = messages.some(
+      (m) =>
+        m.taskId === activeTask.taskId &&
+        m.taskStatus &&
+        m.taskStatus !== "DONE" &&
+        m.taskStatus !== "FAILED",
+    );
+    if (hasRunningMessage) return;
+
+    const asstMsgId = `asst-${Date.now()}`;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: asstMsgId,
+        role: "assistant",
+        content: "Working on your request…",
+        taskId: activeTask.taskId,
+        taskStatus: activeTask.status,
+        taskProgress: activeTask.progress ?? null,
+        activityLog: activeTask.progress ? [activeTask.progress] : [],
+        playbackComplete: true,
+      },
+    ]);
+    setIsSubmitting(true);
+    pollTask(activeTask.taskId, asstMsgId);
+  }, [activeTask, messages, pollTask, projectId]);
 
   /** Start the actual code generation task with a (possibly combined) prompt. */
   const submitGeneration = React.useCallback(
@@ -463,6 +695,8 @@ export function AnimatedAIChat({
           content: "Working on your request…",
           taskStatus: "PENDING",
           taskProgress: "Starting…",
+          activityLog: buildActivityLog([], "PENDING", "Starting…", undefined),
+          playbackComplete: false,
         },
       ]);
 
@@ -499,6 +733,13 @@ export function AnimatedAIChat({
             m.id === asstMsgId ? { ...m, taskId: task.id, taskStatus: task.status } : m,
           ),
         );
+        setActiveTask({
+          projectId,
+          projectSlug: projectSlug ?? null,
+          taskId: task.id,
+          status: task.status,
+          progress: task.progress ?? null,
+        });
         pollTask(task.id, asstMsgId);
       } catch {
         setMessages((prev) =>
@@ -754,7 +995,11 @@ export function AnimatedAIChat({
         {hasMessages && (
           <div className="flex flex-col space-y-4 max-xl:space-y-3">
             {messages.map((msg) => (
-              <MessageBubble key={msg.id} message={msg} />
+              <MessageBubble
+                key={msg.id}
+                message={msg}
+                onPlaybackComplete={markPlaybackComplete}
+              />
             ))}
             {isAsking && (
               <motion.div
@@ -781,6 +1026,7 @@ export function AnimatedAIChat({
       {/* Floating composer card overlay */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-3 sm:px-6 sm:pb-4">
         <motion.div
+          data-onboarding="ai-composer"
           className={cn(
             "pointer-events-auto relative mx-auto w-full max-w-3xl overflow-visible rounded-2xl border border-border/70 bg-card/95 shadow-[0_16px_48px_rgba(0,0,0,0.35)] backdrop-blur-xl max-xl:max-w-none",
           )}

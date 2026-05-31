@@ -8,6 +8,7 @@ import { ArrowLeft } from "lucide-react";
 import { signIn } from "next-auth/react";
 
 import { SignInPage, type Testimonial } from "@/components/ui/sign-in";
+import { setOnboardingPending } from "@/lib/onboarding-storage";
 
 const sampleTestimonials: Testimonial[] = [
   {
@@ -67,6 +68,8 @@ export function SignupPageClient() {
         setFormError(body.error ?? `Could not create account (${res.status}). Try again.`);
         return;
       }
+
+      setOnboardingPending();
 
       const callbackUrl =
         typeof window !== "undefined" ? `${window.location.origin}/dashboard` : "/dashboard";

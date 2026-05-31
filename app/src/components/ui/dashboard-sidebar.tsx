@@ -94,6 +94,7 @@ export function DashboardSidebar({
 
   return (
     <aside
+      data-onboarding="sidebar"
       className={[
         "relative",
         "h-full border-r border-border/70 bg-background/75 backdrop-blur-xl",

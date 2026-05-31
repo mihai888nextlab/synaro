@@ -9,6 +9,7 @@ import {
   getContainerStats,
   listWorkspaceFilePaths,
   getWorkspaceSelection,
+  writeWorkspaceFile,
   reconcileDeadContainersForProject,
   uploadWorkspaceTar,
   exportWorkspaceTarGzip,
@@ -169,6 +170,28 @@ export const environmentRoutes: FastifyPluginAsync = async (app) => {
       if (msg.includes('No container')) return reply.status(404).send({ error: msg })
       app.log.error(err)
       return reply.status(500).send({ error: 'Failed to read workspace selection', detail: msg })
+    }
+  })
+
+  // PUT /api/environments/:id/workspace-file — write a file into the container workspace
+  app.put('/:id/workspace-file', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const writeFileSchema = z.object({
+      path: z.string().min(1).max(4096),
+      content: z.string().max(2_000_000),
+    })
+    const body = writeFileSchema.safeParse(req.body)
+    if (!body.success) return reply.status(400).send({ error: 'Invalid request body' })
+    try {
+      await writeWorkspaceFile(id, body.data.path, body.data.content)
+      return reply.send({ ok: true })
+    } catch (err) {
+      const msg = String(err)
+      if (msg.includes('Invalid path')) return reply.status(400).send({ error: msg })
+      if (msg.includes('not active')) return reply.status(409).send({ error: msg })
+      if (msg.includes('No container')) return reply.status(404).send({ error: msg })
+      app.log.error(err)
+      return reply.status(500).send({ error: 'Failed to write file', detail: msg })
     }
   })
 

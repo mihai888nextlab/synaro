@@ -8,6 +8,7 @@ import {
   Loader2,
   MessageSquareText,
   FolderTree,
+  PencilIcon,
   PlayIcon,
   Rocket,
   ScrollText,
@@ -1161,6 +1162,15 @@ export function ProjectWorkspace({
                   <FolderTree className="size-4" />
                   File tree
                 </button>
+                {projectSlug && (
+                  <a
+                    href={`/projects/${projectSlug}/editor`}
+                    className={tabButtonClass(false)}
+                  >
+                    <PencilIcon className="size-4" />
+                    Editor
+                  </a>
+                )}
                 <button
                   type="button"
                   data-onboarding="tab-terminal"

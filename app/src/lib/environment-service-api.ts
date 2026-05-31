@@ -215,6 +215,20 @@ export async function remoteWorkspaceSelection(envId: string, path: string): Pro
   return { path: pathOut, kind, content, contentTruncated, gitLog };
 }
 
+export async function remoteWriteWorkspaceFile(envId: string, relativePath: string, content: string): Promise<void> {
+  const base = environmentServiceBaseUrl();
+  const res = await fetch(`${base}/api/environments/${encodeURIComponent(envId)}/workspace-file`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: relativePath, content }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(t || `Write workspace file failed (${res.status})`);
+  }
+}
+
 export async function remoteDestroyEnvironment(envId: string): Promise<void> {
   const base = environmentServiceBaseUrl();
   const res = await fetch(`${base}/api/environments/${encodeURIComponent(envId)}`, {

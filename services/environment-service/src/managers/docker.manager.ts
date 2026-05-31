@@ -709,6 +709,30 @@ export async function getWorkspaceSelection(environmentId: string, relativePath:
   return { path: safe, kind, content, contentTruncated, gitLog }
 }
 
+/**
+ * Write a file into the container workspace. Content is base64-encoded via env var to avoid
+ * shell escaping issues. Max content size is limited by Docker env var limits (~1 MB in practice).
+ */
+export async function writeWorkspaceFile(environmentId: string, relativePath: string, content: string): Promise<void> {
+  const safe = sanitizeWorkspaceRelativePath(relativePath)
+  if (!safe) throw new Error('Invalid path')
+
+  const environment = await prisma.environment.findUnique({ where: { id: environmentId } })
+  if (!environment?.containerId) throw new Error('No container found for this environment')
+  if (environment.status !== 'RUNNING' && environment.status !== 'PROVISIONING') {
+    throw new Error('Container is not active')
+  }
+
+  const fullPath = `${WORKSPACE_ROOT}/${safe}`
+  const b64 = Buffer.from(content, 'utf8').toString('base64')
+
+  await execShellInContainer(
+    environment.containerId,
+    `mkdir -p "$(dirname "$SYNARO_PATH")" && printf '%s' "$SYNARO_B64" | base64 -d > "$SYNARO_PATH"`,
+    [`SYNARO_PATH=${fullPath}`, `SYNARO_B64=${b64}`],
+  )
+}
+
 const TERMINAL_MAX_COMMAND_LEN = 8_000
 const TERMINAL_MAX_OUTPUT_BYTES = 96 * 1024
 

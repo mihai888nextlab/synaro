@@ -3,9 +3,9 @@
 import * as React from "react";
 import { motion } from "framer-motion";
 
-import { MarkdownLite } from "@/components/ui/markdown-lite";
 import { useTypewriter } from "@/lib/use-typewriter";
 import { cn } from "@/lib/utils";
+import { MarkdownLite } from "@/components/ui/markdown-lite";
 
 function BlinkCursor() {
   return (
@@ -109,7 +109,6 @@ export function TypewriterMarkdown({
   );
 }
 
-/** Typewriter that re-renders markdown on every tick (README-style while streaming). */
 export function TypewriterMarkdownLite({
   text,
   enabled,
@@ -133,10 +132,10 @@ export function TypewriterMarkdownLite({
   }, [enabled, isComplete, onComplete]);
 
   return (
-    <div className={cn("min-w-0", className)}>
+    <div className={cn("text-left", className)}>
       <MarkdownLite text={displayed} />
       {enabled && !isComplete ? (
-        <span className="inline-block align-baseline">
+        <span className="whitespace-pre-wrap">
           <BlinkCursor />
         </span>
       ) : null}

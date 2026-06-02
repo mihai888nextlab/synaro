@@ -3,6 +3,7 @@
 import * as React from "react";
 import { motion } from "framer-motion";
 
+import { MarkdownLite } from "@/components/ui/markdown-lite";
 import { useTypewriter } from "@/lib/use-typewriter";
 import { cn } from "@/lib/utils";
 
@@ -96,13 +97,49 @@ export function TypewriterMarkdown({
   });
 
   React.useEffect(() => {
+    if (!enabled) return;
     if (isComplete) onComplete?.();
-  }, [isComplete, onComplete]);
+  }, [enabled, isComplete, onComplete]);
 
   return (
     <p className={cn("whitespace-pre-wrap", className)}>
       {displayed}
       {enabled && !isComplete ? <BlinkCursor /> : null}
     </p>
+  );
+}
+
+/** Typewriter that re-renders markdown on every tick (README-style while streaming). */
+export function TypewriterMarkdownLite({
+  text,
+  enabled,
+  className,
+  onComplete,
+}: {
+  text: string;
+  enabled: boolean;
+  className?: string;
+  onComplete?: () => void;
+}) {
+  const { displayed, isComplete } = useTypewriter(text, {
+    enabled,
+    charsPerTick: 3,
+    intervalMs: 14,
+  });
+
+  React.useEffect(() => {
+    if (!enabled) return;
+    if (isComplete) onComplete?.();
+  }, [enabled, isComplete, onComplete]);
+
+  return (
+    <div className={cn("min-w-0", className)}>
+      <MarkdownLite text={displayed} />
+      {enabled && !isComplete ? (
+        <span className="inline-block align-baseline">
+          <BlinkCursor />
+        </span>
+      ) : null}
+    </div>
   );
 }

@@ -29,7 +29,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AiFileChangeCardList } from "@/components/ui/ai-file-change-card";
-import { TaskLivePreview, TypewriterMarkdown } from "@/components/ui/ai-task-live-preview";
+import {
+  TaskLivePreview,
+  TypewriterMarkdown,
+  TypewriterMarkdownLite,
+} from "@/components/ui/ai-task-live-preview";
+import { MarkdownLite } from "@/components/ui/markdown-lite";
 import { SpeechWaveform } from "@/components/ui/speech-waveform";
 import { SynaroAssistantAvatar } from "@/components/ui/synaro-logo";
 import { canUseMicrophone, supportsSpeechRecognition } from "@/lib/speech/capabilities";
@@ -53,6 +58,10 @@ type TaskGitResult = {
 type TaskResult = {
   summary: string;
   changes: { path: string; content: string; previousContent?: string | null }[];
+  meta?: {
+    exploredFiles: number;
+    aiSteps: number;
+  };
   git?: TaskGitResult;
 };
 
@@ -92,6 +101,67 @@ type PendingClarification = {
   originalPrompt: string;
   questions: string[];
 };
+
+function wantsStrictClarification(prompt: string): boolean {
+  const p = prompt.toLowerCase();
+  return (
+    p.includes("don't start") ||
+    p.includes("do not start") ||
+    p.includes("before you start") ||
+    p.includes("until you understand") ||
+    p.includes("ask clarifying") ||
+    p.includes("clarifying questions") ||
+    p.includes("make sure you understand")
+  );
+}
+
+function isLikelyQuestion(prompt: string): boolean {
+  const p = prompt.trim();
+  if (!p) return false;
+  const lower = p.toLowerCase();
+
+  // Explicit instructions should not be treated as questions.
+  const instructionStarters = [
+    "add ",
+    "create ",
+    "implement ",
+    "build ",
+    "fix ",
+    "update ",
+    "modify ",
+    "refactor ",
+    "generate ",
+    "remove ",
+    "rename ",
+    "make ",
+  ];
+  if (instructionStarters.some((s) => lower.startsWith(s))) return false;
+
+  if (p.endsWith("?")) return true;
+
+  const questionStarters = [
+    "what ",
+    "why ",
+    "how ",
+    "where ",
+    "when ",
+    "which ",
+    "can you ",
+    "could you ",
+    "explain ",
+    "tell me ",
+    "summarize ",
+    "describe ",
+    "do we ",
+    "does this ",
+    "is there ",
+  ];
+  if (questionStarters.some((s) => lower.startsWith(s))) return true;
+
+  if (lower.includes("what is this") || lower.includes("what's this")) return true;
+
+  return false;
+}
 
 function useAutoResizeTextarea(minHeight: number, maxHeight = 200) {
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
@@ -234,6 +304,14 @@ function MessageBubble({
     (message.taskResult.git?.htmlUrl ||
       (message.taskResult.git?.branch && !message.taskResult.git.noChanges));
 
+  const miniMeta =
+    isDone && message.taskResult?.meta
+      ? {
+          exploredFiles: Math.max(0, message.taskResult.meta.exploredFiles ?? 0),
+          aiSteps: Math.max(0, message.taskResult.meta.aiSteps ?? 0),
+        }
+      : null;
+
   const bubbleClassName = cn(
     "rounded-2xl px-4 py-3 text-sm leading-relaxed max-xl:px-3 max-xl:py-2.5 max-xl:text-[0.8125rem]",
     isUser
@@ -250,13 +328,31 @@ function MessageBubble({
   const taskReplyContent =
     (isDone || isFailed) && message.content ? (
       <>
+        {miniMeta ? (
+          <div className="mb-2 text-[0.7rem] leading-none text-muted-foreground">
+            Explored {miniMeta.exploredFiles} file{miniMeta.exploredFiles === 1 ? "" : "s"},{" "}
+            {miniMeta.aiSteps} AI step{miniMeta.aiSteps === 1 ? "" : "s"}
+          </div>
+        ) : null}
         <div className="flex items-end gap-2">
           <div className="min-w-0 flex-1">
-            <TypewriterMarkdown
-              text={message.content}
-              enabled={shouldAnimateReply}
-              onComplete={() => onPlaybackComplete?.(message.id)}
-            />
+            {isDone && message.taskResult && message.taskResult.changes.length === 0 ? (
+              shouldAnimateReply && !message.playbackComplete ? (
+                <TypewriterMarkdownLite
+                  text={message.content}
+                  enabled
+                  onComplete={() => onPlaybackComplete?.(message.id)}
+                />
+              ) : (
+                <MarkdownLite text={message.content} />
+              )
+            ) : (
+              <TypewriterMarkdown
+                text={message.content}
+                enabled={shouldAnimateReply}
+                onComplete={() => onPlaybackComplete?.(message.id)}
+              />
+            )}
           </div>
           {showActivityToggle ? (
             <ChevronDown
@@ -439,7 +535,7 @@ function thinkingForStatus(status: TaskStatus): string | null {
     case "ANALYZING":
       return "Thinking — scanning the repo and choosing files to read…";
     case "GENERATING":
-      return "Thinking — drafting code changes for your request…";
+      return "Thinking — working on your response…";
     case "APPLYING":
       return "Thinking — writing files into your workspace…";
     default:
@@ -729,7 +825,7 @@ export function AnimatedAIChat({
 
   /** Start the actual code generation task with a (possibly combined) prompt. */
   const submitGeneration = React.useCallback(
-    async (prompt: string) => {
+    async (prompt: string, mode: "generate" | "answer" = "generate") => {
       if (!projectId) return;
 
       const asstMsgId = `asst-${Date.now()}`;
@@ -752,7 +848,7 @@ export function AnimatedAIChat({
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ prompt }),
+            body: JSON.stringify({ prompt, mode }),
           },
         );
         if (!res.ok) {
@@ -837,17 +933,24 @@ export function AnimatedAIChat({
         "\n\nAdditional context from the user:\n" +
         prompt;
       setPendingClarification(null);
-      await submitGeneration(combined);
+      await submitGeneration(combined, "generate");
       return;
     }
 
     // Git commit/push/create-repo — run immediately (clarify is for new feature builds only)
     if (isGitOnlyWorkflowPrompt(prompt)) {
-      await submitGeneration(prompt);
+      await submitGeneration(prompt, "generate");
+      return;
+    }
+
+    // If the user is asking a question, answer it without modifying files.
+    if (isLikelyQuestion(prompt)) {
+      await submitGeneration(prompt, "answer");
       return;
     }
 
     // Otherwise, ask clarifying questions first
+    const forceClarify = wantsStrictClarification(prompt);
     setIsAsking(true);
 
     try {
@@ -860,15 +963,23 @@ export function AnimatedAIChat({
         },
       );
       const clarifyData = clarifyRes.ok
-        ? ((await clarifyRes.json()) as { questions?: string[] })
-        : { questions: [] };
+        ? ((await clarifyRes.json()) as { required?: boolean; questions?: string[] })
+        : { required: false, questions: [] };
 
       const questions = clarifyData.questions ?? [];
+      const required = Boolean(clarifyData.required);
 
-      if (questions.length === 0) {
+      if (!forceClarify && (!required || questions.length === 0)) {
         // No questions — generate directly
         setIsAsking(false);
-        await submitGeneration(prompt);
+        await submitGeneration(prompt, "generate");
+        return;
+      }
+
+      if (questions.length === 0) {
+        // User requested strict clarification but model didn't ask anything; proceed anyway.
+        setIsAsking(false);
+        await submitGeneration(prompt, "generate");
         return;
       }
 
@@ -888,7 +999,7 @@ export function AnimatedAIChat({
     } catch {
       // On error, fall back to direct generation
       setIsAsking(false);
-      await submitGeneration(prompt);
+      await submitGeneration(prompt, "generate");
     }
   }, [value, isSubmitting, isAsking, projectId, pendingClarification, adjustHeight, submitGeneration]);
 

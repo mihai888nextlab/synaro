@@ -55,12 +55,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.json({ questions: [] });
     }
 
-    const data = (await upstream.json()) as { questions?: string[] };
-    return res.json({ questions: data.questions ?? [] });
+    const data = (await upstream.json()) as { required?: boolean; questions?: string[] };
+    return res.json({ required: Boolean(data.required), questions: data.questions ?? [] });
   } catch (err) {
     if (process.env.NODE_ENV === "development") {
       console.warn("[ai-clarify] could not reach AI service at", clarifyUrl, err);
     }
-    return res.json({ questions: [] });
+    return res.json({ required: false, questions: [] });
   }
 }

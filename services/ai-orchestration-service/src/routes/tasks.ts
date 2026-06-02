@@ -9,6 +9,7 @@ const createTaskSchema = z.object({
   projectId: z.string().uuid(),
   prompt: z.string().min(1).max(2000),
   projectSlug: z.string().min(1).max(80).optional(),
+  mode: z.enum(['generate', 'answer']).optional(),
   git: z
     .object({
       accessToken: z.string().min(1),
@@ -35,30 +36,38 @@ export const taskRoutes: FastifyPluginAsync = async (app) => {
         messages: [
           {
             role: 'system',
-            content: `You are a helpful AI coding assistant. When a user asks you to build something, ask 2–3 short, specific clarifying questions to better understand their requirements before you start.
+            content: `You are a helpful AI coding assistant. Decide whether you MUST ask clarifying questions BEFORE starting work.
 
-Focus on: specific features/pages they need, design or color preferences, any tech constraints or preferences.
+Only ask questions when the request is ambiguous or missing information that would materially change the implementation.
+If you can proceed safely with reasonable defaults, do NOT ask questions.
 
-Return ONLY valid JSON — no explanation: {"questions": ["...", "...", "..."]}
+Return ONLY valid JSON — no explanation, in this exact shape:
+{"required": boolean, "questions": ["...", "...", "..."]}
 
-If the request is already very detailed and specific, return: {"questions": []}`,
+Rules:
+- If required=false, questions MUST be [].
+- If required=true, ask 1–3 short, specific questions. No fluff.
+- Prefer fewer questions over more.
+`,
           },
           { role: 'user', content: prompt },
         ],
       })
 
       const raw = response.choices[0]?.message?.content ?? '{}'
-      let parsed: { questions?: string[] } = {}
+      let parsed: { required?: boolean; questions?: string[] } = {}
       try {
         parsed = JSON.parse(raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```$/m, '').trim()) as typeof parsed
       } catch {
         parsed = {}
       }
 
-      return reply.send({ questions: parsed.questions ?? [] })
+      const questions = Array.isArray(parsed.questions) ? parsed.questions.filter((q) => typeof q === 'string') : []
+      const required = Boolean(parsed.required) && questions.length > 0
+      return reply.send({ required, questions: required ? questions.slice(0, 3) : [] })
     } catch (err) {
       app.log.error(err, 'Clarify call failed')
-      return reply.send({ questions: [] })
+      return reply.send({ required: false, questions: [] })
     }
   })
 
@@ -108,6 +117,7 @@ If the request is already very detailed and specific, return: {"questions": []}`
     executeTask(task.id, {
       gitContext,
       projectSlug: result.data.projectSlug,
+      mode: result.data.mode ?? 'generate',
     }).catch((err) => {
       app.log.error({ taskId: task.id, err }, 'Task execution failed')
     })

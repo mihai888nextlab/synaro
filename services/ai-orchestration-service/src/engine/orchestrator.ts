@@ -40,6 +40,12 @@ interface TaskGitOutcome {
 interface TaskResult {
   changes: FileChange[]
   summary: string
+  meta?: {
+    /** Number of workspace files successfully read for this task. */
+    exploredFiles: number
+    /** Approximate number of AI calls made (analysis + generation passes). */
+    aiSteps: number
+  }
   git?: TaskGitOutcome
   /** Set when a new GitHub repo was linked — app should persist on Project.cloneRepositoryUrl */
   linkedCloneRepositoryUrl?: string
@@ -77,15 +83,22 @@ Return ONLY valid JSON, no explanation.`
   })
 
   const raw = response.choices[0]?.message?.content ?? '{}'
-  let parsed: { files?: string[] } = {}
+  let parsed: { files?: unknown } = {}
   try {
-    parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()) as { files?: string[] }
+    parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()) as { files?: unknown }
   } catch {
     parsed = {}
   }
 
+  const files = Array.isArray(parsed.files)
+    ? (parsed.files
+        .filter((f): f is string => typeof f === 'string')
+        .map((f) => f.trim())
+        .filter((f) => f.length > 0))
+    : []
+
   return {
-    files: parsed.files ?? [],
+    files,
     inputTokens: response.usage?.prompt_tokens ?? 0,
     outputTokens: response.usage?.completion_tokens ?? 0,
   }
@@ -188,18 +201,234 @@ function formatTaskError(err: unknown): string {
   return String(err)
 }
 
+function parseAnswerModelResponse(raw: string): { answer: string; needFiles: string[] } {
+  const cleaned = raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```$/m, '').trim()
+  if (!cleaned) return { answer: '', needFiles: [] }
+
+  try {
+    const parsed = JSON.parse(cleaned) as { answer?: unknown; needFiles?: unknown }
+    const answer = typeof parsed.answer === 'string' ? parsed.answer.trim() : ''
+    const needFiles = Array.isArray(parsed.needFiles)
+      ? parsed.needFiles
+          .filter((p): p is string => typeof p === 'string')
+          .map((p) => p.trim())
+          .filter((p) => p.length > 0)
+      : []
+    if (answer) return { answer, needFiles }
+    if (needFiles.length > 0) return { answer: '', needFiles }
+  } catch {
+    // Model returned prose instead of JSON — use it as the answer.
+  }
+
+  if (cleaned !== '{}' && !cleaned.startsWith('{')) {
+    return { answer: cleaned, needFiles: [] }
+  }
+
+  return { answer: '', needFiles: [] }
+}
+
 /** Main orchestration function — reads from and writes to the running environment container. */
 export async function executeTask(
   taskId: string,
-  opts?: { gitContext?: TaskGitContext | null; projectSlug?: string },
+  opts?: { gitContext?: TaskGitContext | null; projectSlug?: string; mode?: 'generate' | 'answer' },
 ): Promise<void> {
   const gitContext = opts?.gitContext
   const projectSlug = opts?.projectSlug
+  const mode = opts?.mode ?? 'generate'
   const task = await prisma.task.findUnique({ where: { id: taskId } })
   if (!task) throw new Error(`Task ${taskId} not found`)
 
   let totalInputTokens = 0
   let totalOutputTokens = 0
+  let exploredFiles = 0
+  let aiSteps = 0
+
+  // Read-only Q&A mode: answer questions about the repo without modifying files.
+  if (mode === 'answer') {
+    try {
+      await updateTask(taskId, 'ANALYZING')
+      await updateProgress(taskId, 'Reading repository context…')
+
+      const env = await getActiveEnvironment(task.projectId)
+      if (!env) throw new Error('No active environment. Start the runtime to answer questions about this project.')
+
+      const allPaths = await listContainerFiles(env.id)
+      const repoTree = buildRepoTree(allPaths.map((p) => ({ path: p, size: 0 })))
+      aiSteps += 1
+      const analysis = await analyzeRelevantFiles(task.prompt, repoTree)
+      totalInputTokens += analysis.inputTokens
+      totalOutputTokens += analysis.outputTokens
+
+      const allPathSet = new Set(allPaths)
+      const seedCandidates = [
+        'README.md',
+        'package.json',
+        'app/package.json',
+        'pnpm-lock.yaml',
+        'yarn.lock',
+        'Dockerfile',
+        'docker-compose.yml',
+        'docker-compose.yaml',
+        'app/README.md',
+      ].filter((p) => allPathSet.has(p))
+
+      const filesToRead = Array.from(new Set([...seedCandidates, ...(analysis.files ?? [])]))
+        .filter((p) => allPathSet.has(p))
+        .slice(0, 18)
+
+      const existingFiles: { path: string; content: string }[] = []
+      for (const p of filesToRead) {
+        try {
+          const content = await readContainerFile(env.id, p)
+          if (typeof content === 'string') {
+            existingFiles.push({ path: p, content })
+            exploredFiles += 1
+          }
+        } catch {
+          // ignore unreadable files
+        }
+      }
+
+      await updateTask(taskId, 'GENERATING')
+      await updateProgress(taskId, 'Drafting answer…')
+
+      const context = existingFiles
+        .slice(0, 10)
+        .map((f) => `### ${f.path}\n\`\`\`\n${f.content}\n\`\`\``)
+        .join('\n\n')
+
+      const answerOnce = async (extraFiles: { path: string; content: string }[]) => {
+        const extraContext = extraFiles
+          .slice(0, 10)
+          .map((f) => `### ${f.path}\n\`\`\`\n${f.content}\n\`\`\``)
+          .join('\n\n')
+
+        const userContent =
+          `Question: ${task.prompt}\n\n` +
+          `Repository tree (paths only):\n${repoTree}\n\n` +
+          `Repository context:\n${context || '(no files provided)'}\n\n` +
+          (extraContext ? `Additional context:\n${extraContext}\n\n` : '')
+
+        aiSteps += 1
+        const response = await kimi.chat.completions.create({
+          model: MODELS.GENERATE,
+          max_tokens: 1200,
+          messages: [
+            {
+              role: 'system',
+              content:
+                `You are a senior engineer helping a user understand their codebase.\n` +
+                `Return ONLY valid JSON:\n` +
+                `{"answer":"markdown answer here","needFiles":["optional/path"]}\n` +
+                `Rules:\n` +
+                `- "answer" must be a non-empty markdown string answering the question.\n` +
+                `- Use the repository tree and file contents provided.\n` +
+                `- If you can answer confidently, set needFiles to [].\n` +
+                `- If you need more files, set answer to a short note and list up to 8 exact paths in needFiles.\n` +
+                `- Do NOT modify files. Do NOT output code changes.\n`,
+            },
+            { role: 'user', content: userContent },
+          ],
+        })
+
+        const raw = response.choices[0]?.message?.content ?? ''
+        totalInputTokens += response.usage?.prompt_tokens ?? 0
+        totalOutputTokens += response.usage?.completion_tokens ?? 0
+
+        return parseAnswerModelResponse(raw)
+      }
+
+      const answerPlain = async (extraFiles: { path: string; content: string }[]) => {
+        const extraContext = extraFiles
+          .slice(0, 10)
+          .map((f) => `### ${f.path}\n\`\`\`\n${f.content}\n\`\`\``)
+          .join('\n\n')
+
+        aiSteps += 1
+        const response = await kimi.chat.completions.create({
+          model: MODELS.GENERATE,
+          max_tokens: 1200,
+          messages: [
+            {
+              role: 'system',
+              content:
+                `You are a senior engineer helping a user understand their codebase.\n` +
+                `Answer the user's question in clear markdown using the repository context.\n` +
+                `Do NOT modify files. Do NOT propose writing code unless asked.\n` +
+                `If context is insufficient, say what you found and what is still missing.`,
+            },
+            {
+              role: 'user',
+              content:
+                `Question: ${task.prompt}\n\n` +
+                `Repository tree:\n${repoTree}\n\n` +
+                `File contents:\n${context || '(none)'}\n\n` +
+                (extraContext ? `More files:\n${extraContext}\n\n` : ''),
+            },
+          ],
+        })
+
+        const text = (response.choices[0]?.message?.content ?? '').trim()
+        totalInputTokens += response.usage?.prompt_tokens ?? 0
+        totalOutputTokens += response.usage?.completion_tokens ?? 0
+        return text
+      }
+
+      let first = await answerOnce([])
+      let need = first.needFiles
+        .filter((p) => allPathSet.has(p))
+        .filter((p) => !existingFiles.some((f) => f.path === p))
+        .slice(0, 8)
+
+      let finalAnswer = first.answer
+      if (need.length > 0) {
+        await updateProgress(taskId, `Reading ${need.length} more file${need.length === 1 ? '' : 's'} for your question…`)
+        const extraFiles: { path: string; content: string }[] = []
+        for (const p of need) {
+          try {
+            const content = await readContainerFile(env.id, p)
+            if (typeof content === 'string') {
+              extraFiles.push({ path: p, content })
+              exploredFiles += 1
+            }
+          } catch {
+            // ignore
+          }
+        }
+        const second = await answerOnce(extraFiles)
+        finalAnswer = second.answer || first.answer
+        need = []
+      }
+
+      if (!finalAnswer.trim()) {
+        await updateProgress(taskId, 'Summarizing findings from the repository…')
+        finalAnswer = await answerPlain([...existingFiles])
+      }
+
+      const result: TaskResult = {
+        summary: finalAnswer.trim() || 'I could not find enough information in the repository to answer that question.',
+        changes: [],
+        meta: { exploredFiles, aiSteps },
+      }
+      await updateTask(taskId, 'DONE', {
+        result,
+        progress: null,
+        errorMessage: null,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+      })
+      return
+    } catch (err) {
+      const msg = formatTaskError(err)
+      await updateTask(taskId, 'FAILED', {
+        errorMessage: msg,
+        progress: null,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+      })
+      return
+    }
+  }
 
   const runGitPush = async (
     envId: string,
@@ -341,12 +570,17 @@ export async function executeTask(
     await updateProgress(taskId, `Found ${allPaths.length} file${allPaths.length === 1 ? '' : 's'} — identifying relevant ones...`)
 
     // ── Step 3: Identify relevant files ──────────────────────────────────
+    aiSteps += 1
     const analysis = await analyzeRelevantFiles(task.prompt, repoTree)
     totalInputTokens += analysis.inputTokens
     totalOutputTokens += analysis.outputTokens
 
     // ── Step 4: Read relevant files in parallel ───────────────────────────
-    const fileCount = analysis.files.length
+    // Hard safety: even if upstream returns malformed shapes, never allow a non-array here.
+    const relevantFiles: string[] = Array.isArray((analysis as any).files)
+      ? ((analysis as any).files as unknown[]).filter((f): f is string => typeof f === 'string')
+      : analysis.files
+    const fileCount = relevantFiles.length
     await updateProgress(
       taskId,
       fileCount > 0
@@ -354,17 +588,19 @@ export async function executeTask(
         : 'No existing files — starting from scratch...',
     )
     const fileContents = await Promise.all(
-      analysis.files.map(async (filePath) => {
+      relevantFiles.map(async (filePath) => {
         const content = await readContainerFile(env.id, filePath)
         return content !== null ? { path: filePath, content } : null
       }),
     )
     const existingFiles = fileContents.filter((f): f is { path: string; content: string } => f !== null)
+    exploredFiles += existingFiles.length
 
     // ── Step 5: Generate changes ─────────────────────────────────────────
     await updateTask(taskId, 'GENERATING')
     await updateProgress(taskId, 'AI is writing your code...')
 
+    aiSteps += 1
     const generation = await generateChanges(task.prompt, existingFiles)
     totalInputTokens += generation.inputTokens
     totalOutputTokens += generation.outputTokens
@@ -392,7 +628,11 @@ export async function executeTask(
       enrichedChanges.map(({ path, content }) => ({ path, content })),
     )
 
-    const result: TaskResult = { ...generation.result, changes: enrichedChanges }
+    const result: TaskResult = {
+      ...generation.result,
+      changes: enrichedChanges,
+      meta: { exploredFiles, aiSteps },
+    }
     let linkedCloneRepositoryUrl: string | undefined
 
     if (shouldGitAfterCode && gitContext?.accessToken) {

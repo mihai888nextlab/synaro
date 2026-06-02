@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!project) return res.status(404).json({ error: "Project not found" });
 
   if (req.method === "POST") {
-    const { prompt } = req.body as { prompt?: string };
+    const { prompt, mode } = req.body as { prompt?: string; mode?: "generate" | "answer" };
     if (!prompt?.trim()) return res.status(400).json({ error: "prompt is required" });
 
     const githubToken = await getGithubAccessTokenForUser(session.user.id);
@@ -39,6 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       projectId,
       prompt: prompt.trim(),
       projectSlug: project.slug,
+      mode: mode === "answer" ? "answer" : "generate",
     };
     if (githubToken) {
       payload.git = {

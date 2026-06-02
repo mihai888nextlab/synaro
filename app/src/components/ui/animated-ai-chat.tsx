@@ -29,11 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AiFileChangeCardList } from "@/components/ui/ai-file-change-card";
-import {
-  TaskLivePreview,
-  TypewriterMarkdown,
-  TypewriterMarkdownLite,
-} from "@/components/ui/ai-task-live-preview";
+import { TaskLivePreview, TypewriterMarkdown } from "@/components/ui/ai-task-live-preview";
 import { MarkdownLite } from "@/components/ui/markdown-lite";
 import { SpeechWaveform } from "@/components/ui/speech-waveform";
 import { SynaroAssistantAvatar } from "@/components/ui/synaro-logo";
@@ -338,7 +334,7 @@ function MessageBubble({
           <div className="min-w-0 flex-1">
             {isDone && message.taskResult && message.taskResult.changes.length === 0 ? (
               shouldAnimateReply && !message.playbackComplete ? (
-                <TypewriterMarkdownLite
+                <TypewriterMarkdown
                   text={message.content}
                   enabled
                   onComplete={() => onPlaybackComplete?.(message.id)}

@@ -8,6 +8,32 @@ import { Input } from "@/components/ui/input";
 
 const DEFAULT_PREVIEW_URL = "about:blank";
 
+/** Extracts the /api/preview/{envId} prefix from a previewUrl, or null if not a proxy URL. */
+function extractProxyPrefix(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const m = url.match(/^(\/api\/preview\/[^/?#]+)/);
+  return m ? m[1] : null;
+}
+
+/** Converts an iframe src back to a display path ("/test") by stripping the proxy prefix. */
+function srcToDisplayPath(src: string, proxyPrefix: string | null): string {
+  if (!proxyPrefix || !src.startsWith(proxyPrefix)) return src;
+  return src.slice(proxyPrefix.length) || "/";
+}
+
+/** Resolves a user-typed string to an iframe src, using the proxy prefix for bare paths. */
+function resolveInputToSrc(input: string, proxyPrefix: string | null): string {
+  const trimmed = input.trim();
+  if (!trimmed) return DEFAULT_PREVIEW_URL;
+  if (trimmed.includes("://")) return trimmed; // external URL — use as-is
+  // Treat as an app path (e.g. "/test", "test", "/api/users")
+  if (proxyPrefix) {
+    const path = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+    return `${proxyPrefix}${path}`;
+  }
+  return `https://${trimmed}`;
+}
+
 export function ProjectIframePreview({
   className,
   title = "Preview",
@@ -20,28 +46,39 @@ export function ProjectIframePreview({
   /** When set by parent (e.g. after Run), navigate the iframe here automatically. */
   previewUrl?: string | null;
 }) {
-  const [urlInput, setUrlInput] = React.useState(DEFAULT_PREVIEW_URL);
+  const proxyPrefix = extractProxyPrefix(previewUrl);
+
+  const [urlInput, setUrlInput] = React.useState("/");
   const [iframeSrc, setIframeSrc] = React.useState(DEFAULT_PREVIEW_URL);
 
   React.useEffect(() => {
     if (!previewUrl) return;
-    setUrlInput(previewUrl);
+    setUrlInput("/");
     setIframeSrc(previewUrl);
   }, [previewUrl]);
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
 
   const applyUrl = React.useCallback(() => {
-    const trimmed = urlInput.trim();
-    if (!trimmed) {
-      setIframeSrc(DEFAULT_PREVIEW_URL);
-      return;
+    const src = resolveInputToSrc(urlInput, proxyPrefix);
+    setIframeSrc(src);
+    // Keep the display path in sync
+    const display = srcToDisplayPath(src, proxyPrefix);
+    setUrlInput(display);
+  }, [urlInput, proxyPrefix]);
+
+  // Sync the URL bar when the iframe navigates internally (e.g. clicking links in the app).
+  const handleIframeLoad = React.useCallback(() => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow || !proxyPrefix) return;
+    try {
+      const { pathname, search, hash } = iframe.contentWindow.location;
+      if (pathname.startsWith(proxyPrefix)) {
+        setUrlInput((pathname.slice(proxyPrefix.length) || "/") + search + hash);
+      }
+    } catch {
+      // Blocked by cross-origin policy — ignore
     }
-    const withProtocol =
-      trimmed.startsWith("http://") || trimmed.startsWith("https://")
-        ? trimmed
-        : `https://${trimmed}`;
-    setIframeSrc(withProtocol);
-  }, [urlInput]);
+  }, [proxyPrefix]);
 
   const refresh = React.useCallback(() => {
     const el = iframeRef.current;
@@ -64,6 +101,7 @@ export function ProjectIframePreview({
           ref={iframeRef}
           title={title}
           src={iframeSrc}
+          onLoad={handleIframeLoad}
           className={cn(
             "h-full min-h-0 w-full flex-1 bg-background",
             iframeSrc === "about:blank" && "opacity-0",
@@ -89,7 +127,7 @@ export function ProjectIframePreview({
         </div>
         <div className="flex min-w-0 w-full flex-1 items-center gap-1.5 sm:max-w-md sm:min-w-[200px] sm:gap-2">
           <Input
-            type="url"
+            type="text"
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
             onKeyDown={(e) => {
@@ -98,7 +136,7 @@ export function ProjectIframePreview({
                 applyUrl();
               }
             }}
-            placeholder="https://…"
+            placeholder="/path or https://…"
             className="h-8 text-xs"
             spellCheck={false}
             autoComplete="off"
@@ -135,6 +173,7 @@ export function ProjectIframePreview({
           ref={iframeRef}
           title={title}
           src={iframeSrc}
+          onLoad={handleIframeLoad}
           className={cn(
             "h-full min-h-0 w-full bg-background",
             iframeSrc === "about:blank" && "opacity-0",

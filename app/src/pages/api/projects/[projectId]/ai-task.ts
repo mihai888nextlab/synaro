@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/next-auth-options";
 import { getGithubAccessTokenForUser } from "@/lib/github-account";
 import { prisma } from "@/lib/prisma";
 import { whereProjectByIdForUser } from "@/lib/project-access";
+import { touchProjectActivity } from "@/lib/project-activity";
 
 function aiServiceBaseUrl(): string {
   return process.env.AI_SERVICE_URL?.trim() || "http://localhost:3003";
@@ -25,6 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!project) return res.status(404).json({ error: "Project not found" });
 
   if (req.method === "POST") {
+    touchProjectActivity(projectId);
     const { prompt, mode } = req.body as { prompt?: string; mode?: "generate" | "answer" };
     if (!prompt?.trim()) return res.status(400).json({ error: "prompt is required" });
 

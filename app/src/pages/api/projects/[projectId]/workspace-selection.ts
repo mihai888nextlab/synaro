@@ -16,6 +16,7 @@ import type {
   WorkspaceSelectionGithubExtras,
 } from "@/lib/workspace-selection-types";
 import { authOptions } from "@/lib/next-auth-options";
+import { touchProjectActivity } from "@/lib/project-activity";
 
 export type { WorkspaceSelectionApiResponse } from "@/lib/workspace-selection-types";
 
@@ -169,6 +170,8 @@ export default async function handler(
     res.status(404).json({ error: "Project not found" });
     return;
   }
+
+  touchProjectActivity(projectId);
 
   try {
     const rows = await fetchEnvironmentsForProject(projectId);

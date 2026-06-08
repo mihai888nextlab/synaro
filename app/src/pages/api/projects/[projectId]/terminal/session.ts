@@ -13,6 +13,7 @@ import {
   createTerminalWsToken,
   environmentServiceTerminalWsUrl,
 } from "@/lib/terminal-ws-token";
+import { touchProjectActivity } from "@/lib/project-activity";
 
 export type TerminalSessionResponse =
   | { ok: true; wsUrl: string; token: string }
@@ -50,6 +51,8 @@ export default async function handler(
     res.status(404).json({ ok: false, error: "Project not found" });
     return;
   }
+
+  touchProjectActivity(projectId);
 
   try {
     const rows = await fetchEnvironmentsForProject(projectId);

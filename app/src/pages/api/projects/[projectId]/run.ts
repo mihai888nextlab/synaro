@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/next-auth-options";
 import { prisma } from "@/lib/prisma";
 import { whereProjectByIdForUser } from "@/lib/project-access";
+import { touchProjectActivity } from "@/lib/project-activity";
 import {
   fetchEnvironmentsForProject,
   pickActiveRuntimeEnvironment,
@@ -81,6 +82,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // POST — start the app
   if (req.method === "POST") {
+    touchProjectActivity(projectId);
     let pkg: PackageJson | null = null;
     try {
       const sel = await remoteWorkspaceSelection(env.id, "package.json");

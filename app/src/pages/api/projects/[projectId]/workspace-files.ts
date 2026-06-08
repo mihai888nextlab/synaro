@@ -12,6 +12,7 @@ import { filterWorkspaceTreePaths } from "@/lib/workspace-tree-filter";
 import { whereProjectByIdForUser } from "@/lib/project-access";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/next-auth-options";
+import { touchProjectActivity } from "@/lib/project-activity";
 
 export type { WorkspaceFilesResponse } from "@/lib/workspace-files-types";
 
@@ -58,6 +59,8 @@ export default async function handler(
     res.status(404).json({ error: "Project not found" });
     return;
   }
+
+  touchProjectActivity(projectId);
 
   const hasGitRemote = Boolean(project.cloneRepositoryUrl?.trim());
 

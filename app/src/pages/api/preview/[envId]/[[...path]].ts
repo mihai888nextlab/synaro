@@ -34,12 +34,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const rawUrl = req.url ?? "";
   const qIdx = rawUrl.indexOf("?");
   const queryStr = qIdx !== -1 ? rawUrl.slice(qIdx) : "";
-  const targetUrl = `http://host.docker.internal:${port}/${pathStr}${queryStr}`;
+  const proxyHost = process.env.PREVIEW_PROXY_HOST?.trim() || "localhost";
+  const targetUrl = `http://${proxyHost}:${port}/${pathStr}${queryStr}`;
   const prefix = `/api/preview/${envId}`;
 
   const forwardHeaders: Record<string, string> = {
     "accept-encoding": "identity",
-    host: `host.docker.internal:${port}`,
+    host: `${proxyHost}:${port}`,
   };
   if (req.headers.accept) forwardHeaders.accept = req.headers.accept as string;
   if (req.headers.cookie) forwardHeaders.cookie = req.headers.cookie as string;

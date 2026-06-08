@@ -907,6 +907,15 @@ export function ProjectWorkspace({
     };
   }, [projectId]);
 
+  // Periodically trigger idle-container cleanup in the background.
+  React.useEffect(() => {
+    if (!projectId) return;
+    const id = window.setInterval(() => {
+      void fetch("/api/cron/auto-stop", { method: "POST" }).catch(() => {});
+    }, 5 * 60 * 1000);
+    return () => window.clearInterval(id);
+  }, [projectId]);
+
   // Stop polling on unmount
   React.useEffect(() => () => {
     if (runPollRef.current) clearInterval(runPollRef.current);
@@ -1411,6 +1420,8 @@ export function ProjectWorkspace({
                 className="h-full w-full min-w-0"
                 projectId={projectId}
                 projectSlug={projectSlug}
+                environmentStatus={environmentStatus}
+                onRunApp={() => void handleRun()}
               />
             </div>
             <div

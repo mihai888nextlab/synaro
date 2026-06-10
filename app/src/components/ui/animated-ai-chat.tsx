@@ -31,6 +31,9 @@ import {
 import { AiFileChangeCardList } from "@/components/ui/ai-file-change-card";
 import { TaskLivePreview, TypewriterMarkdown } from "@/components/ui/ai-task-live-preview";
 import { MarkdownLite } from "@/components/ui/markdown-lite";
+import { useWorkspaceChatPreview } from "@/components/ui/workspace-chat-preview";
+import { isTerminalTaskStatus, resolveTaskAnswerContent } from "@/lib/ai-task-message";
+import type { TaskResult } from "@/lib/ai-task-types";
 import { SpeechWaveform } from "@/components/ui/speech-waveform";
 import { SynaroAssistantAvatar } from "@/components/ui/synaro-logo";
 import { canUseMicrophone, supportsSpeechRecognition } from "@/lib/speech/capabilities";
@@ -38,36 +41,11 @@ import { useMicrophoneLevels } from "@/lib/speech/use-microphone-levels";
 import { useSpeechInput } from "@/lib/speech/use-speech-input";
 import { isGitOnlyWorkflowPrompt } from "@/lib/git-workflow-prompt";
 import { cn } from "@/lib/utils";
-import { useAiBackgroundTask } from "@/components/ui/ai-background-task";
+import { useAiBackgroundTask, type AiRemoteTask, type AiTaskStatus } from "@/components/ui/ai-background-task";
 
-type TaskStatus = "PENDING" | "ANALYZING" | "GENERATING" | "APPLYING" | "DONE" | "FAILED";
+type TaskStatus = AiTaskStatus;
 
-type TaskGitResult = {
-  action?: string;
-  branch?: string;
-  commitSha?: string | null;
-  remoteUrl?: string;
-  htmlUrl?: string;
-  noChanges?: boolean;
-};
-
-type TaskResult = {
-  summary: string;
-  changes: { path: string; content: string; previousContent?: string | null }[];
-  meta?: {
-    exploredFiles: number;
-    aiSteps: number;
-  };
-  git?: TaskGitResult;
-};
-
-type RemoteTask = {
-  id: string;
-  status: TaskStatus;
-  progress?: string | null;
-  result?: TaskResult | null;
-  errorMessage?: string | null;
-};
+type RemoteTask = AiRemoteTask & { result?: TaskResult | null };
 
 type Message = {
   id: string;
@@ -264,9 +242,11 @@ function useElapsedSeconds(running: boolean): string {
 function MessageBubble({
   message,
   onPlaybackComplete,
+  onOpenFile,
 }: {
   message: Message;
   onPlaybackComplete?: (messageId: string) => void;
+  onOpenFile?: (path: string) => void;
 }) {
   const isUser = message.role === "user";
   const isClarification = Boolean(message.questions && message.questions.length > 0);
@@ -276,8 +256,7 @@ function MessageBubble({
     message.taskStatus !== "FAILED";
   const isDone = message.taskStatus === "DONE";
   const isFailed = message.taskStatus === "FAILED";
-  const shouldAnimateReply =
-    !isUser && !message.playbackComplete && (isDone || isFailed);
+  const hasAnswerText = Boolean(message.content?.trim());
   const activeFromLog =
     message.activityLog && message.activityLog.length > 0
       ? message.activityLog[message.activityLog.length - 1]
@@ -321,68 +300,20 @@ function MessageBubble({
       "w-full cursor-pointer text-left transition-colors hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
   );
 
-  const taskReplyContent =
-    (isDone || isFailed) && message.content ? (
-      <>
-        {miniMeta ? (
-          <div className="mb-2 text-[0.7rem] leading-none text-muted-foreground">
-            Explored {miniMeta.exploredFiles} file{miniMeta.exploredFiles === 1 ? "" : "s"},{" "}
-            {miniMeta.aiSteps} AI step{miniMeta.aiSteps === 1 ? "" : "s"}
-          </div>
-        ) : null}
-        <div className="flex items-end gap-2">
-          <div className="min-w-0 flex-1">
-            {isDone && message.taskResult && message.taskResult.changes.length === 0 ? (
-              shouldAnimateReply && !message.playbackComplete ? (
-                <TypewriterMarkdown
-                  text={message.content}
-                  enabled
-                  onComplete={() => onPlaybackComplete?.(message.id)}
-                />
-              ) : (
-                <MarkdownLite text={message.content} />
-              )
-            ) : (
-              <TypewriterMarkdown
-                text={message.content}
-                enabled={shouldAnimateReply}
-                onComplete={() => onPlaybackComplete?.(message.id)}
-              />
-            )}
-          </div>
-          {showActivityToggle ? (
-            <ChevronDown
-              className={cn(
-                "mb-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                activityLogOpen && "rotate-180",
-              )}
-              aria-hidden
-            />
-          ) : null}
-        </div>
-        <AnimatePresence initial={false}>
-          {activityLogOpen && hasActivityLog ? (
-            <motion.div
-              key="activity-log"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="overflow-hidden"
-            >
-              <div className="mt-3 max-h-40 space-y-0.5 overflow-y-auto border-t border-border/50 pt-3 font-mono text-[0.65rem] leading-relaxed text-muted-foreground/90 sm:text-xs">
-                {message.activityLog!.map((line, i) => (
-                  <p key={`${i}-${line.slice(0, 32)}`}>
-                    <span className="text-primary/40">› </span>
-                    {line}
-                  </p>
-                ))}
-              </div>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
-      </>
-    ) : null;
+  const answerBody = hasAnswerText ? (
+    isRunning ? (
+      <TypewriterMarkdown
+        text={message.content!}
+        enabled
+        streaming
+        className="break-words"
+      />
+    ) : (
+      <MarkdownLite text={message.content!} onOpenFile={onOpenFile} />
+    )
+  ) : null;
+
+  const taskReplyContent = hasAnswerText && (isDone || isFailed);
 
   return (
     <motion.div
@@ -399,58 +330,110 @@ function MessageBubble({
           isUser ? "items-end" : "items-start",
         )}
       >
-        {/* Main bubble — whole card toggles activity log when applicable */}
-        {showActivityToggle && taskReplyContent ? (
-          <button
-            type="button"
-            onClick={() => setActivityLogOpen((open) => !open)}
-            aria-expanded={activityLogOpen}
-            aria-label={activityLogOpen ? "Hide activity log" : "Show activity log"}
-            className={bubbleClassName}
-          >
-            {taskReplyContent}
-          </button>
-        ) : (
-          <div className={bubbleClassName}>
-            {isClarification ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 font-medium text-foreground">
-                  <HelpCircleIcon className="h-4 w-4 text-primary" />
-                  Before I start, a few quick questions:
+        {/* Main bubble — stable wrapper so typewriter state survives running → done */}
+        <div
+          className={bubbleClassName}
+          {...(showActivityToggle && taskReplyContent
+            ? {
+                role: "button" as const,
+                tabIndex: 0,
+                onClick: () => setActivityLogOpen((open) => !open),
+                onKeyDown: (e: React.KeyboardEvent) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setActivityLogOpen((open) => !open);
+                  }
+                },
+                "aria-expanded": activityLogOpen,
+                "aria-label": activityLogOpen ? "Hide activity log" : "Show activity log",
+              }
+            : {})}
+        >
+          {isClarification ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 font-medium text-foreground">
+                <HelpCircleIcon className="h-4 w-4 text-primary" />
+                Before I start, a few quick questions:
+              </div>
+              <ol className="space-y-2 pl-1">
+                {message.questions!.map((q, i) => (
+                  <li key={i} className="flex gap-2 text-sm text-muted-foreground">
+                    <span className="shrink-0 font-mono text-xs font-medium text-primary/70 mt-0.5">
+                      {i + 1}.
+                    </span>
+                    <span>{q}</span>
+                  </li>
+                ))}
+              </ol>
+              <p className="text-xs text-muted-foreground/70 italic">
+                Answer below and press Enter — or press Enter to skip and generate now.
+              </p>
+            </div>
+          ) : hasAnswerText && (isRunning || isDone || isFailed) ? (
+            <>
+              {miniMeta ? (
+                <div className="mb-2 text-[0.7rem] leading-none text-muted-foreground">
+                  Explored {miniMeta.exploredFiles} file
+                  {miniMeta.exploredFiles === 1 ? "" : "s"}, {miniMeta.aiSteps} AI step
+                  {miniMeta.aiSteps === 1 ? "" : "s"}
                 </div>
-                <ol className="space-y-2 pl-1">
-                  {message.questions!.map((q, i) => (
-                    <li key={i} className="flex gap-2 text-sm text-muted-foreground">
-                      <span className="shrink-0 font-mono text-xs font-medium text-primary/70 mt-0.5">
-                        {i + 1}.
-                      </span>
-                      <span>{q}</span>
-                    </li>
-                  ))}
-                </ol>
-                <p className="text-xs text-muted-foreground/70 italic">
-                  Answer below and press Enter — or press Enter to skip and generate now.
+              ) : null}
+              <div className="flex items-end gap-2">
+                <div className="min-w-0 flex-1">{answerBody}</div>
+                {showActivityToggle ? (
+                  <ChevronDown
+                    className={cn(
+                      "mb-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                      activityLogOpen && "rotate-180",
+                    )}
+                    aria-hidden
+                  />
+                ) : null}
+              </div>
+              {isRunning ? (
+                <p className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span>Writing…</span>
+                  <span className="font-mono tabular-nums opacity-50">{elapsed}</span>
                 </p>
-              </div>
-            ) : isRunning ? (
-              <div className="flex items-center justify-between gap-3 text-muted-foreground">
-                <p>Working on your request…</p>
-                <span className="font-mono text-xs tabular-nums opacity-50">{elapsed}</span>
-              </div>
-            ) : taskReplyContent ? (
-              taskReplyContent
-            ) : (
-              message.content
-            )}
-          </div>
-        )}
+              ) : null}
+              <AnimatePresence initial={false}>
+                {activityLogOpen && hasActivityLog ? (
+                  <motion.div
+                    key="activity-log"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2, ease: "easeInOut" }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-3 max-h-40 space-y-0.5 overflow-y-auto border-t border-border/50 pt-3 font-mono text-[0.65rem] leading-relaxed text-muted-foreground/90 sm:text-xs">
+                      {message.activityLog!.map((line, i) => (
+                        <p key={`${i}-${line.slice(0, 32)}`}>
+                          <span className="text-primary/40">› </span>
+                          {line}
+                        </p>
+                      ))}
+                    </div>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </>
+          ) : isRunning ? (
+            <div className="flex items-center justify-between gap-3 text-muted-foreground">
+              <p>Working on your request…</p>
+              <span className="font-mono text-xs tabular-nums opacity-50">{elapsed}</span>
+            </div>
+          ) : (
+            message.content
+          )}
+        </div>
 
         {isRunning && message.activityLog && message.activityLog.length > 0 ? (
           <div className="space-y-2">
             <TaskLivePreview
               activityLog={message.activityLog ?? []}
               activeLine={activeLine}
-              animate={!message.playbackComplete}
+              animate={false}
             />
             <ProgressBar />
           </div>
@@ -459,11 +442,12 @@ function MessageBubble({
         {isDone && message.taskResult && message.taskResult.changes.length > 0 ? (
           <AiFileChangeCardList
             changes={message.taskResult.changes}
-            animate={!message.playbackComplete}
+            animate={false}
+            onOpenFile={onOpenFile}
           />
         ) : null}
 
-        {gitFooter && (message.playbackComplete || !shouldAnimateReply) ? (
+        {gitFooter && message.playbackComplete ? (
           <motion.div
             className="space-y-1.5 rounded-xl border border-border/70 bg-muted/40 px-3 py-2 text-xs"
             initial={{ opacity: 0, y: 6 }}
@@ -565,6 +549,46 @@ function buildActivityLog(
   return log;
 }
 
+function mergeMessageWithRemoteTask(m: Message, task: RemoteTask): Message {
+  const activityLog = buildActivityLog(
+    m.activityLog,
+    task.status,
+    task.progress,
+    m.taskStatus,
+  );
+  const isTerminal = isTerminalTaskStatus(task.status);
+  const result = task.result as TaskResult | null | undefined;
+  const content = resolveTaskAnswerContent(task, m.content ?? "") ?? m.content;
+
+  return {
+    ...m,
+    taskStatus: task.status,
+    taskProgress: task.progress ?? null,
+    taskResult: result ?? null,
+    taskError: task.errorMessage ?? null,
+    activityLog,
+    content: content ?? m.content,
+    playbackComplete: isTerminal ? true : m.playbackComplete,
+  };
+}
+
+function messagesEqualForRemoteTask(a: Message, b: Message): boolean {
+  const aLog = a.activityLog;
+  const bLog = b.activityLog;
+  const logEqual =
+    (aLog?.length ?? 0) === (bLog?.length ?? 0) &&
+    (aLog?.[aLog.length - 1] ?? "") === (bLog?.[bLog.length - 1] ?? "");
+  return (
+    a.taskStatus === b.taskStatus &&
+    a.taskProgress === b.taskProgress &&
+    a.content === b.content &&
+    a.taskError === b.taskError &&
+    a.playbackComplete === b.playbackComplete &&
+    (a.taskResult?.summary ?? "") === (b.taskResult?.summary ?? "") &&
+    logEqual
+  );
+}
+
 export function AnimatedAIChat({
   className,
   projectId,
@@ -575,7 +599,14 @@ export function AnimatedAIChat({
   projectSlug?: string;
 }) {
   const storageKey = projectId ? `synaro:chat:${projectId}` : null;
-  const { setActiveTask } = useAiBackgroundTask();
+  const { activeTask, polledTask, setActiveTask } = useAiBackgroundTask();
+  const chatPreview = useWorkspaceChatPreview();
+  const handleOpenWorkspaceFile = React.useCallback(
+    (path: string) => {
+      chatPreview?.openFile(path);
+    },
+    [chatPreview],
+  );
 
   const [value, setValue] = React.useState("");
   const [attachments, setAttachments] = React.useState<File[]>([]);
@@ -587,7 +618,6 @@ export function AnimatedAIChat({
   const paletteRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
-  const pollTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const [compactInput, setCompactInput] = React.useState(false);
   React.useEffect(() => {
     const mq = window.matchMedia("(max-width: 1279px)");
@@ -609,8 +639,15 @@ export function AnimatedAIChat({
       const saved = localStorage.getItem(`synaro:chat:${projectId}`);
       if (saved) {
         const restored = JSON.parse(saved) as Message[];
-        setMessages(restored.map((m) => ({ ...m, playbackComplete: true })));
-        // If there's an in-flight task, resume polling immediately.
+        setMessages(
+          restored.map((m) => ({
+            ...m,
+            playbackComplete:
+              isTerminalTaskStatus(m.taskStatus) || m.role === "user" || !m.taskId
+                ? true
+                : Boolean(m.playbackComplete),
+          })),
+        );
         const running = [...restored]
           .reverse()
           .find(
@@ -623,7 +660,6 @@ export function AnimatedAIChat({
           );
         if (running?.taskId && running.id) {
           setIsSubmitting(true);
-          pollTask(running.taskId, running.id);
           setActiveTask({
             projectId,
             projectSlug: projectSlug ?? null,
@@ -631,33 +667,71 @@ export function AnimatedAIChat({
             status: running.taskStatus,
             progress: running.taskProgress ?? null,
           });
+          void (async () => {
+            try {
+              const res = await fetch(`/api/ai-tasks/${encodeURIComponent(running.taskId!)}`, {
+                cache: "no-store",
+              });
+              if (!res.ok) return;
+              const task = (await res.json()) as RemoteTask;
+              setMessages((prev) => {
+                let touched = false;
+                const next = prev.map((m) => {
+                  if (m.taskId !== task.id) return m;
+                  const merged = mergeMessageWithRemoteTask(m, task);
+                  if (messagesEqualForRemoteTask(m, merged)) return m;
+                  touched = true;
+                  return merged;
+                });
+                return touched ? next : prev;
+              });
+              if (isTerminalTaskStatus(task.status)) setIsSubmitting(false);
+            } catch {
+              /* ignore */
+            }
+          })();
         }
       }
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const scrollRafRef = React.useRef<number | null>(null);
   React.useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const streaming = messages.some(
+        (m) =>
+          m.taskStatus &&
+          m.taskStatus !== "DONE" &&
+          m.taskStatus !== "FAILED" &&
+          Boolean(m.content?.trim()),
+      );
+      messagesEndRef.current?.scrollIntoView({ behavior: streaming ? "auto" : "smooth" });
+    });
+    return () => {
+      if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
+    };
   }, [messages]);
 
-  // Persist chat history (skip in-flight tasks)
+  // Persist chat history (debounced — avoid blocking the main thread during streaming)
   React.useEffect(() => {
     if (!storageKey) return;
-    try {
-      // Persist everything (including in-flight tasks) so switching tabs/pages is seamless.
-      // Keep the payload small by dropping large transient fields for older messages.
-      const toSave = messages.slice(-100).map((m, idx, arr) => {
-        const isRecent = idx >= Math.max(0, arr.length - 6);
-        if (isRecent) return m;
-        return {
-          ...m,
-          // activity log can get large; keep only the tail for older messages
-          activityLog: m.activityLog ? m.activityLog.slice(-12) : undefined,
-        };
-      });
-      localStorage.setItem(storageKey, JSON.stringify(toSave));
-    } catch {}
+    const id = window.setTimeout(() => {
+      try {
+        const toSave = messages.slice(-100).map((m, idx, arr) => {
+          const isRecent = idx >= Math.max(0, arr.length - 6);
+          if (isRecent) return m;
+          return {
+            ...m,
+            activityLog: m.activityLog ? m.activityLog.slice(-12) : undefined,
+          };
+        });
+        localStorage.setItem(storageKey, JSON.stringify(toSave));
+      } catch {}
+    }, 900);
+    return () => window.clearTimeout(id);
   }, [messages, storageKey]);
 
   const commandSuggestions: CommandSuggestion[] = React.useMemo(
@@ -709,83 +783,31 @@ export function AnimatedAIChat({
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
-  const stopPolling = React.useCallback(() => {
-    if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current);
-      pollTimerRef.current = null;
-    }
-  }, []);
-
-  React.useEffect(() => () => stopPolling(), [stopPolling]);
-
   const markPlaybackComplete = React.useCallback((messageId: string) => {
     setMessages((prev) =>
       prev.map((m) => (m.id === messageId ? { ...m, playbackComplete: true } : m)),
     );
   }, []);
 
-  const pollTask = React.useCallback(
-    (taskId: string, messageId: string) => {
-      stopPolling();
-      pollTimerRef.current = setInterval(() => {
-        void (async () => {
-          try {
-            const res = await fetch(`/api/ai-tasks/${encodeURIComponent(taskId)}`);
-            if (!res.ok) return;
-            const task = (await res.json()) as RemoteTask;
-            setMessages((prev) =>
-              prev.map((m) => {
-                if (m.id !== messageId) return m;
-                const activityLog = buildActivityLog(
-                  m.activityLog,
-                  task.status,
-                  task.progress,
-                  m.taskStatus,
-                );
-                const isTerminal = task.status === "DONE" || task.status === "FAILED";
-                return {
-                  ...m,
-                  taskStatus: task.status,
-                  taskProgress: task.progress ?? null,
-                  taskResult: task.result ?? null,
-                  taskError: task.errorMessage ?? null,
-                  activityLog,
-                  content:
-                    task.status === "DONE" && task.result?.summary
-                      ? task.result.summary
-                      : task.status === "FAILED"
-                        ? task.errorMessage ?? "Task failed"
-                        : m.content,
-                  playbackComplete: isTerminal ? false : m.playbackComplete,
-                };
-              }),
-            );
-            if (task.status !== "DONE" && task.status !== "FAILED") {
-              setActiveTask({
-                projectId: projectId ?? "",
-                projectSlug: projectSlug ?? null,
-                taskId: task.id,
-                status: task.status,
-                progress: task.progress ?? null,
-              });
-            }
-            if (task.status === "DONE" || task.status === "FAILED") {
-              stopPolling();
-              setIsSubmitting(false);
-              setActiveTask(null);
-            }
-          } catch {
-            /* ignore transient errors */
-          }
-        })();
-      }, 500);
-    },
-    [projectId, projectSlug, setActiveTask, stopPolling],
-  );
+  React.useEffect(() => {
+    if (!polledTask) return;
+    const terminal = isTerminalTaskStatus(polledTask.status);
+    setMessages((prev) => {
+      let touched = false;
+      const next = prev.map((m) => {
+        if (m.taskId !== polledTask.id) return m;
+        const merged = mergeMessageWithRemoteTask(m, polledTask as RemoteTask);
+        if (!terminal && messagesEqualForRemoteTask(m, merged)) return m;
+        touched = true;
+        return merged;
+      });
+      return touched ? next : prev;
+    });
+    if (terminal) {
+      setIsSubmitting(false);
+    }
+  }, [polledTask]);
 
-  // If the global task pill says we have a running task for this project, but the chat
-  // has no running message (e.g. localStorage got cleared), recreate and resume polling.
-  const { activeTask } = useAiBackgroundTask();
   React.useEffect(() => {
     if (!projectId) return;
     if (!activeTask?.taskId) return;
@@ -816,8 +838,7 @@ export function AnimatedAIChat({
       },
     ]);
     setIsSubmitting(true);
-    pollTask(activeTask.taskId, asstMsgId);
-  }, [activeTask, messages, pollTask, projectId]);
+  }, [activeTask, messages, projectId]);
 
   /** Start the actual code generation task with a (possibly combined) prompt. */
   const submitGeneration = React.useCallback(
@@ -878,7 +899,6 @@ export function AnimatedAIChat({
           status: task.status,
           progress: task.progress ?? null,
         });
-        pollTask(task.id, asstMsgId);
       } catch {
         setMessages((prev) =>
           prev.map((m) =>
@@ -895,7 +915,7 @@ export function AnimatedAIChat({
         setIsSubmitting(false);
       }
     },
-    [projectId, pollTask],
+    [projectId, projectSlug, setActiveTask],
   );
 
   const handleSend = React.useCallback(async (promptOverride?: string) => {
@@ -1152,6 +1172,7 @@ export function AnimatedAIChat({
                 key={msg.id}
                 message={msg}
                 onPlaybackComplete={markPlaybackComplete}
+                onOpenFile={chatPreview ? handleOpenWorkspaceFile : undefined}
               />
             ))}
             {isAsking && (

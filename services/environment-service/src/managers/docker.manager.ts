@@ -733,6 +733,62 @@ export async function writeWorkspaceFile(environmentId: string, relativePath: st
   )
 }
 
+export async function createWorkspaceDirectory(environmentId: string, relativePath: string): Promise<void> {
+  const safe = sanitizeWorkspaceRelativePath(relativePath)
+  if (!safe) throw new Error('Invalid path')
+
+  const environment = await prisma.environment.findUnique({ where: { id: environmentId } })
+  if (!environment?.containerId) throw new Error('No container found for this environment')
+  if (environment.status !== 'RUNNING' && environment.status !== 'PROVISIONING') {
+    throw new Error('Container is not active')
+  }
+
+  const fullPath = `${WORKSPACE_ROOT}/${safe}`
+  await execShellInContainer(environment.containerId, `mkdir -p "$SYNARO_PATH"`, [`SYNARO_PATH=${fullPath}`])
+}
+
+export async function deleteWorkspacePath(environmentId: string, relativePath: string): Promise<void> {
+  const safe = sanitizeWorkspaceRelativePath(relativePath)
+  if (!safe) throw new Error('Invalid path')
+
+  const environment = await prisma.environment.findUnique({ where: { id: environmentId } })
+  if (!environment?.containerId) throw new Error('No container found for this environment')
+  if (environment.status !== 'RUNNING' && environment.status !== 'PROVISIONING') {
+    throw new Error('Container is not active')
+  }
+
+  const fullPath = `${WORKSPACE_ROOT}/${safe}`
+  await execShellInContainer(
+    environment.containerId,
+    `if test -e "$SYNARO_PATH"; then rm -rf "$SYNARO_PATH"; else exit 3; fi`,
+    [`SYNARO_PATH=${fullPath}`],
+  )
+}
+
+export async function renameWorkspacePath(
+  environmentId: string,
+  fromPath: string,
+  toPath: string,
+): Promise<void> {
+  const fromSafe = sanitizeWorkspaceRelativePath(fromPath)
+  const toSafe = sanitizeWorkspaceRelativePath(toPath)
+  if (!fromSafe || !toSafe) throw new Error('Invalid path')
+
+  const environment = await prisma.environment.findUnique({ where: { id: environmentId } })
+  if (!environment?.containerId) throw new Error('No container found for this environment')
+  if (environment.status !== 'RUNNING' && environment.status !== 'PROVISIONING') {
+    throw new Error('Container is not active')
+  }
+
+  const fromFull = `${WORKSPACE_ROOT}/${fromSafe}`
+  const toFull = `${WORKSPACE_ROOT}/${toSafe}`
+  await execShellInContainer(
+    environment.containerId,
+    `if test -e "$SYNARO_FROM"; then mkdir -p "$(dirname "$SYNARO_TO")" && mv "$SYNARO_FROM" "$SYNARO_TO"; else exit 3; fi`,
+    [`SYNARO_FROM=${fromFull}`, `SYNARO_TO=${toFull}`],
+  )
+}
+
 const TERMINAL_MAX_COMMAND_LEN = 8_000
 const TERMINAL_MAX_OUTPUT_BYTES = 96 * 1024
 

@@ -1,14 +1,16 @@
 import * as React from "react";
+import { useRouter } from "next/router";
 import {
   Download,
   ExternalLink,
   FileIcon,
+  FilePlus2,
   FolderIcon,
   FolderOpenIcon,
+  FolderPlus,
   Loader2,
   MessageSquareText,
   FolderTree,
-  PencilIcon,
   PlayIcon,
   Rocket,
   ScrollText,
@@ -20,6 +22,13 @@ import { hotkeysCoreFeature, syncDataLoaderFeature } from "@headless-tree/core";
 import { useTree } from "@headless-tree/react";
 
 import { AnimatedAIChat } from "@/components/ui/animated-ai-chat";
+import { WorkspaceChatPreviewProvider, useWorkspaceChatPreview } from "@/components/ui/workspace-chat-preview";
+import { WorkspaceFileEditorPanel } from "@/components/ui/workspace-file-editor";
+import {
+  explorerTargetFromItemId,
+  WorkspaceExplorerContextMenu,
+  type ExplorerMenuTarget,
+} from "@/components/ui/workspace-explorer-context-menu";
 import { ProjectContainerTerminal } from "@/components/ui/project-container-terminal";
 import { Input } from "@/components/ui/input";
 import { ProjectIframePreview } from "@/components/ui/project-iframe-preview";
@@ -45,7 +54,6 @@ import {
   type WorkspaceExplorerItem,
 } from "@/lib/workspace-path-tree";
 import type { WorkspaceFilesResponse } from "@/lib/workspace-files-types";
-import type { WorkspaceSelectionApiResponse } from "@/lib/workspace-selection-types";
 import { cn } from "@/lib/utils";
 
 type TabKey = ProjectWorkspaceTab;
@@ -69,30 +77,23 @@ function placeholderTreeItems(message: string): Record<string, WorkspaceExplorer
 
 type LiveExplorerTreeProps = {
   projectId?: string;
-  /** When false, hide GitHub-only panels (Actions / PRs); uploads have no linked repo. */
-  projectHasGitRemote: boolean;
   environmentStatus: SynaroProjectEnvironmentStatus;
   items: Record<string, WorkspaceExplorerItem>;
   truncated: boolean;
   loadState: "idle" | "loading" | "ready" | "hint";
   /** True while the File tree tab is visible — used to auto-expand the root folder on each visit. */
   treeTabActive: boolean;
+  onTreeMutated: () => void;
 };
-
-function formatShortDate(iso: string): string {
-  const s = iso.trim();
-  if (s.length >= 10) return s.slice(0, 10);
-  return s || "—";
-}
 
 function LiveExplorerTree({
   projectId,
-  projectHasGitRemote,
   environmentStatus,
   items,
   truncated,
   loadState,
   treeTabActive,
+  onTreeMutated,
 }: LiveExplorerTreeProps) {
   /** Restore from localStorage on every mount (tab switches remount this tree via `treeKey`). */
   const [expandedItems, setExpandedItems] = React.useState<string[]>([]);
@@ -213,6 +214,19 @@ function LiveExplorerTree({
 
   const [query, setQuery] = React.useState("");
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [menuTarget, setMenuTarget] = React.useState<ExplorerMenuTarget | null>(null);
+  const [menuPosition, setMenuPosition] = React.useState<{ x: number; y: number } | null>(null);
+  const [toolbarNameDialog, setToolbarNameDialog] = React.useState<
+    "newFile" | "newFolder" | null
+  >(null);
+  const closeEditorTabRef = React.useRef<
+    ((path: string, opts?: { includeChildren?: boolean }) => void) | null
+  >(null);
+  const renameEditorTabRef = React.useRef<
+    ((from: string, to: string, isFolder?: boolean) => void) | null
+  >(null);
+
+  const canMutate = Boolean(projectId && environmentStatus === "RUNNING" && loadState === "ready");
 
   // Do not memoize on `tree` alone: @headless-tree/react runs the first `rebuildTree()` in
   // `useEffect`, so `getItems()` is empty on the first paint then populated. A `useMemo` whose
@@ -265,98 +279,79 @@ function LiveExplorerTree({
 
   const selectedPath = selectedId ? relativePathFromTreeItemId(selectedId) : null;
 
-  const [detail, setDetail] = React.useState<WorkspaceSelectionApiResponse | null>(null);
-  const [detailLoading, setDetailLoading] = React.useState(false);
-  const [detailError, setDetailError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (!projectId || environmentStatus !== "RUNNING" || !selectedPath) {
-      setDetail(null);
-      setDetailError(null);
-      setDetailLoading(false);
-      return;
+  const editorFilePath = React.useMemo(() => {
+    if (!selectedId || !selectedPath || selectedId === "root" || selectedId.startsWith("syn:")) {
+      return null;
     }
-    if (!selectedId || selectedId === "root" || selectedId.startsWith("syn:")) {
-      setDetail(null);
-      setDetailError(null);
-      setDetailLoading(false);
-      return;
-    }
+    if (!selectedItem || selectedItem.isFolder()) return null;
+    return selectedPath;
+  }, [selectedId, selectedPath, selectedItem]);
 
-    const pid = projectId;
-    const relPath = selectedPath;
+  const selectionLabel = selectedItem ? selectedItem.getItemName() : null;
 
-    const ac = new AbortController();
-    setDetailLoading(true);
-    setDetailError(null);
-    setDetail(null);
+  const handleActiveEditorPath = React.useCallback(
+    (path: string | null) => {
+      if (!path) return;
+      const match = visibleItems.find((it) => relativePathFromTreeItemId(it.getId()) === path);
+      if (match) setSelectedId(match.getId());
+    },
+    [visibleItems],
+  );
 
-    async function run() {
-      try {
-        const res = await fetch(
-          `/api/projects/${encodeURIComponent(pid)}/workspace-selection?path=${encodeURIComponent(relPath)}`,
-          { signal: ac.signal, cache: "no-store" },
-        );
-        const raw = await res.text();
-        let data: WorkspaceSelectionApiResponse | { error?: string } = {};
-        try {
-          data = raw ? (JSON.parse(raw) as WorkspaceSelectionApiResponse & { error?: string }) : {};
-        } catch {
-          if (!ac.signal.aborted) setDetailError("Could not parse selection response.");
-          return;
-        }
-        if (!res.ok) {
-          const errJson = data as { error?: string };
-          if (!ac.signal.aborted) {
-            setDetailError(errJson.error ?? `Request failed (${res.status})`);
-          }
-          return;
-        }
-        if (!ac.signal.aborted) setDetail(data as WorkspaceSelectionApiResponse);
-      } catch (e) {
-        if (ac.signal.aborted) return;
-        setDetailError(e instanceof Error ? e.message : "Network error");
-      } finally {
-        if (!ac.signal.aborted) setDetailLoading(false);
+  const openFileInEditor = React.useCallback(
+    (path: string) => {
+      const fileId = `file:${path}`;
+      setSelectedId(fileId);
+    },
+    [],
+  );
+
+  const contextParentDir = React.useMemo((): string | null => {
+    if (!selectedId || selectedId === "root" || selectedId.startsWith("syn:")) return null;
+    const path = relativePathFromTreeItemId(selectedId);
+    if (!path) return null;
+    const item = visibleItems.find((it) => it.getId() === selectedId);
+    if (item?.isFolder()) return path;
+    return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : null;
+  }, [selectedId, visibleItems]);
+
+  const openContextMenu = React.useCallback(
+    (e: React.MouseEvent, target: ExplorerMenuTarget) => {
+      if (!canMutate) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setMenuPosition({ x: e.clientX, y: e.clientY });
+      setMenuTarget(target);
+      if (target.kind !== "background") {
+        setSelectedId(target.itemId);
       }
-    }
+    },
+    [canMutate],
+  );
 
-    void run();
-    return () => ac.abort();
-  }, [projectId, environmentStatus, selectedId, selectedPath]);
-
-  const commitsToShow =
-    detail?.github?.fileCommits && detail.github.fileCommits.length > 0
-      ? detail.github.fileCommits.map((c) => ({
-        label: c.shortSha,
-        sub: `${formatShortDate(c.date)} · ${c.author}`,
-        line: c.message,
-        href: c.htmlUrl,
-      }))
-      : (detail?.gitLog ?? []).map((c) => ({
-        label: c.shortSha,
-        sub: `${formatShortDate(c.date)} · ${c.author}`,
-        line: c.subject,
-        href: null as string | null,
-      }));
-
-  const showSelectionPanel = Boolean(selectedPath);
+  const closeContextMenu = React.useCallback(() => {
+    setMenuTarget(null);
+    setMenuPosition(null);
+  }, []);
 
   return (
     <div
       className={cn(
         "grid min-h-0 flex-1 grid-cols-1 gap-3 lg:h-full lg:grid-rows-1 lg:gap-3",
         workspaceExplorerTabPaddingClass,
-        showSelectionPanel
-          ? "max-lg:grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]"
-          : "lg:grid-cols-1",
+        "max-lg:grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]",
       )}
     >
       <div
         className={cn(
-          "flex flex-col overflow-hidden rounded-2xl border border-border bg-card",
+          "flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card",
           workspaceExplorerPrimaryCardSizeClass,
         )}
+        onContextMenu={(e) => {
+          if ((e.target as HTMLElement).closest("[data-tree-item]")) return;
+          if ((e.target as HTMLElement).closest("button,input")) return;
+          openContextMenu(e, { kind: "background", parentDir: contextParentDir });
+        }}
       >
         <div className="flex shrink-0 flex-col gap-2 border-b border-border/60 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
           <p className="text-xs font-medium text-muted-foreground">
@@ -367,6 +362,28 @@ function LiveExplorerTree({
           </p>
           <div className="flex min-w-0 items-center gap-2">
             <p className="shrink-0 text-xs text-muted-foreground">{visibleItems.length} items</p>
+            {canMutate ? (
+              <div className="flex shrink-0 items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => setToolbarNameDialog("newFile")}
+                  className="inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  title="New file"
+                  aria-label="New file"
+                >
+                  <FilePlus2 className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setToolbarNameDialog("newFolder")}
+                  className="inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  title="New folder"
+                  aria-label="New folder"
+                >
+                  <FolderPlus className="size-3.5" />
+                </button>
+              </div>
+            ) : null}
             <div className="min-w-0 flex-1 sm:w-[140px] sm:flex-none">
               <Input
                 type="search"
@@ -382,10 +399,16 @@ function LiveExplorerTree({
           <Tree className="gap-0.5" indent={indent} tree={tree}>
             {visibleItems.map((item) => {
               const isSelected = selectedId === item.getId();
+              const menuTargetForItem = explorerTargetFromItemId(item.getId(), item.isFolder());
               return (
                 <TreeItem key={item.getId()} item={item}>
                   <TreeItemLabel
+                    data-tree-item
                     onClick={() => setSelectedId(item.getId())}
+                    onContextMenu={(e) => {
+                      if (!menuTargetForItem) return;
+                      openContextMenu(e, menuTargetForItem);
+                    }}
                     className={cn(
                       "cursor-pointer",
                       isSelected && "bg-accent text-accent-foreground",
@@ -409,214 +432,74 @@ function LiveExplorerTree({
             })}
           </Tree>
         </div>
+        <WorkspaceExplorerContextMenu
+          projectId={projectId}
+          canMutate={canMutate}
+          target={menuTarget}
+          position={menuPosition}
+          onClose={closeContextMenu}
+          onOpenFile={openFileInEditor}
+          onTreeMutated={onTreeMutated}
+          externalNameDialog={
+            toolbarNameDialog
+              ? {
+                  mode: toolbarNameDialog,
+                  parentDir: contextParentDir,
+                  open: true,
+                  onOpenChange: (open) => {
+                    if (!open) setToolbarNameDialog(null);
+                  },
+                }
+              : null
+          }
+          onPathRemoved={(path, isFolder) => {
+            closeEditorTabRef.current?.(path, { includeChildren: isFolder });
+            if (selectedPath === path || (isFolder && selectedPath?.startsWith(`${path}/`))) {
+              setSelectedId(null);
+            }
+          }}
+          onPathRenamed={(from, to, isFolder) => {
+            renameEditorTabRef.current?.(from, to, isFolder);
+            if (selectedPath === from) {
+              setSelectedId(isFolder ? `dir:${to}` : `file:${to}`);
+            } else if (isFolder && selectedPath?.startsWith(`${from}/`)) {
+              setSelectedId(`file:${to}${selectedPath.slice(from.length)}`);
+            }
+          }}
+        />
       </div>
 
-      {showSelectionPanel ? (
-        <div className="flex max-h-[min(52vh,28rem)] min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card lg:max-h-none lg:flex-1">
-          <div className="flex items-start justify-between gap-2 px-3 py-2.5">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-foreground">
-                {selectedItem ? selectedItem.getItemName() : selectedPath}
-              </p>
-              <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{selectedPath}</p>
-            </div>
-            <div className="shrink-0 max-sm:mt-0.5">
-              {truncated ? (
-                <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs text-amber-700 dark:text-amber-400">
-                  List truncated
-                </span>
-              ) : (
-                <span className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">Read-only</span>
-              )}
-            </div>
-          </div>
-
-          <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr] gap-3 p-3 pt-0">
-            <div
-              className={cn(
-                "grid grid-cols-1 gap-3",
-                projectHasGitRemote ? "sm:grid-cols-3" : "sm:grid-cols-1",
-              )}
-            >
-              <div className="rounded-2xl bg-muted/40 p-3">
-                <p className="text-xs font-medium text-muted-foreground">Commits</p>
-                {detailLoading ? (
-                  <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                    Loading…
-                  </div>
-                ) : detailError ? (
-                  <p className="mt-2 text-xs text-destructive">{detailError}</p>
-                ) : commitsToShow.length === 0 ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {projectHasGitRemote
-                      ? "No commit history for this path yet."
-                      : "No Git history — uploaded projects do not include a .git directory (only the files you imported)."}
-                  </p>
-                ) : (
-                  <ul className="mt-2 max-h-32 space-y-2 overflow-auto text-xs">
-                    {commitsToShow.slice(0, 5).map((c, i) => (
-                      <li key={`${c.label}-${i}`} className="leading-snug">
-                        <span className="font-mono text-foreground">{c.label}</span>
-                        {c.href ? (
-                          <a
-                            href={c.href}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="ms-1 inline-flex align-middle text-muted-foreground hover:text-foreground"
-                            aria-label="Open on GitHub"
-                          >
-                            <ExternalLink className="size-3" />
-                          </a>
-                        ) : null}
-                        <span className="mt-0.5 block text-[0.65rem] text-muted-foreground">{c.sub}</span>
-                        <span className="line-clamp-2 text-muted-foreground">{c.line}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              {projectHasGitRemote ? (
-                <>
-                  <div className="rounded-2xl bg-muted/40 p-3">
-                    <p className="text-xs font-medium text-muted-foreground">Last build</p>
-                    {detailLoading ? (
-                      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                        <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                        Loading…
-                      </div>
-                    ) : detail?.github?.lastWorkflowRun ? (
-                      <div className="mt-2 space-y-1 text-xs">
-                        <p className="font-medium text-foreground">{detail.github.lastWorkflowRun.name}</p>
-                        <p className="text-muted-foreground">
-                          {detail.github.lastWorkflowRun.status}
-                          {detail.github.lastWorkflowRun.conclusion
-                            ? ` · ${detail.github.lastWorkflowRun.conclusion}`
-                            : ""}
-                        </p>
-                        <p className="text-[0.65rem] text-muted-foreground">
-                          {formatShortDate(detail.github.lastWorkflowRun.createdAt)}
-                        </p>
-                        <a
-                          href={detail.github.lastWorkflowRun.htmlUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-[0.65rem] text-primary hover:underline"
-                        >
-                          View run <ExternalLink className="size-3" />
-                        </a>
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                        {detail?.github === undefined && projectId
-                          ? "Link GitHub in your account and set a GitHub clone URL on the project to see Actions runs."
-                          : "No recent workflow run returned for this repository."}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="rounded-2xl bg-muted/40 p-3">
-                    <p className="text-xs font-medium text-muted-foreground">Open PRs</p>
-                    {detailLoading ? (
-                      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                        <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                        Loading…
-                      </div>
-                    ) : detail?.github?.openPullRequests && detail.github.openPullRequests.length > 0 ? (
-                      <ul className="mt-2 max-h-32 space-y-2 overflow-auto text-xs">
-                        {detail.github.openPullRequests.map((pr) => (
-                          <li key={pr.number}>
-                            <a
-                              href={pr.htmlUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="font-medium text-primary hover:underline"
-                            >
-                              #{pr.number}
-                            </a>
-                            <span className="ms-1 text-muted-foreground line-clamp-2">{pr.title}</span>
-                            <span className="mt-0.5 block text-[0.65rem] text-muted-foreground">
-                              Updated {formatShortDate(pr.updatedAt)}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                        {detail?.github === undefined && projectId
-                          ? "Connect GitHub to list open pull requests for this repo."
-                          : "No open PRs returned (or none open right now)."}
-                      </p>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="rounded-2xl border border-border/60 bg-muted/25 p-3">
-                  <p className="text-xs font-medium text-muted-foreground">GitHub Actions and pull requests</p>
-                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    Shown only for projects created from a GitHub repository URL. This project is a{" "}
-                    <span className="font-medium text-foreground">folder upload</span> (no linked repo). Files still
-                    live in the same container workspace as a Git import:{" "}
-                    <code className="rounded bg-muted px-1 py-px text-[0.65rem]">/tmp/synaro-workspace/app</code>.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl bg-muted/30 p-3">
-              <p className="shrink-0 text-xs font-medium text-muted-foreground">Preview</p>
-              {detailLoading ? (
-                <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                  Loading file contents…
-                </div>
-              ) : detailError ? (
-                <p className="mt-3 text-xs text-destructive">{detailError}</p>
-              ) : detail?.kind === "directory" ? (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  This path is a directory. Expand it in the tree or pick a file to see source preview.
-                </p>
-              ) : detail?.kind === "missing" || detail?.kind === "notfile" ? (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  This path is not available as a regular file in the container workspace (missing or special file).
-                </p>
-              ) : detail?.kind === "file" && detail.content != null ? (
-                <div className="mt-2 flex min-h-0 flex-1 flex-col gap-2">
-                  {detail.contentTruncated ? (
-                    <p className="shrink-0 text-[0.65rem] text-amber-700 dark:text-amber-400">
-                      Preview truncated — file exceeds the safe read limit in the container.
-                    </p>
-                  ) : null}
-                  <pre className="min-h-0 flex-1 overflow-auto rounded-lg border border-border bg-background/80 p-3 font-mono text-[0.7rem] leading-relaxed text-foreground">
-                    {detail.content}
-                  </pre>
-                </div>
-              ) : (
-                <p className="mt-3 text-xs text-muted-foreground">No preview available for this selection.</p>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <WorkspaceFileEditorPanel
+        projectId={projectId}
+        openFilePath={editorFilePath}
+        openFileLabel={selectionLabel}
+        environmentStatus={environmentStatus}
+        onActivePathChange={handleActiveEditorPath}
+        onRegisterCloseTab={(fn) => {
+          closeEditorTabRef.current = fn;
+        }}
+        onRegisterRenameTab={(fn) => {
+          renameEditorTabRef.current = fn;
+        }}
+      />
     </div>
   );
 }
 
 type TreePanelProps = {
   projectId?: string;
-  projectHasGitRemote: boolean;
   environmentStatus: SynaroProjectEnvironmentStatus;
   treeRefreshKey: number;
   treeTabActive: boolean;
+  onTreeMutated: () => void;
 };
 
 function TreePanel({
   projectId,
-  projectHasGitRemote,
   environmentStatus,
   treeRefreshKey,
   treeTabActive,
+  onTreeMutated,
 }: TreePanelProps) {
   const [items, setItems] = React.useState<Record<string, WorkspaceExplorerItem>>(() =>
     placeholderTreeItems("Connect to a project to load the repository tree."),
@@ -794,13 +677,54 @@ function TreePanel({
       <LiveExplorerTree
         key={treeKey}
         projectId={projectId}
-        projectHasGitRemote={projectHasGitRemote}
         environmentStatus={environmentStatus}
         items={items}
         truncated={truncated}
         loadState={loadState}
         treeTabActive={treeTabActive}
+        onTreeMutated={onTreeMutated}
       />
+    </div>
+  );
+}
+
+function ProjectChatWithPreview({
+  projectId,
+  projectSlug,
+  environmentStatus,
+}: {
+  projectId?: string;
+  projectSlug?: string;
+  environmentStatus: SynaroProjectEnvironmentStatus;
+}) {
+  const { previewPath, openFile, closePreview } = useWorkspaceChatPreview()!;
+
+  return (
+    <div
+      className={cn(
+        "flex h-full min-h-0 w-full gap-0 lg:gap-3",
+        previewPath && "lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(280px,42%)]",
+      )}
+    >
+      <AnimatedAIChat
+        className="h-full min-h-0 min-w-0 flex-1"
+        projectId={projectId}
+        projectSlug={projectSlug}
+      />
+      {previewPath ? (
+        <div className="mt-3 flex min-h-[min(40vh,20rem)] min-w-0 flex-col lg:mt-0 lg:min-h-0">
+          <WorkspaceFileEditorPanel
+            projectId={projectId}
+            openFilePath={previewPath}
+            environmentStatus={environmentStatus}
+            onAllTabsClosed={closePreview}
+            onActivePathChange={(path) => {
+              if (path) openFile(path);
+            }}
+            className="h-full min-h-0"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -828,15 +752,30 @@ export function ProjectWorkspace({
   initialEnvironmentStatus = "INACTIVE",
   canManageInvites = false,
 }: ProjectWorkspaceProps) {
+  const router = useRouter();
   const [tab, setTab] = React.useState<TabKey>("chat");
+
+  const tabFromQuery = router.query.tab;
+  const queryTab =
+    typeof tabFromQuery === "string" &&
+    (tabFromQuery === "tree" ||
+      tabFromQuery === "chat" ||
+      tabFromQuery === "terminal" ||
+      tabFromQuery === "deployments")
+      ? (tabFromQuery as TabKey)
+      : null;
 
   // Restore persisted tab after hydration (localStorage not available on server)
   React.useEffect(() => {
     if (!projectSlug) return;
+    if (queryTab) {
+      setTab(queryTab);
+      return;
+    }
     const saved = readProjectTab(projectSlug);
     if (saved) setTab(saved);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [queryTab]);
 
   React.useEffect(() => {
     if (projectSlug) writeProjectTab(projectSlug, tab);
@@ -1127,7 +1066,7 @@ export function ProjectWorkspace({
         >
           <div
             className={cn(
-              "flex shrink-0 flex-col gap-2 px-2 py-2 sm:px-3 sm:py-2.5",
+              "flex shrink-0 flex-col gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5",
               !showPreviewPanel && "xl:flex-row xl:items-center xl:gap-2 xl:px-4",
             )}
           >
@@ -1162,15 +1101,6 @@ export function ProjectWorkspace({
                   <FolderTree className="size-4" />
                   File tree
                 </button>
-                {projectSlug && (
-                  <a
-                    href={`/projects/${projectSlug}/editor`}
-                    className={tabButtonClass(false)}
-                  >
-                    <PencilIcon className="size-4" />
-                    Editor
-                  </a>
-                )}
                 <button
                   type="button"
                   data-onboarding="tab-terminal"
@@ -1245,28 +1175,10 @@ export function ProjectWorkspace({
                           <button
                             type="button"
                             onClick={() => void handleRun()}
-                            disabled={runStatus === "starting"}
-                            className={cn(
-                              "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-medium transition sm:gap-2 sm:px-3 sm:text-sm",
-                              runStatus === "running"
-                                ? "bg-green-500/15 text-green-600 dark:text-green-400"
-                                : runStatus === "error"
-                                  ? "bg-destructive/10 text-destructive"
-                                  : runStatus === "starting"
-                                    ? "bg-muted text-muted-foreground"
-                                    : "bg-muted text-muted-foreground hover:bg-green-500/10 hover:text-green-600 dark:hover:text-green-400",
-                            )}
+                            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-green-500/15 px-2.5 py-2 text-xs font-medium text-green-600 transition sm:gap-2 sm:px-3 sm:text-sm dark:text-green-400"
                           >
-                            {runStatus === "starting" ? (
-                              <Loader2 className="size-4 animate-spin" />
-                            ) : (
-                              <PlayIcon className="size-4" />
-                            )}
-                            {runStatus === "starting"
-                              ? "Starting…"
-                              : runStatus === "running"
-                                ? "Running"
-                                : "Run"}
+                            <PlayIcon className="size-4" />
+                            Running
                           </button>
                           {runStatus === "running" ? (
                             <button
@@ -1379,10 +1291,10 @@ export function ProjectWorkspace({
             >
               <TreePanel
                 projectId={projectId}
-                projectHasGitRemote={projectHasGitRemote}
                 environmentStatus={environmentStatus}
                 treeRefreshKey={treeRefreshKey}
                 treeTabActive={tab === "tree"}
+                onTreeMutated={() => setTreeRefreshKey((k) => k + 1)}
               />
             </div>
             <div
@@ -1407,11 +1319,13 @@ export function ProjectWorkspace({
               )}
               aria-hidden={tab !== "chat"}
             >
-              <AnimatedAIChat
-                className="h-full w-full min-w-0"
-                projectId={projectId}
-                projectSlug={projectSlug}
-              />
+              <WorkspaceChatPreviewProvider>
+                <ProjectChatWithPreview
+                  projectId={projectId}
+                  projectSlug={projectSlug}
+                  environmentStatus={environmentStatus}
+                />
+              </WorkspaceChatPreviewProvider>
             </div>
             <div
               className={cn(

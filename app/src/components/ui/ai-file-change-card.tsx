@@ -55,12 +55,14 @@ export function AiFileChangeCard({
   previousContent,
   animate = true,
   index = 0,
+  onOpenFile,
 }: {
   path: string;
   content: string;
   previousContent?: string | null;
   animate?: boolean;
   index?: number;
+  onOpenFile?: (path: string) => void;
 }) {
   const preview = React.useMemo(
     () => buildFileChangePreview(path, content, previousContent),
@@ -87,7 +89,18 @@ export function AiFileChangeCard({
     >
       <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2">
         <FileCode2 className="h-3.5 w-3.5 shrink-0 text-sky-400/90" />
-        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{preview.fileName}</span>
+        {onOpenFile ? (
+          <button
+            type="button"
+            onClick={() => onOpenFile(path)}
+            className="min-w-0 truncate text-left font-mono text-xs text-primary underline-offset-2 hover:underline"
+            title={`Open ${path}`}
+          >
+            {path}
+          </button>
+        ) : (
+          <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{preview.fileName}</span>
+        )}
         <div className="ml-auto flex shrink-0 items-center gap-1.5 font-mono text-[0.6875rem]">
           {preview.added > 0 ? (
             <span className="text-emerald-400">+{preview.added}</span>
@@ -114,9 +127,11 @@ export function AiFileChangeCard({
 export function AiFileChangeCardList({
   changes,
   animate = true,
+  onOpenFile,
 }: {
   changes: { path: string; content: string; previousContent?: string | null }[];
   animate?: boolean;
+  onOpenFile?: (path: string) => void;
 }) {
   if (changes.length === 0) return null;
 
@@ -130,6 +145,7 @@ export function AiFileChangeCardList({
           previousContent={change.previousContent}
           animate={animate}
           index={i}
+          onOpenFile={onOpenFile}
         />
       ))}
     </div>

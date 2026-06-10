@@ -99,6 +99,10 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
   const isHome = breadcrumbs.length === 1 && breadcrumbs[0]?.label === "Home";
 
+  const isProjectWorkspace =
+    router.pathname === "/projects/[projectSlug]" ||
+    router.pathname === "/projects/[projectSlug]/analytics";
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Fixed to the viewport on lg+ so long pages do not scroll the rail away (sticky breaks under some overflow ancestors). */}
@@ -198,7 +202,12 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col px-3 py-4 sm:px-6 sm:py-6">
+        <main
+          className={cn(
+            "flex min-h-0 min-w-0 flex-1 flex-col px-3 sm:px-6",
+            isProjectWorkspace ? "pt-1.5 pb-4 sm:pt-2 sm:pb-5" : "py-4 sm:py-6",
+          )}
+        >
           <div className="flex min-h-0 w-full flex-1 flex-col">{children}</div>
         </main>
       </div>

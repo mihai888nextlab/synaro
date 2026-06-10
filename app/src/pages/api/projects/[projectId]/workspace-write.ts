@@ -4,8 +4,8 @@ import { getServerSession } from "next-auth/next";
 import {
   fetchEnvironmentsForProject,
   pickActiveRuntimeEnvironment,
-  remoteWriteWorkspaceFile,
 } from "@/lib/environment-service-api";
+import { terminalWriteWorkspaceFile } from "@/lib/workspace-terminal-fs";
 import { whereProjectByIdForUser } from "@/lib/project-access";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/next-auth-options";
@@ -57,7 +57,7 @@ export default async function handler(
       return;
     }
 
-    await remoteWriteWorkspaceFile(active.id, path.trim(), content);
+    await terminalWriteWorkspaceFile(active.id, path.trim(), content);
     res.status(200).json({ ok: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

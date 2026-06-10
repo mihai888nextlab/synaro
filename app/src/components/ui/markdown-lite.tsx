@@ -1,7 +1,13 @@
 "use client";
 
 import * as React from "react";
+import { FileIcon } from "lucide-react";
 
+import {
+  isLikelyWorkspaceFilePath,
+  normalizeWorkspaceFilePath,
+  splitTextWithFilePaths,
+} from "@/lib/workspace-file-link";
 import { cn } from "@/lib/utils";
 
 type Node =
@@ -73,13 +79,72 @@ function parseInline(md: string): Node[] {
   return out;
 }
 
-function renderNodes(nodes: Node[], keyPrefix: string): React.ReactNode {
+function FilePathButton({
+  path,
+  onOpenFile,
+}: {
+  path: string;
+  onOpenFile: (path: string) => void;
+}) {
+  const normalized = normalizeWorkspaceFilePath(path);
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenFile(normalized)}
+      className={cn(
+        "inline-flex max-w-full items-center gap-1 rounded-md border border-primary/25 bg-primary/5 px-1.5 py-0.5",
+        "font-mono text-[0.85em] text-primary underline-offset-2 transition",
+        "hover:border-primary/40 hover:bg-primary/10 hover:underline",
+      )}
+      title={`Open ${normalized}`}
+    >
+      <FileIcon className="size-3 shrink-0 opacity-70" aria-hidden />
+      <span className="truncate">{path}</span>
+    </button>
+  );
+}
+
+function renderTextWithFileLinks(
+  text: string,
+  keyPrefix: string,
+  onOpenFile?: (path: string) => void,
+): React.ReactNode {
+  if (!onOpenFile) {
+    return <React.Fragment key={keyPrefix}>{text}</React.Fragment>;
+  }
+
+  const parts = splitTextWithFilePaths(text);
+  if (parts.length === 1 && parts[0]?.type === "text") {
+    return <React.Fragment key={keyPrefix}>{text}</React.Fragment>;
+  }
+
+  return parts.map((part, idx) => {
+    const key = `${keyPrefix}-t-${idx}`;
+    if (part.type === "file") {
+      return <FilePathButton key={key} path={part.value} onOpenFile={onOpenFile} />;
+    }
+    return <React.Fragment key={key}>{part.value}</React.Fragment>;
+  });
+}
+
+function renderNodes(
+  nodes: Node[],
+  keyPrefix: string,
+  onOpenFile?: (path: string) => void,
+): React.ReactNode {
   return nodes.map((n, idx) => {
     const key = `${keyPrefix}-${idx}`;
     switch (n.type) {
       case "text":
-        return <React.Fragment key={key}>{n.text}</React.Fragment>;
+        return (
+          <React.Fragment key={key}>
+            {renderTextWithFileLinks(n.text, key, onOpenFile)}
+          </React.Fragment>
+        );
       case "code":
+        if (onOpenFile && isLikelyWorkspaceFilePath(n.text)) {
+          return <FilePathButton key={key} path={n.text} onOpenFile={onOpenFile} />;
+        }
         return (
           <code
             key={key}
@@ -91,10 +156,25 @@ function renderNodes(nodes: Node[], keyPrefix: string): React.ReactNode {
       case "strong":
         return (
           <strong key={key} className="font-semibold text-foreground">
-            {renderNodes(n.children, key)}
+            {renderNodes(n.children, key, onOpenFile)}
           </strong>
         );
-      case "link":
+      case "link": {
+        const href = n.href.trim();
+        const openAsFile =
+          onOpenFile &&
+          !/^https?:\/\//i.test(href) &&
+          !href.startsWith("mailto:") &&
+          isLikelyWorkspaceFilePath(href);
+        if (openAsFile) {
+          return (
+            <FilePathButton
+              key={key}
+              path={href}
+              onOpenFile={onOpenFile}
+            />
+          );
+        }
         return (
           <a
             key={key}
@@ -103,16 +183,16 @@ function renderNodes(nodes: Node[], keyPrefix: string): React.ReactNode {
             rel="noopener noreferrer"
             className="text-primary underline-offset-4 hover:underline"
           >
-            {renderNodes(n.children, key)}
+            {renderNodes(n.children, key, onOpenFile)}
           </a>
         );
+      }
     }
   });
 }
 
-export function MarkdownLite({ text, className }: { text: string; className?: string }) {
-  const lines = React.useMemo(() => text.replace(/\r\n/g, "\n").split("\n"), [text]);
-
+function buildMarkdownBlocks(text: string, onOpenFile?: (path: string) => void): React.ReactNode[] {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
   const blocks: React.ReactNode[] = [];
   let inCode = false;
   let codeAcc: string[] = [];
@@ -138,7 +218,7 @@ export function MarkdownLite({ text, className }: { text: string; className?: st
       <ul key={`ul-${blocks.length}`} className="mt-2 space-y-1.5 pl-4 text-sm text-muted-foreground">
         {listAcc.map((item, i) => (
           <li key={i} className="list-disc">
-            {renderNodes(parseInline(item), `li-${blocks.length}-${i}`)}
+            {renderNodes(parseInline(item), `li-${blocks.length}-${i}`, onOpenFile)}
           </li>
         ))}
       </ul>,
@@ -181,7 +261,7 @@ export function MarkdownLite({ text, className }: { text: string; className?: st
                 ? "mt-3 text-base font-semibold tracking-tight text-foreground"
                 : "mt-3 text-sm font-semibold text-foreground",
           },
-          renderNodes(parseInline(content), `h-${blocks.length}`),
+          renderNodes(parseInline(content), `h-${blocks.length}`, onOpenFile),
         ),
       );
       continue;
@@ -205,14 +285,29 @@ export function MarkdownLite({ text, className }: { text: string; className?: st
         key={`p-${blocks.length}`}
         className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground"
       >
-        {renderNodes(parseInline(line), `p-${blocks.length}`)}
+        {renderNodes(parseInline(line), `p-${blocks.length}`, onOpenFile)}
       </p>,
     );
   }
 
   flushList();
   flushCode();
-
-  return <div className={cn("text-left", className)}>{blocks}</div>;
+  return blocks;
 }
+
+export const MarkdownLite = React.memo(function MarkdownLite({
+  text,
+  className,
+  onOpenFile,
+}: {
+  text: string;
+  className?: string;
+  onOpenFile?: (path: string) => void;
+}) {
+  const blocks = React.useMemo(
+    () => buildMarkdownBlocks(text, onOpenFile),
+    [text, onOpenFile],
+  );
+  return <div className={cn("text-left", className)}>{blocks}</div>;
+});
 

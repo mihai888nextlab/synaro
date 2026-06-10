@@ -229,6 +229,52 @@ export async function remoteWriteWorkspaceFile(envId: string, relativePath: stri
   }
 }
 
+export async function remoteDeleteWorkspacePath(envId: string, relativePath: string): Promise<void> {
+  const base = environmentServiceBaseUrl();
+  const res = await fetch(`${base}/api/environments/${encodeURIComponent(envId)}/workspace-delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: relativePath }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(t || `Delete workspace path failed (${res.status})`);
+  }
+}
+
+export async function remoteCreateWorkspaceDirectory(envId: string, relativePath: string): Promise<void> {
+  const base = environmentServiceBaseUrl();
+  const res = await fetch(`${base}/api/environments/${encodeURIComponent(envId)}/workspace-mkdir`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: relativePath }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(t || `Create workspace directory failed (${res.status})`);
+  }
+}
+
+export async function remoteRenameWorkspacePath(
+  envId: string,
+  fromPath: string,
+  toPath: string,
+): Promise<void> {
+  const base = environmentServiceBaseUrl();
+  const res = await fetch(`${base}/api/environments/${encodeURIComponent(envId)}/workspace-rename`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ from: fromPath, to: toPath }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(t || `Rename workspace path failed (${res.status})`);
+  }
+}
+
 export async function remoteDestroyEnvironment(envId: string): Promise<void> {
   const base = environmentServiceBaseUrl();
   const res = await fetch(`${base}/api/environments/${encodeURIComponent(envId)}`, {

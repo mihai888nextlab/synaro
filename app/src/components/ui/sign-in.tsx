@@ -2,9 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { getProviders, signIn } from "next-auth/react";
+
+import { getLastLoginMethod, setLastLoginMethod, type LastLoginMethod } from "@/lib/last-login-storage";
+import { cn } from "@/lib/utils";
 
 const GitHubIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" className="size-5" viewBox="0 0 24 24" fill="currentColor">
@@ -100,6 +103,20 @@ const FloatingField = ({
   </GlassInputWrapper>
 );
 
+function LastUsedPill({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded-full border border-violet-400/35 bg-violet-500/15 px-2 py-0.5",
+        "text-[0.625rem] font-medium uppercase tracking-wide text-violet-200/90",
+        className,
+      )}
+    >
+      Used last time
+    </span>
+  );
+}
+
 const TestimonialCard = ({ testimonial }: { testimonial: Testimonial }) => (
   <div className="flex w-64 items-start gap-3 rounded-3xl border border-white/10 bg-zinc-900/60 p-5 backdrop-blur-xl">
     <Image
@@ -143,10 +160,18 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   const [googleError, setGoogleError] = useState<string | null>(null);
   const [githubBusy, setGithubBusy] = useState(false);
   const [githubError, setGithubError] = useState<string | null>(null);
+  const [lastLoginMethod, setLastLoginMethodState] = useState<LastLoginMethod | null>(null);
+
+  useEffect(() => {
+    setLastLoginMethodState(getLastLoginMethod());
+  }, []);
+
+  const showLastUsed = mode === "login" && lastLoginMethod !== null;
 
   const handleGoogleClick = async () => {
     setGoogleError(null);
     setGoogleBusy(true);
+    setLastLoginMethod("google");
     try {
       const providers = await getProviders();
       if (!providers?.google) {
@@ -168,6 +193,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   const handleGithubClick = async () => {
     setGithubError(null);
     setGithubBusy(true);
+    setLastLoginMethod("github");
     try {
       const providers = await getProviders();
       if (!providers?.github) {
@@ -291,9 +317,10 @@ export const SignInPage: React.FC<SignInPageProps> = ({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full rounded-2xl bg-white py-4 font-medium text-black transition-colors hover:bg-zinc-200 disabled:pointer-events-none disabled:opacity-60"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-4 font-medium text-black transition-colors hover:bg-zinc-200 disabled:pointer-events-none disabled:opacity-60"
               >
-                {isSubmitting ? "Please wait…" : submitLabel}
+                <span>{isSubmitting ? "Please wait…" : submitLabel}</span>
+                {showLastUsed && lastLoginMethod === "email" ? <LastUsedPill /> : null}
               </button>
             </form>
 
@@ -312,7 +339,10 @@ export const SignInPage: React.FC<SignInPageProps> = ({
                 className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/15 py-4 text-zinc-100 transition-colors hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <GoogleIcon />
-                {googleBusy ? "Redirecting…" : "Continue with Google"}
+                <span className="flex items-center gap-2">
+                  {googleBusy ? "Redirecting…" : "Continue with Google"}
+                  {showLastUsed && lastLoginMethod === "google" ? <LastUsedPill /> : null}
+                </span>
               </button>
               <button
                 type="button"
@@ -321,7 +351,10 @@ export const SignInPage: React.FC<SignInPageProps> = ({
                 className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/15 py-4 text-zinc-100 transition-colors hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <GitHubIcon />
-                {githubBusy ? "Redirecting…" : "Continue with GitHub"}
+                <span className="flex items-center gap-2">
+                  {githubBusy ? "Redirecting…" : "Continue with GitHub"}
+                  {showLastUsed && lastLoginMethod === "github" ? <LastUsedPill /> : null}
+                </span>
               </button>
             </div>
             {googleError ? (

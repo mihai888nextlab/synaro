@@ -13,6 +13,7 @@ import {
   LogOut,
   User,
   CircleUser,
+  Bot,
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 
@@ -33,6 +34,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Projects", href: "/projects", icon: Folder },
+  { label: "Agents", href: "/agents", icon: Bot },
   { label: "Logs", href: "/logs", icon: ScrollText },
   { label: "Settings", href: "/settings", icon: Settings },
 ];

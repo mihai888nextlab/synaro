@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Agent {
+  id           String     @id @default(cuid())
+  userId       String
+  projectId    String?
+  name         String
+  description  String?
+  systemPrompt String
+  tools        String[]   @default([])
+  maxSteps     Int        @default(20)
+  schedule     String?
+  enabled      Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  runs         AgentRun[]
+
+  @@index([userId])
+}
+
+model AgentRun {
+  id         String    @id @default(cuid())
+  agentId    String
+  userId     String
+  status     String    @default("PENDING")
+  trigger    String    @default("manual")
+  input      String?
+  output     String?
+  steps      Json?
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+  agent      Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+  @@index([userId])
+}

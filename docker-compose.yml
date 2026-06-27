@@ -161,6 +161,55 @@ services:
       postgresql:
         condition: service_healthy
 
+  agent-service:
+    build:
+      context: ./services/agent-service
+      dockerfile: Dockerfile.dev
+    container_name: synaro-agent-service
+    restart: unless-stopped
+    ports:
+      - '3007:3005'
+    environment:
+      DATABASE_URL: postgresql://synaro_user:synaro_local_password@postgresql:5432/synaro
+      NODE_ENV: development
+      PORT: 3005
+      LOG_LEVEL: info
+      CORS_ORIGIN: '*'
+      AGENT_SERVICE_KEY: ${AGENT_SERVICE_KEY:-synaro-agent-key-dev}
+      AGENT_RUNNER_URL: http://agent-runner:3006
+    volumes:
+      - ./services/agent-service/src:/app/src
+      - ./services/agent-service/prisma:/app/prisma
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
+  agent-runner:
+    build:
+      context: ./services/agent-runner
+      dockerfile: Dockerfile.dev
+    container_name: synaro-agent-runner
+    restart: unless-stopped
+    ports:
+      - '3008:3006'
+    environment:
+      DATABASE_URL: postgresql://synaro_user:synaro_local_password@postgresql:5432/synaro
+      NODE_ENV: development
+      PORT: 3006
+      LOG_LEVEL: info
+      KIMI_API_KEY: ${KIMI_API_KEY}
+      BRAVE_SEARCH_API_KEY: ${BRAVE_SEARCH_API_KEY:-}
+      AGENT_SERVICE_URL: http://agent-service:3005
+      AGENT_SERVICE_KEY: ${AGENT_SERVICE_KEY:-synaro-agent-key-dev}
+    volumes:
+      - ./services/agent-runner/src:/app/src
+      - ./services/agent-runner/prisma:/app/prisma
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      agent-service:
+        condition: service_started
+
   adminer:
     image: adminer:latest
     container_name: synaro-adminer

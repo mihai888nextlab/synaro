@@ -1,0 +1,595 @@
+"use client";
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  Bot,
+  Plus,
+  Play,
+  Trash2,
+  ChevronRight,
+  Clock,
+  Globe,
+  Zap,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  RefreshCw,
+  X,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogClose,
+} from "@/components/ui/dialog";
+
+type Agent = {
+  id: string;
+  name: string;
+  description?: string | null;
+  systemPrompt: string;
+  tools: string[];
+  maxSteps: number;
+  schedule?: string | null;
+  enabled: boolean;
+  createdAt: string;
+};
+
+type AgentRun = {
+  id: string;
+  status: string;
+  trigger: string;
+  input?: string | null;
+  output?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  createdAt: string;
+};
+
+const TOOL_OPTIONS = [
+  { id: "web_search", label: "Web Search", icon: Globe },
+  { id: "http_get", label: "HTTP GET", icon: Zap },
+  { id: "http_post", label: "HTTP POST", icon: Zap },
+];
+
+const TOOL_LABELS: Record<string, string> = {
+  web_search: "Web Search",
+  http_get: "HTTP GET",
+  http_post: "HTTP POST",
+  finish: "Finish",
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
+    PENDING: {
+      label: "Pending",
+      cls: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
+      icon: <Clock className="size-3" />,
+    },
+    RUNNING: {
+      label: "Running",
+      cls: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+      icon: <Loader2 className="size-3 animate-spin" />,
+    },
+    DONE: {
+      label: "Done",
+      cls: "bg-green-500/10 text-green-400 border-green-500/20",
+      icon: <CheckCircle2 className="size-3" />,
+    },
+    FAILED: {
+      label: "Failed",
+      cls: "bg-red-500/10 text-red-400 border-red-500/20",
+      icon: <XCircle className="size-3" />,
+    },
+  };
+  const s = map[status] ?? { label: status, cls: "bg-muted text-muted-foreground border-border/70", icon: null };
+  return (
+    <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium", s.cls)}>
+      {s.icon}
+      {s.label}
+    </span>
+  );
+}
+
+function RunCard({ run }: { run: AgentRun }) {
+  const [expanded, setExpanded] = useState(false);
+  const date = new Date(run.createdAt).toLocaleString();
+  return (
+    <div className="rounded-xl border border-border/70 bg-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <StatusBadge status={run.status} />
+            <span className="text-xs text-muted-foreground capitalize">{run.trigger}</span>
+          </div>
+          <span className="text-xs text-muted-foreground/70">{date}</span>
+        </div>
+        {run.output && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="shrink-0 text-xs text-muted-foreground hover:text-foreground"
+          >
+            {expanded ? "Hide" : "Show output"}
+          </button>
+        )}
+      </div>
+      {expanded && run.output && (
+        <pre className="mt-3 max-h-64 overflow-auto rounded-lg bg-muted p-3 text-xs text-foreground whitespace-pre-wrap">
+          {run.output}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+function AgentCard({
+  agent,
+  onTrigger,
+  onDelete,
+  onViewRuns,
+  triggering,
+}: {
+  agent: Agent;
+  onTrigger: (id: string) => void;
+  onDelete: (id: string) => void;
+  onViewRuns: (agent: Agent) => void;
+  triggering: boolean;
+}) {
+  return (
+    <div className="group flex flex-col rounded-2xl border border-border/70 bg-card p-5 transition hover:border-border">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col">
+          <div className="flex items-center gap-2">
+            <h3 className="truncate text-sm font-semibold text-foreground">{agent.name}</h3>
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
+                agent.enabled
+                  ? "bg-green-500/10 text-green-400"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
+              {agent.enabled ? "Enabled" : "Disabled"}
+            </span>
+          </div>
+          {agent.description && (
+            <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{agent.description}</p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => onDelete(agent.id)}
+          className="shrink-0 rounded-lg p-1.5 text-muted-foreground/50 opacity-0 transition hover:bg-muted hover:text-red-400 group-hover:opacity-100"
+          title="Delete agent"
+        >
+          <Trash2 className="size-3.5" />
+        </button>
+      </div>
+
+      {agent.tools.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {agent.tools.map((t) => (
+            <span
+              key={t}
+              className="rounded-full border border-border/70 bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+            >
+              {TOOL_LABELS[t] ?? t}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {agent.schedule && (
+        <div className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Clock className="size-3" />
+          <span className="font-mono">{agent.schedule}</span>
+        </div>
+      )}
+
+      <div className="mt-auto flex items-center gap-2 pt-3">
+        <button
+          type="button"
+          onClick={() => onTrigger(agent.id)}
+          disabled={triggering}
+          className="flex items-center gap-1.5 rounded-lg border border-border/70 bg-muted px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-accent disabled:opacity-50"
+        >
+          {triggering ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            <Play className="size-3" />
+          )}
+          Run
+        </button>
+        <button
+          type="button"
+          onClick={() => onViewRuns(agent)}
+          className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
+        >
+          View runs
+          <ChevronRight className="size-3" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const defaultForm = {
+  name: "",
+  description: "",
+  systemPrompt: "",
+  tools: [] as string[],
+  maxSteps: 20,
+  schedule: "",
+  input: "",
+};
+
+export function AgentsPageClient() {
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [form, setForm] = useState(defaultForm);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [triggering, setTriggering] = useState<string | null>(null);
+  const [triggerOpen, setTriggerOpen] = useState(false);
+  const [triggerTarget, setTriggerTarget] = useState<Agent | null>(null);
+  const [runsOpen, setRunsOpen] = useState(false);
+  const [runsAgent, setRunsAgent] = useState<Agent | null>(null);
+  const [runs, setRuns] = useState<AgentRun[]>([]);
+  const [runsLoading, setRunsLoading] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchAgents = useCallback(async () => {
+    try {
+      const res = await fetch("/api/agents");
+      if (res.ok) setAgents((await res.json()) as Agent[]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchAgents();
+  }, [fetchAgents]);
+
+  const fetchRuns = useCallback(async (agentId: string) => {
+    setRunsLoading(true);
+    try {
+      const res = await fetch(`/api/agents/${agentId}/runs`);
+      if (res.ok) setRuns((await res.json()) as AgentRun[]);
+    } finally {
+      setRunsLoading(false);
+    }
+  }, []);
+
+  // Poll runs while any are active
+  useEffect(() => {
+    if (!runsOpen || !runsAgent) {
+      if (pollRef.current) clearInterval(pollRef.current);
+      return;
+    }
+    const hasActive = runs.some((r) => r.status === "PENDING" || r.status === "RUNNING");
+    if (hasActive) {
+      pollRef.current = setInterval(() => void fetchRuns(runsAgent.id), 3_000);
+    }
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [runsOpen, runsAgent, runs, fetchRuns]);
+
+  const handleViewRuns = async (agent: Agent) => {
+    setRunsAgent(agent);
+    setRuns([]);
+    setRunsOpen(true);
+    await fetchRuns(agent.id);
+  };
+
+  const handleOpenTrigger = (agent: Agent) => {
+    setTriggerTarget(agent);
+    setForm((f) => ({ ...f, input: "" }));
+    setTriggerOpen(true);
+  };
+
+  const handleTrigger = async () => {
+    if (!triggerTarget) return;
+    setTriggering(triggerTarget.id);
+    setTriggerOpen(false);
+    try {
+      await fetch(`/api/agents/${triggerTarget.id}/trigger`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ input: form.input || undefined }),
+      });
+      if (runsAgent?.id === triggerTarget.id) await fetchRuns(triggerTarget.id);
+    } finally {
+      setTriggering(null);
+    }
+  };
+
+  const handleDelete = async (agentId: string) => {
+    if (!window.confirm("Delete this agent and all its runs?")) return;
+    await fetch(`/api/agents/${agentId}`, { method: "DELETE" });
+    if (runsAgent?.id === agentId) setRunsOpen(false);
+    await fetchAgents();
+  };
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreating(true);
+    setCreateError("");
+    try {
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          description: form.description || undefined,
+          systemPrompt: form.systemPrompt,
+          tools: form.tools,
+          maxSteps: form.maxSteps,
+          schedule: form.schedule || undefined,
+        }),
+      });
+      if (res.ok) {
+        setCreateOpen(false);
+        setForm(defaultForm);
+        await fetchAgents();
+      } else {
+        const data = (await res.json()) as { error?: string };
+        setCreateError(data.error ?? "Failed to create agent");
+      }
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const toggleTool = (toolId: string) => {
+    setForm((f) => ({
+      ...f,
+      tools: f.tools.includes(toolId) ? f.tools.filter((t) => t !== toolId) : [...f.tools, toolId],
+    }));
+  };
+
+  return (
+    <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">Agents</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Autonomous AI agents that run tasks using tools
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => { setCreateOpen(true); setCreateError(""); }}
+          className="flex items-center gap-2 rounded-xl border border-border/70 bg-card px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted"
+        >
+          <Plus className="size-4" />
+          New Agent
+        </button>
+      </div>
+
+      {/* Content */}
+      {loading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-44 animate-pulse rounded-2xl border border-border/70 bg-card" />
+          ))}
+        </div>
+      ) : agents.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/70 py-20 text-center">
+          <Bot className="mb-4 size-10 text-muted-foreground/40" />
+          <p className="text-sm font-medium text-foreground">No agents yet</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Create an agent to automate tasks with AI tools
+          </p>
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="mt-4 flex items-center gap-2 rounded-xl border border-border/70 bg-card px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted"
+          >
+            <Plus className="size-4" />
+            New Agent
+          </button>
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {agents.map((agent) => (
+            <AgentCard
+              key={agent.id}
+              agent={agent}
+              onTrigger={() => handleOpenTrigger(agent)}
+              onDelete={handleDelete}
+              onViewRuns={handleViewRuns}
+              triggering={triggering === agent.id}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Create Agent Dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-w-xl rounded-2xl border border-border/70 bg-card p-0 shadow-2xl">
+          <div className="border-b border-border/70 px-6 py-4">
+            <DialogTitle className="text-base font-semibold text-foreground">New Agent</DialogTitle>
+          </div>
+          <form onSubmit={(e) => void handleCreate(e)} className="flex flex-col gap-4 px-6 py-5">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Name</label>
+              <input
+                required
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="My Research Agent"
+                className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Description <span className="text-muted-foreground/50">(optional)</span></label>
+              <input
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="What does this agent do?"
+                className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">System Prompt</label>
+              <textarea
+                required
+                rows={4}
+                value={form.systemPrompt}
+                onChange={(e) => setForm((f) => ({ ...f, systemPrompt: e.target.value }))}
+                placeholder="You are a helpful research assistant. When given a task, search the web and provide a detailed, accurate answer."
+                className="resize-none rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-medium text-muted-foreground">Tools</label>
+              <div className="flex flex-wrap gap-2">
+                {TOOL_OPTIONS.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => toggleTool(t.id)}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition",
+                      form.tools.includes(t.id)
+                        ? "border-primary/40 bg-primary/10 text-primary"
+                        : "border-border/70 bg-background text-muted-foreground hover:bg-muted",
+                    )}
+                  >
+                    <t.icon className="size-3" />
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Max Steps</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={form.maxSteps}
+                  onChange={(e) => setForm((f) => ({ ...f, maxSteps: Number(e.target.value) }))}
+                  className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Cron Schedule <span className="text-muted-foreground/50">(optional)</span>
+                </label>
+                <input
+                  value={form.schedule}
+                  onChange={(e) => setForm((f) => ({ ...f, schedule: e.target.value }))}
+                  placeholder="*/30 * * * *"
+                  className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+            </div>
+            {createError && <p className="text-xs text-red-400">{createError}</p>}
+            <div className="flex justify-end gap-2 pt-1">
+              <DialogClose asChild>
+                <button type="button" className="rounded-xl border border-border/70 px-4 py-2 text-sm text-muted-foreground transition hover:bg-muted">
+                  Cancel
+                </button>
+              </DialogClose>
+              <button
+                type="submit"
+                disabled={creating}
+                className="flex items-center gap-2 rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background transition hover:opacity-90 disabled:opacity-50"
+              >
+                {creating && <Loader2 className="size-3.5 animate-spin" />}
+                Create Agent
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Trigger Dialog */}
+      <Dialog open={triggerOpen} onOpenChange={setTriggerOpen}>
+        <DialogContent className="max-w-md rounded-2xl border border-border/70 bg-card p-0 shadow-2xl">
+          <div className="border-b border-border/70 px-6 py-4">
+            <DialogTitle className="text-base font-semibold text-foreground">
+              Run {triggerTarget?.name}
+            </DialogTitle>
+          </div>
+          <div className="flex flex-col gap-4 px-6 py-5">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">
+                Input <span className="text-muted-foreground/50">(optional)</span>
+              </label>
+              <textarea
+                rows={3}
+                value={form.input}
+                onChange={(e) => setForm((f) => ({ ...f, input: e.target.value }))}
+                placeholder="What should the agent do? Leave empty to use the system prompt goal."
+                className="resize-none rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <DialogClose asChild>
+                <button type="button" className="rounded-xl border border-border/70 px-4 py-2 text-sm text-muted-foreground transition hover:bg-muted">
+                  Cancel
+                </button>
+              </DialogClose>
+              <button
+                type="button"
+                onClick={() => void handleTrigger()}
+                className="flex items-center gap-2 rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background transition hover:opacity-90"
+              >
+                <Play className="size-3.5" />
+                Run Agent
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Runs Dialog */}
+      <Dialog open={runsOpen} onOpenChange={setRunsOpen}>
+        <DialogContent className="max-w-2xl rounded-2xl border border-border/70 bg-card p-0 shadow-2xl">
+          <div className="flex flex-row items-center justify-between border-b border-border/70 px-6 py-4">
+            <DialogTitle className="text-base font-semibold text-foreground">
+              Runs — {runsAgent?.name}
+            </DialogTitle>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => runsAgent && void fetchRuns(runsAgent.id)}
+                className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                title="Refresh"
+              >
+                <RefreshCw className={cn("size-4", runsLoading && "animate-spin")} />
+              </button>
+              <DialogClose asChild>
+                <button type="button" className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground">
+                  <X className="size-4" />
+                </button>
+              </DialogClose>
+            </div>
+          </div>
+          <div className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto px-6 py-5">
+            {runsLoading && runs.length === 0 ? (
+              <div className="flex items-center justify-center py-10">
+                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : runs.length === 0 ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                No runs yet. Click <strong>Run</strong> to start one.
+              </div>
+            ) : (
+              runs.map((run) => <RunCard key={run.id} run={run} />)
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

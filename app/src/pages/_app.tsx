@@ -19,6 +19,7 @@ export default function App({ Component, pageProps }: AppPropsWithSession) {
     router.pathname === "/dashboard" ||
     router.pathname === "/projects" ||
     router.pathname.startsWith("/projects/") ||
+    router.pathname === "/agents" ||
     router.pathname === "/logs" ||
     router.pathname === "/settings" ||
     router.pathname.startsWith("/settings/");

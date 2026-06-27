@@ -10,6 +10,9 @@ import {
   listWorkspaceFilePaths,
   getWorkspaceSelection,
   writeWorkspaceFile,
+  createWorkspaceDirectory,
+  deleteWorkspacePath,
+  renameWorkspacePath,
   reconcileDeadContainersForProject,
   uploadWorkspaceTar,
   exportWorkspaceTarGzip,
@@ -170,6 +173,66 @@ export const environmentRoutes: FastifyPluginAsync = async (app) => {
       if (msg.includes('No container')) return reply.status(404).send({ error: msg })
       app.log.error(err)
       return reply.status(500).send({ error: 'Failed to read workspace selection', detail: msg })
+    }
+  })
+
+  // POST /api/environments/:id/workspace-delete — remove a file or directory
+  app.post('/:id/workspace-delete', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const deleteSchema = z.object({ path: z.string().min(1).max(4096) })
+    const body = deleteSchema.safeParse(req.body)
+    if (!body.success) return reply.status(400).send({ error: 'Invalid request body' })
+    try {
+      await deleteWorkspacePath(id, body.data.path)
+      return reply.send({ ok: true })
+    } catch (err) {
+      const msg = String(err)
+      if (msg.includes('Invalid path')) return reply.status(400).send({ error: msg })
+      if (msg.includes('not active')) return reply.status(409).send({ error: msg })
+      if (msg.includes('No container')) return reply.status(404).send({ error: msg })
+      app.log.error(err)
+      return reply.status(500).send({ error: 'Failed to delete path', detail: msg })
+    }
+  })
+
+  // POST /api/environments/:id/workspace-mkdir — create a directory in the workspace
+  app.post('/:id/workspace-mkdir', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const mkdirSchema = z.object({ path: z.string().min(1).max(4096) })
+    const body = mkdirSchema.safeParse(req.body)
+    if (!body.success) return reply.status(400).send({ error: 'Invalid request body' })
+    try {
+      await createWorkspaceDirectory(id, body.data.path)
+      return reply.send({ ok: true })
+    } catch (err) {
+      const msg = String(err)
+      if (msg.includes('Invalid path')) return reply.status(400).send({ error: msg })
+      if (msg.includes('not active')) return reply.status(409).send({ error: msg })
+      if (msg.includes('No container')) return reply.status(404).send({ error: msg })
+      app.log.error(err)
+      return reply.status(500).send({ error: 'Failed to create directory', detail: msg })
+    }
+  })
+
+  // POST /api/environments/:id/workspace-rename — rename or move a path in the workspace
+  app.post('/:id/workspace-rename', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const renameSchema = z.object({
+      from: z.string().min(1).max(4096),
+      to: z.string().min(1).max(4096),
+    })
+    const body = renameSchema.safeParse(req.body)
+    if (!body.success) return reply.status(400).send({ error: 'Invalid request body' })
+    try {
+      await renameWorkspacePath(id, body.data.from, body.data.to)
+      return reply.send({ ok: true })
+    } catch (err) {
+      const msg = String(err)
+      if (msg.includes('Invalid path')) return reply.status(400).send({ error: msg })
+      if (msg.includes('not active')) return reply.status(409).send({ error: msg })
+      if (msg.includes('No container')) return reply.status(404).send({ error: msg })
+      app.log.error(err)
+      return reply.status(500).send({ error: 'Failed to rename path', detail: msg })
     }
   })
 

@@ -3,28 +3,20 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { Loader2, Sparkles } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
+import { taskPollFingerprint } from "@/lib/ai-task-message";
+import type { AiRemoteTask, AiTaskStatus } from "@/lib/ai-task-types";
 import { cn } from "@/lib/utils";
 import { showBrowserNotification, useNotifications } from "@/components/ui/notifications";
 
-type TaskStatus = "PENDING" | "ANALYZING" | "GENERATING" | "APPLYING" | "DONE" | "FAILED";
-
-type RemoteTask = {
-  id: string;
-  status: TaskStatus;
-  progress?: string | null;
-  errorMessage?: string | null;
-  result?: { summary?: string | null } | unknown | null;
-  projectId?: string | null;
-  projectSlug?: string | null;
-};
+export type { AiRemoteTask, AiTaskStatus } from "@/lib/ai-task-types";
 
 type ActiveAiTask = {
   projectId: string;
   projectSlug?: string | null;
   taskId: string;
-  status?: TaskStatus;
+  status?: AiTaskStatus;
   progress?: string | null;
   updatedAtMs?: number;
 };
@@ -32,13 +24,16 @@ type ActiveAiTask = {
 type Ctx = {
   activeTask: ActiveAiTask | null;
   setActiveTask: (task: ActiveAiTask | null) => void;
+  /** Latest task payload from the shared poller (one request per interval). */
+  polledTask: AiRemoteTask | null;
 };
 
 const STORAGE_KEY = "synaro:ai:activeTask";
+const TASK_POLL_MS = 700;
 
 const AiBackgroundTaskContext = React.createContext<Ctx | null>(null);
 
-function isTerminal(status: TaskStatus | undefined) {
+function isTerminal(status: AiTaskStatus | undefined) {
   return status === "DONE" || status === "FAILED";
 }
 
@@ -69,6 +64,8 @@ function storeActiveTask(task: ActiveAiTask | null) {
 
 export function AiBackgroundTaskProvider({ children }: { children: React.ReactNode }) {
   const [activeTask, setActiveTaskState] = React.useState<ActiveAiTask | null>(null);
+  const [polledTask, setPolledTask] = React.useState<AiRemoteTask | null>(null);
+  const lastPollFingerprintRef = React.useRef<string | null>(null);
   const lastNotifiedTaskIdRef = React.useRef<string | null>(null);
   const { push } = useNotifications();
 
@@ -77,13 +74,11 @@ export function AiBackgroundTaskProvider({ children }: { children: React.ReactNo
     storeActiveTask(task);
   }, []);
 
-  // Restore on hydration
   React.useEffect(() => {
     const stored = loadStoredActiveTask();
     if (stored) setActiveTaskState(stored);
   }, []);
 
-  // If we have a stored projectId but not status, try to infer by asking the tasks list endpoint once.
   React.useEffect(() => {
     if (!activeTask?.projectId) return;
     if (activeTask.status) return;
@@ -96,27 +91,39 @@ export function AiBackgroundTaskProvider({ children }: { children: React.ReactNo
           { cache: "no-store" },
         );
         if (!res.ok) return;
-        const data = (await res.json()) as { tasks?: RemoteTask[] } | RemoteTask[] | unknown;
+        const data = (await res.json()) as { tasks?: AiRemoteTask[] } | AiRemoteTask[] | unknown;
         if (cancelled) return;
 
         const tasks = Array.isArray(data)
-          ? (data as RemoteTask[])
-          : (data as { tasks?: RemoteTask[] }).tasks ?? [];
+          ? (data as AiRemoteTask[])
+          : (data as { tasks?: AiRemoteTask[] }).tasks ?? [];
 
-        const running = tasks.find((t) => t.id === activeTask.taskId && !isTerminal(t.status));
-        if (running) {
+        const match = tasks.find((t) => t.id === activeTask.taskId);
+        if (match && !isTerminal(match.status)) {
           const next: ActiveAiTask = {
             ...activeTask,
-            status: running.status,
-            progress: running.progress ?? null,
+            status: match.status,
+            progress: match.progress ?? null,
             updatedAtMs: Date.now(),
           };
           setActiveTaskState(next);
           storeActiveTask(next);
-        } else {
-          // task no longer running
-          setActiveTask(null);
+          return;
         }
+
+        let terminal = match;
+        if (!terminal) {
+          const one = await fetch(`/api/ai-tasks/${encodeURIComponent(activeTask.taskId)}`, {
+            cache: "no-store",
+          });
+          if (one.ok) terminal = (await one.json()) as AiRemoteTask;
+        }
+
+        if (terminal) {
+          lastPollFingerprintRef.current = taskPollFingerprint(terminal);
+          setPolledTask(terminal);
+        }
+        setActiveTask(null);
       } catch {
         // ignore
       }
@@ -127,29 +134,41 @@ export function AiBackgroundTaskProvider({ children }: { children: React.ReactNo
     };
   }, [activeTask, setActiveTask]);
 
-  // Poll task status while it's running
+  const pollingTaskIdRef = React.useRef<string | null>(null);
+
   React.useEffect(() => {
     if (!activeTask?.taskId) return;
     if (isTerminal(activeTask.status)) return;
+
+    if (pollingTaskIdRef.current !== activeTask.taskId) {
+      pollingTaskIdRef.current = activeTask.taskId;
+      lastPollFingerprintRef.current = null;
+    }
 
     let cancelled = false;
     let timer: ReturnType<typeof setInterval> | null = null;
 
     async function tick() {
       try {
-        const res = await fetch(`/api/ai-tasks/${encodeURIComponent(activeTask.taskId)}`, {
+        const res = await fetch(`/api/ai-tasks/${encodeURIComponent(activeTask!.taskId)}`, {
           cache: "no-store",
         });
         if (!res.ok) {
           if (res.status === 404) setActiveTask(null);
           return;
         }
-        const task = (await res.json()) as RemoteTask;
+        const task = (await res.json()) as AiRemoteTask;
         if (cancelled) return;
 
+        const fingerprint = taskPollFingerprint(task);
+        if (isTerminal(task.status) || fingerprint !== lastPollFingerprintRef.current) {
+          lastPollFingerprintRef.current = fingerprint;
+          setPolledTask(task);
+        }
+
         const next: ActiveAiTask = {
-          projectId: activeTask.projectId,
-          projectSlug: activeTask.projectSlug ?? null,
+          projectId: activeTask!.projectId,
+          projectSlug: activeTask!.projectSlug ?? null,
           taskId: task.id,
           status: task.status,
           progress: task.progress ?? null,
@@ -157,26 +176,26 @@ export function AiBackgroundTaskProvider({ children }: { children: React.ReactNo
         };
 
         if (isTerminal(task.status)) {
-          // Notify once per task
           if (lastNotifiedTaskIdRef.current !== task.id) {
             lastNotifiedTaskIdRef.current = task.id;
             const href =
-              activeTask.projectSlug?.trim() ? `/projects/${encodeURIComponent(activeTask.projectSlug)}` : undefined;
-            const title =
-              task.status === "DONE" ? "AI finished your task" : "AI task failed";
+              activeTask!.projectSlug?.trim()
+                ? `/projects/${encodeURIComponent(activeTask!.projectSlug)}`
+                : undefined;
+            const title = task.status === "DONE" ? "AI finished your task" : "AI task failed";
             const description =
               task.status === "DONE"
-                ? (typeof (task.result as any)?.summary === "string"
-                    ? ((task.result as any).summary as string)
-                    : activeTask.progress ?? undefined)
-                : task.errorMessage ?? activeTask.progress ?? undefined;
+                ? typeof (task.result as { summary?: string })?.summary === "string"
+                  ? ((task.result as { summary: string }).summary)
+                  : activeTask!.progress ?? undefined
+                : task.errorMessage ?? activeTask!.progress ?? undefined;
 
             push({
               type: task.status === "DONE" ? "ai_task_done" : "ai_task_failed",
               title,
               description,
               href,
-              meta: { taskId: task.id, projectId: activeTask.projectId },
+              meta: { taskId: task.id, projectId: activeTask!.projectId },
             });
 
             showBrowserNotification(title, {
@@ -185,7 +204,10 @@ export function AiBackgroundTaskProvider({ children }: { children: React.ReactNo
             });
           }
           setActiveTask(null);
-        } else {
+        } else if (
+          activeTask!.status !== task.status ||
+          activeTask!.progress !== (task.progress ?? null)
+        ) {
           setActiveTaskState(next);
           storeActiveTask(next);
         }
@@ -195,15 +217,18 @@ export function AiBackgroundTaskProvider({ children }: { children: React.ReactNo
     }
 
     void tick();
-    timer = setInterval(() => void tick(), 1200);
+    timer = setInterval(() => void tick(), TASK_POLL_MS);
 
     return () => {
       cancelled = true;
       if (timer) clearInterval(timer);
     };
-  }, [activeTask?.projectId, activeTask?.projectSlug, activeTask?.status, activeTask?.taskId, setActiveTask]);
+  }, [activeTask?.projectId, activeTask?.projectSlug, activeTask?.taskId, push, setActiveTask]);
 
-  const ctx: Ctx = React.useMemo(() => ({ activeTask, setActiveTask }), [activeTask, setActiveTask]);
+  const ctx: Ctx = React.useMemo(
+    () => ({ activeTask, setActiveTask, polledTask }),
+    [activeTask, polledTask, setActiveTask],
+  );
 
   return (
     <AiBackgroundTaskContext.Provider value={ctx}>{children}</AiBackgroundTaskContext.Provider>
@@ -218,6 +243,34 @@ export function useAiBackgroundTask() {
   return ctx;
 }
 
+function pillStatusLabel(
+  progress: string | null | undefined,
+  status: AiTaskStatus | undefined,
+): string {
+  const raw = progress?.trim();
+  if (raw) {
+    if (/writing your code/i.test(raw)) return "Writing";
+    if (/drafting/i.test(raw)) return "Drafting";
+    if (/reading|scanning/i.test(raw)) return "Reading";
+    if (/analyzing|identifying/i.test(raw)) return "Analyzing";
+    if (/applying|writing \d+ file/i.test(raw)) return "Applying";
+    if (/github|commit|push/i.test(raw)) return "Syncing";
+    if (/summariz/i.test(raw)) return "Summarizing";
+    if (raw.length > 22) return `${raw.slice(0, 20)}…`;
+    return raw.replace(/\.{3}$|…$/g, "");
+  }
+  switch (status) {
+    case "ANALYZING":
+      return "Analyzing";
+    case "GENERATING":
+      return "Generating";
+    case "APPLYING":
+      return "Applying";
+    default:
+      return "Running";
+  }
+}
+
 export function AiBackgroundTaskPill({ className }: { className?: string }) {
   const { activeTask } = useAiBackgroundTask();
   const router = useRouter();
@@ -226,29 +279,31 @@ export function AiBackgroundTaskPill({ className }: { className?: string }) {
 
   const slug = activeTask.projectSlug?.trim();
   const href = slug ? `/projects/${encodeURIComponent(slug)}` : router.asPath;
-  const label = activeTask.progress?.trim() || "AI is running…";
+  const fullLabel = activeTask.progress?.trim() || "AI task in progress";
+  const shortLabel = pillStatusLabel(activeTask.progress, activeTask.status);
 
   return (
     <Link
       href={href}
       className={cn(
-        "group inline-flex max-w-[18rem] items-center gap-2 rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs text-foreground shadow-sm shadow-black/5",
-        "transition hover:bg-muted",
+        "group inline-flex max-w-[9.5rem] items-center gap-1.5 rounded-full",
+        "border border-border/35 bg-muted/15 px-2 py-0.5",
+        "text-[11px] leading-none text-muted-foreground",
+        "transition-colors hover:border-border/55 hover:bg-muted/35 hover:text-foreground",
         className,
       )}
-      title={label}
+      title={fullLabel}
+      aria-label={`${fullLabel}. Open project chat.`}
     >
-      <span className="relative inline-flex size-5 items-center justify-center rounded-full bg-primary/10 text-primary">
-        <Sparkles className="size-3.5" />
-        <Loader2 className="absolute -right-1 -top-1 size-3 animate-spin text-primary/70" />
+      <span className="relative flex size-1.5 shrink-0" aria-hidden>
+        <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/40 opacity-60" />
+        <span className="relative inline-flex size-1.5 rounded-full bg-primary/80" />
       </span>
-      <span className="min-w-0 flex-1 truncate text-muted-foreground group-hover:text-foreground">
-        {label}
-      </span>
-      <span className="text-muted-foreground/70 transition group-hover:text-muted-foreground">
-        View
-      </span>
+      <span className="min-w-0 truncate">{shortLabel}</span>
+      <ChevronRight
+        className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-50"
+        aria-hidden
+      />
     </Link>
   );
 }
-

@@ -33,4 +33,27 @@ describe("useTypewriter", () => {
     expect(result.current.displayed).toBe("instant");
     expect(result.current.isComplete).toBe(true);
   });
+
+  it("continues from the cursor when text grows", () => {
+    const { result, rerender } = renderHook(
+      ({ text }) => useTypewriter(text, { enabled: true, charsPerTick: 5, intervalMs: 10 }),
+      { initialProps: { text: "hello" } },
+    );
+
+    act(() => {
+      jest.advanceTimersByTime(100);
+    });
+    expect(result.current.displayed).toBe("hello");
+    expect(result.current.isComplete).toBe(true);
+
+    rerender({ text: "hello world" });
+    expect(result.current.displayed).toBe("hello");
+    expect(result.current.isComplete).toBe(false);
+
+    act(() => {
+      jest.advanceTimersByTime(100);
+    });
+    expect(result.current.displayed).toBe("hello world");
+    expect(result.current.isComplete).toBe(true);
+  });
 });

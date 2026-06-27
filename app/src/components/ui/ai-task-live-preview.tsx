@@ -84,16 +84,21 @@ export function TypewriterMarkdown({
   enabled,
   className,
   onComplete,
+  streaming = false,
 }: {
   text: string;
   enabled: boolean;
   className?: string;
   onComplete?: () => void;
+  /** Slower reveal while tokens are still arriving from the server. */
+  streaming?: boolean;
 }) {
   const { displayed, isComplete } = useTypewriter(text, {
     enabled,
-    charsPerTick: 3,
-    intervalMs: 14,
+    charsPerTick: streaming ? 1 : 3,
+    intervalMs: streaming ? 32 : 14,
+    catchUpThreshold: streaming ? 120 : 40,
+    catchUpCharsPerTick: streaming ? 4 : 32,
   });
 
   React.useEffect(() => {
@@ -114,16 +119,23 @@ export function TypewriterMarkdownLite({
   enabled,
   className,
   onComplete,
+  streaming = false,
+  onOpenFile,
 }: {
   text: string;
   enabled: boolean;
   className?: string;
   onComplete?: () => void;
+  /** Faster catch-up while tokens are still arriving from the server. */
+  streaming?: boolean;
+  onOpenFile?: (path: string) => void;
 }) {
   const { displayed, isComplete } = useTypewriter(text, {
     enabled,
-    charsPerTick: 3,
-    intervalMs: 14,
+    charsPerTick: streaming ? 6 : 3,
+    intervalMs: streaming ? 10 : 14,
+    catchUpThreshold: streaming ? 24 : 40,
+    catchUpCharsPerTick: streaming ? 48 : 32,
   });
 
   React.useEffect(() => {
@@ -133,7 +145,7 @@ export function TypewriterMarkdownLite({
 
   return (
     <div className={cn("text-left", className)}>
-      <MarkdownLite text={displayed} />
+      <MarkdownLite text={displayed} onOpenFile={onOpenFile} />
       {enabled && !isComplete ? (
         <span className="whitespace-pre-wrap">
           <BlinkCursor />

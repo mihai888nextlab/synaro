@@ -15,6 +15,8 @@ import {
   type TaskGitContext,
   type TaskIntent,
 } from '../lib/task-intent.js'
+import { streamKimiChatCompletion } from '../lib/kimi-stream.js'
+import { readWorkspaceFilesParallel } from '../lib/read-workspace-files.js'
 import { prisma } from '../lib/prisma.js'
 
 type TaskStatus = 'PENDING' | 'ANALYZING' | 'GENERATING' | 'APPLYING' | 'DONE' | 'FAILED'
@@ -108,6 +110,7 @@ Return ONLY valid JSON, no explanation.`
 async function generateChanges(
   prompt: string,
   existingFiles: { path: string; content: string }[],
+  taskId?: string,
 ): Promise<{ result: TaskResult; inputTokens: number; outputTokens: number }> {
   const systemPrompt = `You are an expert software engineer. Given a task and the current source files, produce all necessary file changes to complete the task — including new files.
 
@@ -137,18 +140,37 @@ Rules:
       : '(no existing files yet — this is a new project)'
 
   const userPrompt = `Task: ${prompt}\n\nExisting files:\n\n${filesSection}`
+  const messages = [
+    { role: 'system' as const, content: systemPrompt },
+    { role: 'user' as const, content: userPrompt },
+  ]
 
-  const response = await kimi.chat.completions.create({
-    model: MODELS.GENERATE,
-    max_tokens: TOKEN_BUDGETS.MAX_OUTPUT,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
-  })
+  let raw: string
+  let finishReason: string | null | undefined
+  let inputTokens = 0
+  let outputTokens = 0
 
-  const raw = response.choices[0]?.message?.content ?? '{}'
-  const finishReason = response.choices[0]?.finish_reason
+  if (taskId) {
+    const streamed = await streamKimiChatCompletion({
+      taskId,
+      messages,
+      maxTokens: TOKEN_BUDGETS.MAX_OUTPUT,
+    })
+    raw = streamed.content || '{}'
+    inputTokens = streamed.inputTokens
+    outputTokens = streamed.outputTokens
+    finishReason = streamed.finishReason
+  } else {
+    const response = await kimi.chat.completions.create({
+      model: MODELS.GENERATE,
+      max_tokens: TOKEN_BUDGETS.MAX_OUTPUT,
+      messages,
+    })
+    raw = response.choices[0]?.message?.content ?? '{}'
+    finishReason = response.choices[0]?.finish_reason
+    inputTokens = response.usage?.prompt_tokens ?? 0
+    outputTokens = response.usage?.completion_tokens ?? 0
+  }
 
   let parsed: { summary?: string; changes?: FileChange[] } = {}
   let parseError: string | null = null
@@ -186,8 +208,8 @@ Rules:
       summary: parsed.summary ?? 'Changes applied.',
       changes,
     },
-    inputTokens: response.usage?.prompt_tokens ?? 0,
-    outputTokens: response.usage?.completion_tokens ?? 0,
+    inputTokens,
+    outputTokens,
   }
 }
 
@@ -276,20 +298,10 @@ export async function executeTask(
         .filter((p) => allPathSet.has(p))
         .slice(0, 18)
 
-      const existingFiles: { path: string; content: string }[] = []
-      for (const p of filesToRead) {
-        try {
-          const content = await readContainerFile(env.id, p)
-          if (typeof content === 'string') {
-            existingFiles.push({ path: p, content })
-            exploredFiles += 1
-          }
-        } catch {
-          // ignore unreadable files
-        }
-      }
+      const existingFiles = await readWorkspaceFilesParallel(env.id, filesToRead)
+      exploredFiles += existingFiles.length
 
-      await updateTask(taskId, 'GENERATING')
+      await updateTask(taskId, 'GENERATING', { streamContent: null })
       await updateProgress(taskId, 'Drafting answer…')
 
       const context = existingFiles
@@ -338,34 +350,48 @@ export async function executeTask(
         return parseAnswerModelResponse(raw)
       }
 
-      const answerPlain = async (extraFiles: { path: string; content: string }[]) => {
+      const answerPlain = async (extraFiles: { path: string; content: string }[], stream: boolean) => {
         const extraContext = extraFiles
           .slice(0, 10)
           .map((f) => `### ${f.path}\n\`\`\`\n${f.content}\n\`\`\``)
           .join('\n\n')
 
         aiSteps += 1
+        const messages = [
+          {
+            role: 'system' as const,
+            content:
+              `You are a senior engineer helping a user understand their codebase.\n` +
+              `Answer the user's question in clear markdown using the repository context.\n` +
+              `Do NOT modify files. Do NOT propose writing code unless asked.\n` +
+              `If context is insufficient, say what you found and what is still missing.`,
+          },
+          {
+            role: 'user' as const,
+            content:
+              `Question: ${task.prompt}\n\n` +
+              `Repository tree:\n${repoTree}\n\n` +
+              `File contents:\n${context || '(none)'}\n\n` +
+              (extraContext ? `More files:\n${extraContext}\n\n` : ''),
+          },
+        ]
+
+        if (stream) {
+          const streamed = await streamKimiChatCompletion({
+            taskId,
+            messages,
+            maxTokens: 1200,
+            plainTextStream: true,
+          })
+          totalInputTokens += streamed.inputTokens
+          totalOutputTokens += streamed.outputTokens
+          return streamed.content
+        }
+
         const response = await kimi.chat.completions.create({
           model: MODELS.GENERATE,
           max_tokens: 1200,
-          messages: [
-            {
-              role: 'system',
-              content:
-                `You are a senior engineer helping a user understand their codebase.\n` +
-                `Answer the user's question in clear markdown using the repository context.\n` +
-                `Do NOT modify files. Do NOT propose writing code unless asked.\n` +
-                `If context is insufficient, say what you found and what is still missing.`,
-            },
-            {
-              role: 'user',
-              content:
-                `Question: ${task.prompt}\n\n` +
-                `Repository tree:\n${repoTree}\n\n` +
-                `File contents:\n${context || '(none)'}\n\n` +
-                (extraContext ? `More files:\n${extraContext}\n\n` : ''),
-            },
-          ],
+          messages,
         })
 
         const text = (response.choices[0]?.message?.content ?? '').trim()
@@ -374,35 +400,34 @@ export async function executeTask(
         return text
       }
 
-      let first = await answerOnce([])
-      let need = first.needFiles
-        .filter((p) => allPathSet.has(p))
-        .filter((p) => !existingFiles.some((f) => f.path === p))
-        .slice(0, 8)
-
-      let finalAnswer = first.answer
-      if (need.length > 0) {
-        await updateProgress(taskId, `Reading ${need.length} more file${need.length === 1 ? '' : 's'} for your question…`)
-        const extraFiles: { path: string; content: string }[] = []
-        for (const p of need) {
-          try {
-            const content = await readContainerFile(env.id, p)
-            if (typeof content === 'string') {
-              extraFiles.push({ path: p, content })
-              exploredFiles += 1
-            }
-          } catch {
-            // ignore
-          }
-        }
-        const second = await answerOnce(extraFiles)
-        finalAnswer = second.answer || first.answer
-        need = []
-      }
+      // Stream the main answer into the chat as tokens arrive.
+      let finalAnswer = await answerPlain([], true)
 
       if (!finalAnswer.trim()) {
-        await updateProgress(taskId, 'Summarizing findings from the repository…')
-        finalAnswer = await answerPlain([...existingFiles])
+        const first = await answerOnce([])
+        let need = first.needFiles
+          .filter((p) => allPathSet.has(p))
+          .filter((p) => !existingFiles.some((f) => f.path === p))
+          .slice(0, 8)
+
+        finalAnswer = first.answer
+        if (need.length > 0) {
+          await updateProgress(taskId, `Reading ${need.length} more file${need.length === 1 ? '' : 's'} for your question…`)
+          const extraFiles = await readWorkspaceFilesParallel(env.id, need)
+          exploredFiles += extraFiles.length
+          const second = await answerOnce(extraFiles)
+          finalAnswer = second.answer || first.answer
+        }
+
+        if (!finalAnswer.trim()) {
+          await updateProgress(taskId, 'Summarizing findings from the repository…')
+          finalAnswer = await answerPlain([...existingFiles], true)
+        } else {
+          await prisma.task.update({
+            where: { id: taskId },
+            data: { streamContent: finalAnswer },
+          })
+        }
       }
 
       const result: TaskResult = {
@@ -413,6 +438,7 @@ export async function executeTask(
       await updateTask(taskId, 'DONE', {
         result,
         progress: null,
+        streamContent: null,
         errorMessage: null,
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
@@ -423,6 +449,7 @@ export async function executeTask(
       await updateTask(taskId, 'FAILED', {
         errorMessage: msg,
         progress: null,
+        streamContent: null,
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
       })
@@ -597,11 +624,11 @@ export async function executeTask(
     exploredFiles += existingFiles.length
 
     // ── Step 5: Generate changes ─────────────────────────────────────────
-    await updateTask(taskId, 'GENERATING')
+    await updateTask(taskId, 'GENERATING', { streamContent: null })
     await updateProgress(taskId, 'AI is writing your code...')
 
     aiSteps += 1
-    const generation = await generateChanges(task.prompt, existingFiles)
+    const generation = await generateChanges(task.prompt, existingFiles, taskId)
     totalInputTokens += generation.inputTokens
     totalOutputTokens += generation.outputTokens
 
@@ -680,6 +707,8 @@ export async function executeTask(
     // ── Done ──────────────────────────────────────────────────────────────
     await updateTask(taskId, 'DONE', {
       result,
+      progress: null,
+      streamContent: null,
       inputTokens: totalInputTokens,
       outputTokens: totalOutputTokens,
     })
@@ -687,6 +716,8 @@ export async function executeTask(
     const errorMessage = formatTaskError(err)
     await updateTask(taskId, 'FAILED', {
       errorMessage,
+      progress: null,
+      streamContent: null,
       inputTokens: totalInputTokens,
       outputTokens: totalOutputTokens,
     })

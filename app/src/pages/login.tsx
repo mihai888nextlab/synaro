@@ -6,6 +6,7 @@ import { signIn, useSession } from "next-auth/react";
 import type { GetServerSideProps } from "next";
 
 import { SignInPage, type Testimonial } from "@/components/ui/sign-in";
+import { setLastLoginMethod } from "@/lib/last-login-storage";
 import { redirectIfAuthed } from "@/lib/auth-redirect";
 
 const sampleTestimonials: Testimonial[] = [
@@ -60,6 +61,7 @@ export default function LoginPage() {
       if (result?.error) {
         setError("Invalid email or password");
       } else if (result?.ok) {
+        setLastLoginMethod("email");
         router.push("/dashboard");
       }
     } catch {

@@ -590,6 +590,76 @@ function messagesEqualForRemoteTask(a: Message, b: Message): boolean {
   );
 }
 
+function RunAppSuggestion({
+  messages,
+  environmentStatus,
+  onRunApp,
+  dismissedFor,
+  onDismiss,
+}: {
+  messages: Message[];
+  environmentStatus?: string;
+  onRunApp?: (() => void) | undefined;
+  dismissedFor: string | null;
+  onDismiss: (id: string) => void;
+}) {
+  if (!onRunApp || !environmentStatus || environmentStatus === "PROVISIONING") return null;
+
+  const lastMsg = messages[messages.length - 1];
+  if (!lastMsg || lastMsg.role !== "assistant") return null;
+  if (lastMsg.taskStatus !== "DONE") return null;
+  if (!lastMsg.taskResult || lastMsg.taskResult.changes.length === 0) return null;
+  if (dismissedFor === lastMsg.id) return null;
+
+  const isAlreadyRunning = environmentStatus === "RUNNING";
+  const msgId = lastMsg.id;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        key={`run-suggestion-${msgId}`}
+        className="flex w-full gap-3 justify-start"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -4 }}
+        transition={{ duration: 0.25, delay: 0.15 }}
+      >
+        <SynaroAssistantAvatar />
+        <div className="rounded-2xl border border-border/70 bg-card px-4 py-3 text-sm max-w-[80%] max-xl:max-w-[min(100%,20rem)]">
+          <div className="flex items-center gap-2 text-foreground mb-3">
+            <PlayIcon className="h-4 w-4 text-primary shrink-0" />
+            <span>
+              {isAlreadyRunning
+                ? "Want to restart the app to apply your changes?"
+                : "Want to run the app to see your changes?"}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                onRunApp();
+                onDismiss(msgId);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-foreground px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90"
+            >
+              <PlayIcon className="h-3 w-3" />
+              {isAlreadyRunning ? "Restart" : "Run the app"}
+            </button>
+            <button
+              type="button"
+              onClick={() => onDismiss(msgId)}
+              className="inline-flex items-center rounded-xl border border-border/70 bg-card/80 px-3 py-1.5 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            >
+              Maybe later
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
 export function AnimatedAIChat({
   className,
   projectId,

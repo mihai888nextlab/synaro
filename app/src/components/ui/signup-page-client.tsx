@@ -8,6 +8,7 @@ import { ArrowLeft } from "lucide-react";
 import { signIn } from "next-auth/react";
 
 import { SignInPage, type Testimonial } from "@/components/ui/sign-in";
+import { setLastLoginMethod } from "@/lib/last-login-storage";
 import { setOnboardingPending } from "@/lib/onboarding-storage";
 
 const sampleTestimonials: Testimonial[] = [
@@ -89,6 +90,8 @@ export function SignupPageClient() {
         );
         return;
       }
+
+      setLastLoginMethod("email");
 
       if (auth?.url) {
         await router.push(auth.url);

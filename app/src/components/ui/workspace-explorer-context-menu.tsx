@@ -107,15 +107,18 @@ export function WorkspaceExplorerContextMenu({
     [projectId, canMutate, busy, onTreeMutated, onClose],
   );
 
-  const activeNameDialog =
-    nameDialog ??
-    (externalNameDialog?.open
-      ? {
-          mode: externalNameDialog.mode,
-          defaultValue:
-            externalNameDialog.mode === "newFile" ? "untitled.txt" : "new-folder",
-        }
-      : null);
+  const activeNameDialog = React.useMemo(
+    () =>
+      nameDialog ??
+      (externalNameDialog?.open
+        ? {
+            mode: externalNameDialog.mode,
+            defaultValue:
+              externalNameDialog.mode === "newFile" ? "untitled.txt" : "new-folder",
+          }
+        : null),
+    [nameDialog, externalNameDialog],
+  );
 
   const nameDialogOpen = Boolean(activeNameDialog);
   const nameDialogParentDir = externalNameDialog?.open

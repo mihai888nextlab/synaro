@@ -223,6 +223,8 @@ export function AiBackgroundTaskProvider({ children }: { children: React.ReactNo
       cancelled = true;
       if (timer) clearInterval(timer);
     };
+  // Poll uses activeTask field deps intentionally — full object would re-subscribe on every progress tick.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- activeTask identity is tracked via projectId/taskId/status fields
   }, [activeTask?.projectId, activeTask?.projectSlug, activeTask?.taskId, push, setActiveTask]);
 
   const ctx: Ctx = React.useMemo(

@@ -287,7 +287,7 @@ function SpotlightTourLayer({
         onStepIndexChange(next);
       }
     },
-    [onFinish, onStepIndexChange, router.pathname],
+    [onFinish, onStepIndexChange, router],
   );
 
   const updateTarget = React.useCallback(
@@ -374,7 +374,7 @@ function SpotlightTourLayer({
       clearTargetElevation(elevatedElRef.current);
       elevatedElRef.current = null;
     };
-  }, [active, step, router.pathname, updateTarget, hasTarget, stepSelectors]);
+  }, [active, step, router, updateTarget, hasTarget, stepSelectors]);
 
   React.useEffect(() => {
     if (!active || !step.advanceOnNavigateTo) return;

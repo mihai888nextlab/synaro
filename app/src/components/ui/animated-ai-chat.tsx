@@ -242,7 +242,6 @@ function useElapsedSeconds(running: boolean): string {
 
 function MessageBubble({
   message,
-  onPlaybackComplete,
   onOpenFile,
 }: {
   message: Message;
@@ -797,7 +796,7 @@ export function AnimatedAIChat({
 
   // Persist chat history (debounced — avoid blocking the main thread during streaming)
   React.useEffect(() => {
-    if (!storageKey) return;
+    if (!storageKey || !chatHydrated) return;
     const id = window.setTimeout(() => {
       try {
         const toSave = messages.slice(-100).map((m, idx, arr) => {
@@ -812,7 +811,7 @@ export function AnimatedAIChat({
       } catch {}
     }, 900);
     return () => window.clearTimeout(id);
-  }, [messages, storageKey]);
+  }, [messages, storageKey, chatHydrated]);
 
   const commandSuggestions: CommandSuggestion[] = React.useMemo(
     () => [

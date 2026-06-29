@@ -90,11 +90,10 @@ function LiveExplorerTree({
   projectId,
   environmentStatus,
   items,
-  truncated,
   loadState,
   treeTabActive,
   onTreeMutated,
-}: LiveExplorerTreeProps) {
+}: Omit<LiveExplorerTreeProps, "truncated">) {
   /** Restore from localStorage on every mount (tab switches remount this tree via `treeKey`). */
   const [expandedItems, setExpandedItems] = React.useState<string[]>([]);
   const initialHydratedRef = React.useRef(false);
@@ -748,10 +747,9 @@ export type ProjectWorkspaceProps = {
 export function ProjectWorkspace({
   projectSlug,
   projectId,
-  projectHasGitRemote,
   initialEnvironmentStatus = "INACTIVE",
   canManageInvites = false,
-}: ProjectWorkspaceProps) {
+}: Omit<ProjectWorkspaceProps, "projectHasGitRemote">) {
   const router = useRouter();
   const [tab, setTab] = React.useState<TabKey>("chat");
 

@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
@@ -36,19 +35,11 @@ const GoogleIcon = () => (
   </svg>
 );
 
-export interface Testimonial {
-  avatarSrc: string;
-  name: string;
-  handle: string;
-  text: string;
-}
-
 interface SignInPageProps {
   topLeftContent?: React.ReactNode;
   title?: React.ReactNode;
   description?: React.ReactNode;
   heroImageSrc?: string;
-  testimonials?: Testimonial[];
   submitLabel?: string;
   mode?: "login" | "signup";
   footerPrompt?: string;
@@ -117,29 +108,11 @@ function LastUsedPill({ className }: { className?: string }) {
   );
 }
 
-const TestimonialCard = ({ testimonial }: { testimonial: Testimonial }) => (
-  <div className="flex w-64 items-start gap-3 rounded-3xl border border-white/10 bg-zinc-900/60 p-5 backdrop-blur-xl">
-    <Image
-      src={testimonial.avatarSrc}
-      width={40}
-      height={40}
-      className="size-10 rounded-2xl object-cover"
-      alt="avatar"
-    />
-    <div className="text-sm leading-snug">
-      <p className="flex items-center gap-1 font-medium">{testimonial.name}</p>
-      <p className="text-zinc-400">{testimonial.handle}</p>
-      <p className="mt-1 text-zinc-300">{testimonial.text}</p>
-    </div>
-  </div>
-);
-
 export const SignInPage: React.FC<SignInPageProps> = ({
   topLeftContent,
   title = <span className="font-light tracking-tighter text-white">Welcome</span>,
   description = "Access your account and continue your journey with us",
   heroImageSrc,
-  testimonials = [],
   submitLabel = "Sign In",
   mode = "login",
   footerPrompt = "New to our platform?",
@@ -397,21 +370,6 @@ export const SignInPage: React.FC<SignInPageProps> = ({
             className="absolute inset-4 rounded-3xl bg-cover bg-center"
             style={{ backgroundImage: `url(${heroImageSrc})` }}
           />
-          {testimonials.length > 0 && (
-            <div className="absolute bottom-8 left-1/2 flex w-full -translate-x-1/2 justify-center gap-4 px-8">
-              <TestimonialCard testimonial={testimonials[0]} />
-              {testimonials[1] && (
-                <div className="hidden xl:flex">
-                  <TestimonialCard testimonial={testimonials[1]} />
-                </div>
-              )}
-              {testimonials[2] && (
-                <div className="hidden 2xl:flex">
-                  <TestimonialCard testimonial={testimonials[2]} />
-                </div>
-              )}
-            </div>
-          )}
         </section>
       )}
     </div>

@@ -12,10 +12,6 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "ui.aceternity.com",
       },
-      {
-        protocol: "https",
-        hostname: "randomuser.me",
-      },
     ],
   },
 };

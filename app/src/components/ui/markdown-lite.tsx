@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 type Node =
   | { type: "text"; text: string }
   | { type: "strong"; children: Node[] }
+  | { type: "em"; children: Node[] }
   | { type: "code"; text: string }
   | { type: "link"; href: string; children: Node[] };
 
@@ -47,6 +48,17 @@ function parseInline(md: string): Node[] {
       }
     }
 
+    // emphasis: *...*
+    if (md[i] === "*") {
+      const end = md.indexOf("*", i + 1);
+      if (end !== -1) {
+        const inner = md.slice(i + 1, end);
+        out.push({ type: "em", children: parseInline(inner) });
+        i = end + 1;
+        continue;
+      }
+    }
+
     // link: [text](href)
     if (md[i] === "[") {
       const closeBracket = md.indexOf("]", i + 1);
@@ -65,6 +77,7 @@ function parseInline(md: string): Node[] {
     const nextSpecials = [
       md.indexOf("`", i),
       md.indexOf("**", i),
+      md.indexOf("*", i),
       md.indexOf("[", i),
     ].filter((n) => n !== -1);
     const next = nextSpecials.length ? Math.min(...nextSpecials) : -1;
@@ -159,6 +172,12 @@ function renderNodes(
             {renderNodes(n.children, key, onOpenFile)}
           </strong>
         );
+      case "em":
+        return (
+          <em key={key} className="italic text-foreground/90">
+            {renderNodes(n.children, key, onOpenFile)}
+          </em>
+        );
       case "link": {
         const href = n.href.trim();
         const openAsFile =
@@ -189,6 +208,73 @@ function renderNodes(
       }
     }
   });
+}
+
+function parseTableCells(line: string): string[] {
+  const trimmed = line.trim();
+  if (!trimmed.includes("|")) return [];
+  let inner = trimmed;
+  if (inner.startsWith("|")) inner = inner.slice(1);
+  if (inner.endsWith("|")) inner = inner.slice(0, -1);
+  return inner.split("|").map((cell) => cell.trim());
+}
+
+function isTableSeparatorLine(line: string): boolean {
+  const cells = parseTableCells(line);
+  if (cells.length === 0) return false;
+  return cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function isTableRow(line: string): boolean {
+  return parseTableCells(line).length >= 2;
+}
+
+function renderMarkdownTable(
+  header: string[],
+  rows: string[][],
+  keyPrefix: string,
+  onOpenFile?: (path: string) => void,
+): React.ReactNode {
+  const colCount = header.length;
+  return (
+    <div
+      key={keyPrefix}
+      className="mt-3 overflow-x-auto rounded-lg border border-border/60 bg-card/40"
+    >
+      <table className="w-full min-w-[16rem] border-collapse text-left text-sm">
+        <thead>
+          <tr className="border-b border-border/60 bg-muted/50">
+            {header.map((cell, i) => (
+              <th
+                key={i}
+                className="px-3 py-2 font-semibold text-foreground whitespace-nowrap"
+              >
+                {renderNodes(parseInline(cell), `${keyPrefix}-th-${i}`, onOpenFile)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, ri) => (
+            <tr
+              key={ri}
+              className="border-b border-border/40 last:border-0 even:bg-muted/20"
+            >
+              {Array.from({ length: colCount }, (_, ci) => (
+                <td key={ci} className="px-3 py-2 text-muted-foreground align-top">
+                  {renderNodes(
+                    parseInline(row[ci] ?? ""),
+                    `${keyPrefix}-td-${ri}-${ci}`,
+                    onOpenFile,
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function buildMarkdownBlocks(text: string, onOpenFile?: (path: string) => void): React.ReactNode[] {
@@ -242,6 +328,24 @@ function buildMarkdownBlocks(text: string, onOpenFile?: (path: string) => void):
 
     if (inCode) {
       codeAcc.push(line);
+      continue;
+    }
+
+    if (isTableRow(line) && isTableSeparatorLine(lines[idx + 1] ?? "")) {
+      flushList();
+      const header = parseTableCells(line);
+      let rowIdx = idx + 2;
+      const rows: string[][] = [];
+      while (rowIdx < lines.length) {
+        const rowLine = lines[rowIdx] ?? "";
+        if (!isTableRow(rowLine) || isTableSeparatorLine(rowLine)) break;
+        rows.push(parseTableCells(rowLine));
+        rowIdx += 1;
+      }
+      blocks.push(
+        renderMarkdownTable(header, rows, `tbl-${blocks.length}`, onOpenFile),
+      );
+      idx = rowIdx - 1;
       continue;
     }
 

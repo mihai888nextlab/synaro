@@ -7,30 +7,9 @@ import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { signIn } from "next-auth/react";
 
-import { SignInPage, type Testimonial } from "@/components/ui/sign-in";
+import { SignInPage } from "@/components/ui/sign-in";
 import { setLastLoginMethod } from "@/lib/last-login-storage";
 import { setOnboardingPending } from "@/lib/onboarding-storage";
-
-const sampleTestimonials: Testimonial[] = [
-  {
-    avatarSrc: "https://randomuser.me/api/portraits/women/44.jpg",
-    name: "Olivia Reed",
-    handle: "@oliviaops",
-    text: "Synaro helped our team ship safer infrastructure changes faster.",
-  },
-  {
-    avatarSrc: "https://randomuser.me/api/portraits/men/72.jpg",
-    name: "Kevin Brooks",
-    handle: "@kevininfra",
-    text: "The governance controls and workflows fit our enterprise setup perfectly.",
-  },
-  {
-    avatarSrc: "https://randomuser.me/api/portraits/women/31.jpg",
-    name: "Maya Patel",
-    handle: "@mayaplatform",
-    text: "Excellent onboarding and a consistent product experience across pages.",
-  },
-];
 
 export function SignupPageClient() {
   const router = useRouter();
@@ -126,7 +105,6 @@ export function SignupPageClient() {
           title={<span className="font-light tracking-tighter text-white">Create Account</span>}
           description="Create your Synaro workspace and start managing your cloud infrastructure."
           heroImageSrc="https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=2160&q=80"
-          testimonials={sampleTestimonials}
           submitLabel="Create account"
           footerPrompt="Already have an account?"
           footerActionLabel="Sign in"

@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Bot,
-  Plus,
   Play,
   Trash2,
-  ChevronRight,
   Clock,
   Globe,
   Zap,
@@ -16,6 +15,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
+import { MarkdownLite } from "@/components/ui/markdown-lite";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -53,12 +53,55 @@ const TOOL_OPTIONS = [
   { id: "http_post", label: "HTTP POST", icon: Zap },
 ];
 
-const TOOL_LABELS: Record<string, string> = {
-  web_search: "Web Search",
-  http_get: "HTTP GET",
-  http_post: "HTTP POST",
-  finish: "Finish",
-};
+function agentToolsLabel(agent: Agent): string {
+  const count = agent.tools.length;
+  return `${count} tool${count === 1 ? "" : "s"}`;
+}
+
+function AgentStatusPill({ enabled }: { enabled: boolean }) {
+  if (enabled) {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium lowercase",
+          "border-emerald-200/70 bg-emerald-50 text-emerald-700",
+          "dark:border-emerald-500/35 dark:bg-emerald-950/55 dark:text-emerald-400",
+        )}
+      >
+        <span
+          className="size-1.5 shrink-0 rounded-full bg-emerald-600 dark:bg-emerald-400"
+          aria-hidden
+        />
+        enabled
+      </span>
+    );
+  }
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium lowercase",
+        "border-border bg-muted text-muted-foreground dark:border-border/80 dark:bg-muted/30",
+      )}
+    >
+      disabled
+    </span>
+  );
+}
+
+function NewAgentCard({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex min-h-[11.25rem] cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border/70 px-5 py-8 text-sm font-medium text-muted-foreground transition sm:min-h-[12rem]",
+        "hover:border-border hover:bg-muted/30 hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70 dark:border-border/55 dark:hover:bg-muted/15",
+      )}
+    >
+      + New agent
+    </button>
+  );
+}
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
@@ -116,9 +159,9 @@ function RunCard({ run }: { run: AgentRun }) {
         )}
       </div>
       {expanded && run.output && (
-        <pre className="mt-3 max-h-64 overflow-auto rounded-lg bg-muted p-3 text-xs text-foreground whitespace-pre-wrap">
-          {run.output}
-        </pre>
+        <div className="mt-3 max-h-96 overflow-auto rounded-lg border border-border/50 bg-muted/30 p-3">
+          <MarkdownLite text={run.output} />
+        </div>
       )}
     </div>
   );
@@ -138,78 +181,66 @@ function AgentCard({
   triggering: boolean;
 }) {
   return (
-    <div className="group flex flex-col rounded-2xl border border-border/70 bg-card p-5 transition hover:border-border">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col">
-          <div className="flex items-center gap-2">
-            <h3 className="truncate text-sm font-semibold text-foreground">{agent.name}</h3>
-            <span
-              className={cn(
-                "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
-                agent.enabled
-                  ? "bg-green-500/10 text-green-400"
-                  : "bg-muted text-muted-foreground",
-              )}
-            >
-              {agent.enabled ? "Enabled" : "Disabled"}
-            </span>
-          </div>
-          {agent.description && (
-            <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{agent.description}</p>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={() => onDelete(agent.id)}
-          className="shrink-0 rounded-lg p-1.5 text-muted-foreground/50 opacity-0 transition hover:bg-muted hover:text-red-400 group-hover:opacity-100"
-          title="Delete agent"
+    <div
+      className={cn(
+        "group flex flex-col rounded-xl border border-border/70 bg-card p-4 text-left shadow-sm shadow-black/[0.06] transition-colors sm:p-[1.125rem]",
+        "hover:border-border hover:shadow-black/[0.08] dark:border-border/55 dark:bg-card/90 dark:shadow-black/20 dark:hover:border-border/70",
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-card text-muted-foreground transition group-hover:bg-muted dark:border-border/60 dark:bg-muted/60"
+          aria-hidden
         >
-          <Trash2 className="size-3.5" />
-        </button>
+          <Bot className="size-4 shrink-0" />
+        </div>
+        <div className="flex shrink-0 items-center justify-end gap-1.5">
+          <AgentStatusPill enabled={agent.enabled} />
+          <button
+            type="button"
+            onClick={() => onDelete(agent.id)}
+            className="shrink-0 rounded-lg p-1.5 text-muted-foreground/50 transition hover:bg-muted hover:text-red-400"
+            title="Delete agent"
+            aria-label={`Delete ${agent.name}`}
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        </div>
       </div>
 
-      {agent.tools.length > 0 && (
-        <div className="mb-3 flex flex-wrap gap-1.5">
-          {agent.tools.map((t) => (
-            <span
-              key={t}
-              className="rounded-full border border-border/70 bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+      <div className="mt-4 min-w-0 flex-1">
+        <span className="block text-[1.0625rem] font-semibold leading-snug tracking-tight text-foreground">
+          {agent.name}
+        </span>
+
+        <hr className="my-4 border-0 border-t border-border/60 dark:border-border/45" />
+
+        <div className="flex items-end justify-between gap-3 text-xs">
+          <span className="min-w-0 truncate text-muted-foreground">{agentToolsLabel(agent)}</span>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onTrigger(agent.id)}
+              disabled={triggering}
+              className="flex items-center gap-1 rounded-lg border border-border/70 bg-muted px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-accent disabled:opacity-50"
             >
-              {TOOL_LABELS[t] ?? t}
-            </span>
-          ))}
+              {triggering ? (
+                <Loader2 className="size-3 animate-spin" aria-hidden />
+              ) : (
+                <Play className="size-3" aria-hidden />
+              )}
+              Run
+            </button>
+            <button
+              type="button"
+              onClick={() => onViewRuns(agent)}
+              className="inline-flex items-center gap-0.5 text-muted-foreground transition hover:text-foreground"
+            >
+              <span>runs</span>
+              <span aria-hidden>→</span>
+            </button>
+          </div>
         </div>
-      )}
-
-      {agent.schedule && (
-        <div className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Clock className="size-3" />
-          <span className="font-mono">{agent.schedule}</span>
-        </div>
-      )}
-
-      <div className="mt-auto flex items-center gap-2 pt-3">
-        <button
-          type="button"
-          onClick={() => onTrigger(agent.id)}
-          disabled={triggering}
-          className="flex items-center gap-1.5 rounded-lg border border-border/70 bg-muted px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-accent disabled:opacity-50"
-        >
-          {triggering ? (
-            <Loader2 className="size-3 animate-spin" />
-          ) : (
-            <Play className="size-3" />
-          )}
-          Run
-        </button>
-        <button
-          type="button"
-          onClick={() => onViewRuns(agent)}
-          className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
-        >
-          View runs
-          <ChevronRight className="size-3" />
-        </button>
       </div>
     </div>
   );
@@ -286,7 +317,9 @@ export function AgentsPageClient() {
     await fetchRuns(agent.id);
   };
 
-  const handleOpenTrigger = (agent: Agent) => {
+  const handleOpenTrigger = (agentOrId: Agent | string) => {
+    const agent = typeof agentOrId === "string" ? agents.find((a) => a.id === agentOrId) : agentOrId;
+    if (!agent) return;
     setTriggerTarget(agent);
     setForm((f) => ({ ...f, input: "" }));
     setTriggerOpen(true);
@@ -352,63 +385,61 @@ export function AgentsPageClient() {
     }));
   };
 
-  return (
-    <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Agents</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Autonomous AI agents that run tasks using tools
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => { setCreateOpen(true); setCreateError(""); }}
-          className="flex items-center gap-2 rounded-xl border border-border/70 bg-card px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted"
-        >
-          <Plus className="size-4" />
-          New Agent
-        </button>
-      </div>
+  const openCreate = () => {
+    setCreateOpen(true);
+    setCreateError("");
+  };
 
-      {/* Content */}
-      {loading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-44 animate-pulse rounded-2xl border border-border/70 bg-card" />
-          ))}
+  return (
+    <div className="relative w-full flex-1">
+      <div className="mx-auto w-full max-w-7xl">
+        <h1 className="sr-only">Agents</h1>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 lg:gap-4 xl:gap-5">
+          {loading ? (
+            [...Array(3)].map((_, i) => (
+              <div
+                key={i}
+                className="min-h-[11.25rem] animate-pulse rounded-xl border border-border/70 bg-card sm:min-h-[12rem]"
+              />
+            ))
+          ) : (
+            <AnimatePresence initial={false}>
+              {agents.map((agent) => (
+                <motion.div
+                  key={agent.id}
+                  layout
+                  className="min-w-0"
+                  initial={{ opacity: 0, scale: 0.94 }}
+                  animate={{
+                    opacity: 1,
+                    scale: 1,
+                    transition: { type: "spring", stiffness: 420, damping: 28, mass: 0.85 },
+                  }}
+                  exit={{
+                    scale: [1, 1.04, 0],
+                    opacity: [1, 1, 0],
+                    transition: {
+                      duration: 0.32,
+                      times: [0, 0.2, 1],
+                      ease: "easeOut",
+                    },
+                  }}
+                >
+                  <AgentCard
+                    agent={agent}
+                    onTrigger={handleOpenTrigger}
+                    onDelete={handleDelete}
+                    onViewRuns={handleViewRuns}
+                    triggering={triggering === agent.id}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          )}
+          <NewAgentCard onClick={openCreate} />
         </div>
-      ) : agents.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/70 py-20 text-center">
-          <Bot className="mb-4 size-10 text-muted-foreground/40" />
-          <p className="text-sm font-medium text-foreground">No agents yet</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Create an agent to automate tasks with AI tools
-          </p>
-          <button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            className="mt-4 flex items-center gap-2 rounded-xl border border-border/70 bg-card px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted"
-          >
-            <Plus className="size-4" />
-            New Agent
-          </button>
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {agents.map((agent) => (
-            <AgentCard
-              key={agent.id}
-              agent={agent}
-              onTrigger={() => handleOpenTrigger(agent)}
-              onDelete={handleDelete}
-              onViewRuns={handleViewRuns}
-              triggering={triggering === agent.id}
-            />
-          ))}
-        </div>
-      )}
+      </div>
 
       {/* Create Agent Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

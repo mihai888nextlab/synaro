@@ -102,6 +102,53 @@ describe("API GET /api/projects/[projectId]/workspace-files", () => {
 
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res._getData() as string).reason).toBe("clone_pending");
-    expect(prisma.project.update).not.toHaveBeenCalled();
+    const statusSyncCalls = (prisma.project.update as jest.Mock).mock.calls.filter(
+      (call) =>
+        typeof call[0] === "object" &&
+        call[0] !== null &&
+        "data" in call[0] &&
+        (call[0] as { data?: { environmentStatus?: string } }).data?.environmentStatus === "STOPPED",
+    );
+    expect(statusSyncCalls).toHaveLength(0);
+  });
+
+  it("touches project activity when workspace files load successfully", async () => {
+    getServerSessionMock.mockResolvedValue({ user: { id: "u1", name: "t", email: "t@t.com" } } as never);
+    prisma.project.findFirst.mockResolvedValue({ id: "p1", cloneRepositoryUrl: null });
+    (globalThis.fetch as jest.Mock).mockImplementation(async (input: RequestInfo | URL) => {
+      const u = requestUrl(input);
+      if (u.includes("/api/environments?")) {
+        return new Response(
+          JSON.stringify([{ id: "e1", projectId: "p1", status: "RUNNING", port: 4001, containerId: "c1" }]),
+        );
+      }
+      if (u.includes("/workspace-files")) {
+        return new Response(
+          JSON.stringify({
+            paths: ["src/index.ts", "package.json"],
+            truncated: false,
+            rootLabel: "repo",
+            clonePending: false,
+          }),
+        );
+      }
+      throw new Error(`unexpected fetch: ${u}`);
+    });
+
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: "GET",
+      query: { projectId: "p1" },
+    });
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res._getData() as string);
+    expect(body.paths).toEqual(["src/index.ts", "package.json"]);
+    expect(prisma.project.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "p1" },
+        data: expect.objectContaining({ lastActivityAt: expect.any(Date) }),
+      }),
+    );
   });
 });

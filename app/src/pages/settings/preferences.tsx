@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Monitor, MoonStar, Sun } from "lucide-react";
 import type { GetServerSideProps } from "next";
 
@@ -22,24 +21,15 @@ export default function PreferencesPage() {
   return (
     <div>
       <div className="rounded-2xl border border-border/70 bg-card/80 p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm text-muted-foreground">Preferences</p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Control your dashboard appearance. Current:{" "}
-              <span className="font-medium text-foreground" suppressHydrationWarning>
-                {mode === "system" ? `System (${resolvedMode})` : mode}
-              </span>
-              .
-            </p>
-          </div>
-
-          <Link
-            href="/settings"
-            className="rounded-full border border-border/70 bg-card/70 px-4 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-          >
-            Back to settings
-          </Link>
+        <div>
+          <p className="text-sm text-muted-foreground">Preferences</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Control your dashboard appearance. Current:{" "}
+            <span className="font-medium text-foreground" suppressHydrationWarning>
+              {mode === "system" ? `System (${resolvedMode})` : mode}
+            </span>
+            .
+          </p>
         </div>
 
         <div className="mt-6 grid gap-3 md:grid-cols-3">

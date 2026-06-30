@@ -92,6 +92,7 @@ function NewAgentCard({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
+      data-onboarding="new-agent"
       onClick={onClick}
       className={cn(
         "flex min-h-[11.25rem] cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border/70 px-5 py-8 text-sm font-medium text-muted-foreground transition sm:min-h-[12rem]",
@@ -395,7 +396,7 @@ export function AgentsPageClient() {
       <div className="mx-auto w-full max-w-7xl">
         <h1 className="sr-only">Agents</h1>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 lg:gap-4 xl:gap-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 lg:gap-4 xl:gap-5" data-onboarding="agents-grid">
           {loading ? (
             [...Array(3)].map((_, i) => (
               <div
@@ -443,7 +444,10 @@ export function AgentsPageClient() {
 
       {/* Create Agent Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-xl rounded-2xl border border-border/70 bg-card p-0 shadow-2xl">
+        <DialogContent
+          data-onboarding="new-agent-dialog"
+          className="max-w-xl rounded-2xl border border-border/70 bg-card p-0 shadow-2xl"
+        >
           <div className="border-b border-border/70 px-6 py-4">
             <DialogTitle className="text-base font-semibold text-foreground">New Agent</DialogTitle>
           </div>

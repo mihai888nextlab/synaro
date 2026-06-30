@@ -6,6 +6,7 @@ import {
   CircleHelp,
   Command as CommandIcon,
   Folder,
+  KeyRound,
   LayoutDashboard,
   SearchIcon,
   ScrollText,
@@ -82,6 +83,15 @@ const baseEntries: SearchEntry[] = [
     href: "/settings/preferences",
     icon: Sparkles,
     keywords: ["theme", "appearance"],
+  },
+  {
+    id: "api-keys",
+    title: "API keys",
+    description: "Create keys for the public /api/v1 API.",
+    group: "Navigation",
+    href: "/settings/api-keys",
+    icon: KeyRound,
+    keywords: ["token", "bearer", "developer", "v1"],
   },
   {
     id: "help",

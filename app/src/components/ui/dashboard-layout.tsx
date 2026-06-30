@@ -3,12 +3,18 @@
 import { Fragment, ReactNode, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
-import { CircleHelp, HomeIcon, Menu, X } from "lucide-react";
+import { BookOpen, CircleHelp, HomeIcon, Menu, Sparkles, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DashboardSidebar, usePersistentSidebarCollapse } from "@/components/ui/dashboard-sidebar";
 import { DashboardNotifications } from "@/components/ui/dashboard-notifications";
 import { AiBackgroundTaskPill } from "@/components/ui/ai-background-task";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -31,6 +37,7 @@ const titles: Record<string, string> = {
   "/settings": "Settings",
   "/settings/preferences": "Preferences",
   "/settings/profile": "Profile",
+  "/settings/api-keys": "API keys",
 };
 
 export function DashboardLayout({ children }: { children: ReactNode }) {
@@ -187,17 +194,39 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2" data-onboarding="header-actions">
               <AiBackgroundTaskPill className="hidden md:inline-flex" />
               <DashboardNotifications />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-9 w-9 rounded-xl border-border/70 bg-card text-muted-foreground shadow-sm shadow-black/5 hover:bg-muted hover:text-foreground"
-                aria-label="Open onboarding tour"
-                title="Help & onboarding"
-                onClick={() => openOnboarding()}
-              >
-                <CircleHelp className="size-4" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 rounded-xl border-border/70 bg-card text-muted-foreground shadow-sm shadow-black/5 hover:bg-muted hover:text-foreground"
+                    aria-label="Help"
+                    title="Help"
+                  >
+                    <CircleHelp className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={8}
+                  className="w-52 rounded-xl border-border/70 bg-popover p-1 shadow-[0_20px_60px_rgba(0,0,0,0.18)]"
+                >
+                  <DropdownMenuItem
+                    className="cursor-pointer gap-2 rounded-lg"
+                    onSelect={() => openOnboarding()}
+                  >
+                    <Sparkles className="size-4 shrink-0 text-muted-foreground" />
+                    Intro explainer
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild className="cursor-pointer rounded-lg">
+                    <Link href="/documentation" className="flex items-center gap-2">
+                      <BookOpen className="size-4 shrink-0 text-muted-foreground" />
+                      Documentation
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </header>

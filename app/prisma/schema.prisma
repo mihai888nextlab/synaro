@@ -23,6 +23,23 @@ model User {
   projectMembers   ProjectMember[]
   invitesCreated   ProjectInvite[] @relation("ProjectInviteCreatedBy")
   activityLogs     ActivityLog[]
+  apiKeys          ApiKey[]
+}
+
+/// Per-user API keys for `/api/v1` (Bearer auth). Only `keyHash` is stored.
+model ApiKey {
+  id         String    @id @default(uuid())
+  userId     String
+  name       String
+  keyPrefix  String
+  keyHash    String    @unique
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Account {

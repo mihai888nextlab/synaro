@@ -4,7 +4,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/router";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, MousePointerClick, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, MousePointerClick, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,9 +12,12 @@ import {
   markOnboardingCompleted,
 } from "@/lib/onboarding-storage";
 import {
+  findClickedTourTarget,
   findVisibleTourTarget,
   getEffectiveStepIndex,
   getPreviousEffectiveStepIndex,
+  getStepIndexById,
+  isElementVisible,
   ONBOARDING_TOUR_STEPS,
   resolveNavigateTo,
   resolveStepSelectors,
@@ -71,7 +74,7 @@ function SpotlightPanels({ rect }: { rect: Rect | null }) {
   if (!rect) {
     return (
       <div
-        className="fixed inset-0 bg-black/40 backdrop-blur-[1px]"
+        className="fixed inset-0 bg-black/40 backdrop-blur-[1px] pointer-events-none"
         style={{ zIndex: Z_OVERLAY }}
         aria-hidden
       />
@@ -83,7 +86,7 @@ function SpotlightPanels({ rect }: { rect: Rect | null }) {
   const w = rect.width + SPOTLIGHT_PAD * 2;
   const h = rect.height + SPOTLIGHT_PAD * 2;
   const panel =
-    "fixed bg-black/38 backdrop-blur-[1px] transition-[top,left,width,height] duration-300 ease-out pointer-events-auto";
+    "fixed bg-black/38 backdrop-blur-[1px] transition-[top,left,width,height] duration-300 ease-out pointer-events-none";
 
   return (
     <>
@@ -119,6 +122,9 @@ function TourPopover({
   onSkip,
   isFirst,
   isLast,
+  waitingForClick,
+  targetClicked,
+  onSkipStep,
 }: {
   step: OnboardingTourStep;
   stepIndex: number;
@@ -129,6 +135,9 @@ function TourPopover({
   onSkip: () => void;
   isFirst: boolean;
   isLast: boolean;
+  waitingForClick: boolean;
+  targetClicked: boolean;
+  onSkipStep: () => void;
 }) {
   const isCenter =
     step.placement === "center" || (!step.selector && !(step.selectors?.length ?? 0));
@@ -213,20 +222,42 @@ function TourPopover({
       </p>
 
       {step.encourageClick ? (
-        <p className="mt-3 flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-relaxed text-foreground/90">
-          <MousePointerClick className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-          <span>{step.encourageClick}</span>
+        <p
+          className={cn(
+            "mt-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-xs leading-relaxed",
+            targetClicked
+              ? "border-emerald-500/30 bg-emerald-500/10 text-foreground/90"
+              : "border-primary/20 bg-primary/5 text-foreground/90",
+          )}
+        >
+          {targetClicked ? (
+            <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
+          ) : (
+            <MousePointerClick className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+          )}
+          <span>{targetClicked ? "Got it — moving on…" : step.encourageClick}</span>
         </p>
       ) : null}
 
       <div className="mt-5 flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={onSkip}
-          className="text-sm text-muted-foreground transition hover:text-foreground"
-        >
-          Skip tour
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onSkip}
+            className="text-sm text-muted-foreground transition hover:text-foreground"
+          >
+            Skip tour
+          </button>
+          {waitingForClick && !targetClicked ? (
+            <button
+              type="button"
+              onClick={onSkipStep}
+              className="text-sm text-muted-foreground transition hover:text-foreground"
+            >
+              Skip step
+            </button>
+          ) : null}
+        </div>
         <div className="flex items-center gap-2">
           {!isFirst ? (
             <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={onBack}>
@@ -234,10 +265,26 @@ function TourPopover({
               Back
             </Button>
           ) : null}
-          <Button type="button" size="sm" className="rounded-xl" onClick={onNext}>
-            {isLast ? "Finish" : "Next"}
-            {!isLast ? <ChevronRight className="ml-1 h-4 w-4" /> : null}
-          </Button>
+          {waitingForClick && !targetClicked ? null : (
+            <Button
+              type="button"
+              size="sm"
+              className="rounded-xl"
+              onClick={onNext}
+              disabled={targetClicked}
+            >
+              {targetClicked ? (
+                "Continuing…"
+              ) : isLast ? (
+                "Finish"
+              ) : (
+                <>
+                  Next
+                  <ChevronRight className="ml-1 h-4 w-4" />
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </div>
     </motion.div>
@@ -258,8 +305,10 @@ function SpotlightTourLayer({
   const router = useRouter();
   const [targetRect, setTargetRect] = React.useState<Rect | null>(null);
   const [mounted, setMounted] = React.useState(false);
+  const [targetClicked, setTargetClicked] = React.useState(false);
   const rafRef = React.useRef<number | null>(null);
   const elevatedElRef = React.useRef<HTMLElement | null>(null);
+  const interactionHandledRef = React.useRef(false);
 
   const effectiveIndex = getEffectiveStepIndex(stepIndex);
   const step = ONBOARDING_TOUR_STEPS[effectiveIndex]!;
@@ -269,25 +318,80 @@ function SpotlightTourLayer({
   const isFirst = effectiveIndex === getEffectiveStepIndex(0);
   const isLast = step.id === "finish";
   const hasTarget = stepSelectors.length > 0;
+  const waitingForClick = Boolean(step.advanceOnTargetClick && step.encourageClick);
 
   React.useEffect(() => setMounted(true), []);
 
+  React.useEffect(() => {
+    setTargetClicked(false);
+    interactionHandledRef.current = false;
+  }, [step.id]);
+
   const goToStep = React.useCallback(
-    (nextRaw: number) => {
+    (nextRaw: number, options?: { hrefOverride?: string | null }) => {
       const next = getEffectiveStepIndex(nextRaw);
       if (next >= ONBOARDING_TOUR_STEPS.length) {
         onFinish();
         return;
       }
       const nextStep = ONBOARDING_TOUR_STEPS[next]!;
-      const href = resolveNavigateTo(nextStep);
-      if (href && !routeMatches(router.pathname, nextStep.route)) {
-        void router.push(href).then(() => onStepIndexChange(next));
-      } else {
+      const href = options?.hrefOverride ?? resolveNavigateTo(nextStep);
+      const needsNav = Boolean(href && !routeMatches(router.pathname, nextStep.route));
+
+      const complete = () => {
         onStepIndexChange(next);
+      };
+
+      if (needsNav && href) {
+        void router.push(href).finally(complete);
+        return;
       }
+      complete();
     },
     [onFinish, onStepIndexChange, router],
+  );
+
+  const advanceAfterInteraction = React.useCallback(
+    (clickedHref?: string | null) => {
+      if (interactionHandledRef.current) return;
+      interactionHandledRef.current = true;
+      setTargetClicked(true);
+
+      const targetIdx = step.advanceOnNavigateTo
+        ? getStepIndexById(step.advanceOnNavigateTo.stepId)
+        : effectiveIndex + 1;
+      const resolvedIdx = getEffectiveStepIndex(targetIdx);
+      const nextStep = ONBOARDING_TOUR_STEPS[resolvedIdx]!;
+
+      const finish = () => onStepIndexChange(resolvedIdx);
+
+      const isOnTargetRoute = () => routeMatches(router.pathname, nextStep.route);
+
+      // Sidebar nav — tour drives navigation explicitly.
+      if (step.id === "nav-projects" || step.id === "nav-agents") {
+        const href = step.id === "nav-projects" ? "/projects" : "/agents";
+        if (isOnTargetRoute()) {
+          finish();
+          return;
+        }
+        void router.push(href).finally(finish);
+        return;
+      }
+
+      // Links — navigate immediately on first click (don't wait for the native link).
+      if (clickedHref) {
+        if (isOnTargetRoute()) {
+          finish();
+          return;
+        }
+        void router.push(clickedHref).finally(finish);
+        return;
+      }
+
+      // Buttons / tabs — native handler runs first, then advance.
+      window.setTimeout(finish, 200);
+    },
+    [effectiveIndex, onStepIndexChange, router, step],
   );
 
   const updateTarget = React.useCallback(
@@ -357,11 +461,41 @@ function SpotlightTourLayer({
 
     const poll = window.setInterval(onLayoutChange, 400);
 
-    const onClickCapture = () => {
+    const onClickCapture = (event: MouseEvent) => {
       window.setTimeout(() => updateTarget(), 50);
       window.setTimeout(() => updateTarget(), 300);
+
+      const clicked = event.target;
+      if (!(clicked instanceof Node)) return;
+      if (clicked instanceof HTMLElement && clicked.closest('[role="dialog"][aria-labelledby="onboarding-tour-title"]')) {
+        return;
+      }
+
+      if (step.advanceOnTargetClick && hasTarget) {
+        const matched = findClickedTourTarget(stepSelectors, clicked);
+        if (matched) {
+          const anchor =
+            matched instanceof HTMLAnchorElement
+              ? matched
+              : matched.querySelector("a[href]") ?? matched.closest("a[href]");
+          const href = anchor?.getAttribute("href");
+          if (href) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+          advanceAfterInteraction(href);
+        }
+      }
     };
     document.addEventListener("click", onClickCapture, true);
+
+    const onWorkspaceAction = (event: Event) => {
+      if (!step.advanceOnWorkspaceTab) return;
+      const detail = (event as CustomEvent<{ type?: string; tab?: string }>).detail;
+      if (detail?.type !== "workspace-tab" || detail.tab !== step.advanceOnWorkspaceTab) return;
+      advanceAfterInteraction();
+    };
+    window.addEventListener("synaro:onboarding-action", onWorkspaceAction);
 
     return () => {
       window.clearTimeout(t);
@@ -369,15 +503,41 @@ function SpotlightTourLayer({
       window.removeEventListener("resize", onLayoutChange);
       window.removeEventListener("scroll", onLayoutChange, true);
       document.removeEventListener("click", onClickCapture, true);
+      window.removeEventListener("synaro:onboarding-action", onWorkspaceAction);
       observer.disconnect();
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       clearTargetElevation(elevatedElRef.current);
       elevatedElRef.current = null;
     };
-  }, [active, step, router, updateTarget, hasTarget, stepSelectors]);
+  }, [
+    active,
+    step,
+    router,
+    updateTarget,
+    hasTarget,
+    stepSelectors,
+    advanceAfterInteraction,
+  ]);
 
   React.useEffect(() => {
-    if (!active || !step.advanceOnNavigateTo) return;
+    if (!active || !step.advanceWhenVisible) return;
+    const { selector, stepId } = step.advanceWhenVisible;
+    const targetIdx = getStepIndexById(stepId);
+    if (targetIdx < 0 || targetIdx === effectiveIndex) return;
+
+    const check = () => {
+      if (!isElementVisible(selector)) return;
+      goToStep(targetIdx);
+    };
+
+    check();
+    const poll = window.setInterval(check, 200);
+    return () => window.clearInterval(poll);
+  }, [active, step.advanceWhenVisible, step.id, effectiveIndex, goToStep]);
+
+  React.useEffect(() => {
+    // Navigation for click-to-advance steps is handled in advanceAfterInteraction.
+    if (!active || !step.advanceOnNavigateTo || step.advanceOnTargetClick) return;
     const { prefix, stepId } = step.advanceOnNavigateTo;
     const matches =
       prefix === "/projects/"
@@ -385,12 +545,12 @@ function SpotlightTourLayer({
         : router.pathname === prefix || router.pathname.startsWith(`${prefix}/`);
     if (!matches) return;
 
-    const targetIdx = ONBOARDING_TOUR_STEPS.findIndex((s) => s.id === stepId);
+    const targetIdx = getStepIndexById(stepId);
     if (targetIdx < 0 || targetIdx === effectiveIndex) return;
 
     const t = window.setTimeout(() => goToStep(targetIdx), 350);
     return () => window.clearTimeout(t);
-  }, [active, step.advanceOnNavigateTo, router.pathname, effectiveIndex, goToStep]);
+  }, [active, step.advanceOnNavigateTo, step.advanceOnTargetClick, router.pathname, effectiveIndex, goToStep]);
 
   if (!active || !mounted) return null;
 
@@ -412,6 +572,9 @@ function SpotlightTourLayer({
             else goToStep(effectiveIndex + 1);
           }}
           onSkip={onFinish}
+          onSkipStep={() => goToStep(effectiveIndex + 1)}
+          waitingForClick={waitingForClick}
+          targetClicked={targetClicked}
         />
       </AnimatePresence>
     </>,

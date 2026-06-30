@@ -47,6 +47,7 @@ import {
   type ProjectWorkspaceTab,
 } from "@/lib/dashboard-workflow-storage";
 import { humanizeProjectSlug } from "@/lib/project-slug";
+import { dispatchWorkspaceTab } from "@/lib/onboarding-tour-steps";
 import {
   defaultExpandedWorkspaceFolderIds,
   filePathsToTreeItems,
@@ -1093,7 +1094,10 @@ export function ProjectWorkspace({
                 <button
                   type="button"
                   data-onboarding="tab-chat"
-                  onClick={() => setTab("chat")}
+                  onClick={() => {
+                    setTab("chat");
+                    dispatchWorkspaceTab("chat");
+                  }}
                   className={tabButtonClass(tab === "chat")}
                 >
                   <MessageSquareText className="size-4" />
@@ -1102,7 +1106,10 @@ export function ProjectWorkspace({
                 <button
                   type="button"
                   data-onboarding="tab-tree"
-                  onClick={() => setTab("tree")}
+                  onClick={() => {
+                    setTab("tree");
+                    dispatchWorkspaceTab("tree");
+                  }}
                   className={tabButtonClass(tab === "tree")}
                 >
                   <FolderTree className="size-4" />
@@ -1111,7 +1118,10 @@ export function ProjectWorkspace({
                 <button
                   type="button"
                   data-onboarding="tab-terminal"
-                  onClick={() => setTab("terminal")}
+                  onClick={() => {
+                    setTab("terminal");
+                    dispatchWorkspaceTab("terminal");
+                  }}
                   className={tabButtonClass(tab === "terminal")}
                 >
                   <TerminalSquare className="size-4" />
@@ -1120,7 +1130,10 @@ export function ProjectWorkspace({
                 <button
                   type="button"
                   data-onboarding="tab-deployments"
-                  onClick={() => setTab("deployments")}
+                  onClick={() => {
+                    setTab("deployments");
+                    dispatchWorkspaceTab("deployments");
+                  }}
                   className={tabButtonClass(tab === "deployments")}
                 >
                   <Rocket className="size-4" />

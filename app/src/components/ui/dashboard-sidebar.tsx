@@ -159,6 +159,15 @@ export function DashboardSidebar({
                   <Link
                     href={item.href}
                     onClick={onNavigate}
+                    data-onboarding={
+                      item.label === "Projects"
+                        ? "nav-projects"
+                        : item.label === "Agents"
+                          ? "nav-agents"
+                          : item.label === "Dashboard"
+                            ? "nav-dashboard"
+                            : undefined
+                    }
                     className={[
                       "group flex items-center rounded-xl text-sm transition",
                       isCollapsed

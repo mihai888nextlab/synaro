@@ -25,6 +25,12 @@ export default function SettingsPage() {
           >
             Preferences
           </Link>
+          <Link
+            href="/settings/api-keys"
+            className="inline-flex items-center rounded-full border border-border/70 bg-card/70 px-4 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          >
+            API keys
+          </Link>
         </div>
 
         <div className="mt-6 grid gap-3 md:grid-cols-2">
@@ -34,7 +40,15 @@ export default function SettingsPage() {
               className="rounded-xl border border-border/70 bg-muted p-4"
             >
               <p className="font-medium">{name}</p>
-              <p className="mt-1 text-sm text-muted-foreground/70">Coming soon</p>
+              <p className="mt-1 text-sm text-muted-foreground/70">
+                {name === "Security" ? (
+                  <Link href="/settings/api-keys" className="underline-offset-4 hover:underline">
+                    Manage API keys
+                  </Link>
+                ) : (
+                  "Coming soon"
+                )}
+              </p>
             </div>
           ))}
         </div>

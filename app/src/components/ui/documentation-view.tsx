@@ -3,9 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Copy, Menu, X } from "lucide-react";
 
-import { MinimalFooter } from "@/components/ui/minimal-footer";
 import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { SiteHeader } from "@/components/ui/site-header";
 import {
@@ -16,6 +15,40 @@ import {
   getDocAdjacent,
 } from "@/lib/documentation";
 import { cn } from "@/lib/utils";
+
+function DocCodeExample({ code, title }: { code: string; title?: string }) {
+  const [copied, setCopied] = React.useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard unavailable */
+    }
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-white/10 bg-zinc-950">
+      <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-2">
+        {title ? <p className="text-xs font-medium text-zinc-500">{title}</p> : <span aria-hidden />}
+        <button
+          type="button"
+          onClick={() => void handleCopy()}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-zinc-400 transition hover:bg-white/5 hover:text-zinc-200"
+          aria-label={copied ? "Copied to clipboard" : "Copy code to clipboard"}
+        >
+          {copied ? <Check className="size-3.5" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-zinc-200 sm:text-sm">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+}
 
 function DocBlockView({ block }: { block: DocBlock }) {
   switch (block.type) {
@@ -48,16 +81,7 @@ function DocBlockView({ block }: { block: DocBlock }) {
         </ol>
       );
     case "code":
-      return (
-        <div className="overflow-hidden rounded-xl border border-white/10 bg-zinc-950">
-          {block.title ? (
-            <p className="border-b border-white/10 px-4 py-2 text-xs font-medium text-zinc-500">{block.title}</p>
-          ) : null}
-          <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-zinc-200 sm:text-sm">
-            <code>{block.code}</code>
-          </pre>
-        </div>
-      );
+      return <DocCodeExample code={block.code} title={block.title} />;
     case "table":
       return (
         <div className="overflow-x-auto rounded-xl border border-white/10">
@@ -163,23 +187,22 @@ export function DocumentationView({ page }: { page: DocPage }) {
   }, [router.asPath]);
 
   return (
-    <main className="relative min-h-dvh overflow-hidden bg-black text-white">
+    <main className="relative flex h-dvh flex-col overflow-hidden bg-black text-white">
       <PageBackgroundPattern className="opacity-40" />
-      <div className="relative z-10 flex min-h-dvh flex-col">
-        <SiteHeader />
+      <div className="relative z-10 flex h-full min-h-0 flex-col">
+        <div className="shrink-0">
+          <SiteHeader />
+        </div>
 
-        <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 sm:px-6 lg:flex-row lg:px-8">
-          <aside className="hidden w-56 shrink-0 lg:block xl:w-60">
-            <div className="sticky top-14 max-h-[calc(100dvh-3.5rem)] overflow-y-auto py-8 pr-4">
-              <p className="mb-8 px-3 text-xs font-medium uppercase tracking-[0.15em] text-zinc-500">
-                Documentation
-              </p>
+        <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 overflow-hidden px-4 sm:px-6 lg:flex-row lg:px-8">
+          <aside className="hidden min-h-0 w-56 shrink-0 overflow-y-auto border-r border-white/10 lg:block xl:w-60">
+            <div className="py-8 pr-4">
               <DocsSidebar activeSlug={page.slug} />
             </div>
           </aside>
 
-          <div className="flex min-w-0 flex-1 flex-col">
-            <div className="flex items-center gap-3 border-b border-white/10 py-4 lg:hidden">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <div className="flex shrink-0 items-center gap-3 border-b border-white/10 py-4 lg:hidden">
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(true)}
@@ -207,48 +230,45 @@ export function DocumentationView({ page }: { page: DocPage }) {
               </label>
             </div>
 
-            <article className="min-w-0 flex-1 py-8 lg:py-10 lg:pl-2 xl:pl-6">
-              <div className="mb-8 border-b border-white/10 pb-8">
-                <p className="mb-2 text-xs font-medium uppercase tracking-[0.15em] text-zinc-500">
-                  Synaro docs
-                </p>
-                <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">{page.title}</h1>
-                <p className="mt-4 max-w-2xl text-base leading-relaxed text-zinc-400">{page.description}</p>
-              </div>
+            <article className="min-h-0 flex-1 overflow-y-auto">
+              <div className="py-8 lg:py-10 lg:pl-2 xl:pl-6">
+                <div className="mb-8 border-b border-white/10 pb-8">
+                  <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">{page.title}</h1>
+                  <p className="mt-4 max-w-2xl text-base leading-relaxed text-zinc-400">{page.description}</p>
+                </div>
 
-              <div className="flex max-w-3xl flex-col gap-6">
-                {page.blocks.map((block, i) => (
-                  <DocBlockView key={`${block.type}-${i}`} block={block} />
-                ))}
-              </div>
+                <div className="flex max-w-3xl flex-col gap-6">
+                  {page.blocks.map((block, i) => (
+                    <DocBlockView key={`${block.type}-${i}`} block={block} />
+                  ))}
+                </div>
 
-              {(prev || next) && (
-                <nav
-                  className={cn(
-                    "mt-12 flex flex-wrap items-center gap-3 border-t border-white/10 pt-8 text-sm",
-                    prev && next ? "justify-between" : next ? "justify-end" : "justify-start",
-                  )}
-                  aria-label="Documentation pagination"
-                >
-                  {prev ? (
-                    <Link href={docHref(prev.slug)} className={docNavLinkClass}>
-                      <ChevronLeft className="size-3.5 shrink-0" aria-hidden />
-                      <span>{prev.label}</span>
-                    </Link>
-                  ) : null}
-                  {next ? (
-                    <Link href={docHref(next.slug)} className={docNavLinkClass}>
-                      <span>{next.label}</span>
-                      <ChevronRight className="size-3.5 shrink-0" aria-hidden />
-                    </Link>
-                  ) : null}
-                </nav>
-              )}
+                {(prev || next) && (
+                  <nav
+                    className={cn(
+                      "mt-12 flex flex-wrap items-center gap-3 border-t border-white/10 pt-8 text-sm",
+                      prev && next ? "justify-between" : next ? "justify-end" : "justify-start",
+                    )}
+                    aria-label="Documentation pagination"
+                  >
+                    {prev ? (
+                      <Link href={docHref(prev.slug)} className={docNavLinkClass}>
+                        <ChevronLeft className="size-3.5 shrink-0" aria-hidden />
+                        <span>{prev.label}</span>
+                      </Link>
+                    ) : null}
+                    {next ? (
+                      <Link href={docHref(next.slug)} className={docNavLinkClass}>
+                        <span>{next.label}</span>
+                        <ChevronRight className="size-3.5 shrink-0" aria-hidden />
+                      </Link>
+                    ) : null}
+                  </nav>
+                )}
+              </div>
             </article>
           </div>
         </div>
-
-        <MinimalFooter />
       </div>
 
       {mobileNavOpen ? (

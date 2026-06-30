@@ -1,6 +1,6 @@
 const COMPLETED_KEY = "synaro:onboarding:completed";
 const PENDING_KEY = "synaro:onboarding:pending";
-const VERSION = 2;
+const VERSION = 3;
 
 export function isOnboardingCompleted(): boolean {
   if (typeof window === "undefined") return false;

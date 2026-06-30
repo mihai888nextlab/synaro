@@ -1,0 +1,24 @@
+{
+  "name": "@synaro/mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Synaro MCP server — create projects, deploy, logs, AI agents",
+  "bin": {
+    "synaro-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.20",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  }
+}

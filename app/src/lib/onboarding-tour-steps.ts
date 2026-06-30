@@ -21,11 +21,23 @@ export type OnboardingTourStep = {
   skipIf?: () => boolean;
   /** When the user navigates to this route prefix, jump to this step id. */
   advanceOnNavigateTo?: { prefix: string; stepId: string };
+  /** Advance to the next step when the user clicks the highlighted target. */
+  advanceOnTargetClick?: boolean;
+  /** When this selector becomes visible, jump to the given step (e.g. dialog opened). */
+  advanceWhenVisible?: { selector: string; stepId: string };
+  /** When the workspace tab changes to this value, advance to the next step. */
+  advanceOnWorkspaceTab?: WorkspaceTab;
 };
 
 export function routeMatches(pathname: string, route: string): boolean {
   if (route === "/projects/") {
     return pathname.startsWith("/projects/") && !pathname.endsWith("/analytics");
+  }
+  if (route === "/projects") {
+    return pathname === "/projects";
+  }
+  if (route === "/agents") {
+    return pathname === "/agents" || pathname.startsWith("/agents/");
   }
   if (route.endsWith("/")) return pathname.startsWith(route);
   return pathname === route;
@@ -48,13 +60,17 @@ function hasProjects(): boolean {
   return Boolean(firstProjectHref());
 }
 
+export function getStepIndexById(id: string): number {
+  return ONBOARDING_TOUR_STEPS.findIndex((s) => s.id === id);
+}
+
 export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
   {
     id: "welcome",
     route: "/dashboard",
     title: "Welcome to Synaro",
     description:
-      "This quick tour highlights the main parts of the app. You can click highlighted areas to try them — we'll guide you step by step.",
+      "This tour walks through the main parts of the app. Click highlighted areas when prompted — the tour will follow your actions.",
     placement: "center",
   },
   {
@@ -63,30 +79,20 @@ export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
     selector: '[data-onboarding="sidebar"]',
     title: "Navigation",
     description:
-      "Use the sidebar to jump between Dashboard, Projects, Logs, and Settings. Your account menu is at the bottom.",
+      "The sidebar is your home base: Dashboard, Projects, Agents, Logs, and Settings. Your account menu is at the bottom.",
     placement: "right",
-    encourageClick: "Try clicking Projects — the tour will follow you.",
+  },
+  {
+    id: "nav-projects",
+    route: "/dashboard",
+    selector: '[data-onboarding="nav-projects"]',
+    title: "Projects",
+    description:
+      "Every app you build lives in a project with its own Docker workspace, file tree, terminal, and AI chat.",
+    placement: "right",
+    encourageClick: "Click Projects — we'll open the projects page.",
+    advanceOnTargetClick: true,
     advanceOnNavigateTo: { prefix: "/projects", stepId: "projects-new" },
-  },
-  {
-    id: "header",
-    route: "/dashboard",
-    selector: '[data-onboarding="header-actions"]',
-    title: "Header tools",
-    description:
-      "Notifications tell you when AI tasks finish. The ? button replays this tour anytime. The pill shows when AI is working in the background.",
-    placement: "bottom",
-  },
-  {
-    id: "dashboard-projects",
-    route: "/dashboard",
-    selector: '[data-onboarding="dashboard-projects"]',
-    title: "Your projects at a glance",
-    description:
-      "Recent projects appear here on the home dashboard. Open one or go to the full Projects page to create or import.",
-    placement: "top",
-    encourageClick: "Click a project card to open it, or hit Next to continue.",
-    advanceOnNavigateTo: { prefix: "/projects/", stepId: "workspace-tabs" },
   },
   {
     id: "projects-new",
@@ -94,10 +100,25 @@ export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
     selectors: ['[data-onboarding="new-project-dialog"]', '[data-onboarding="new-project"]'],
     title: "Create or import",
     description:
-      "Start blank, import from GitHub, or upload a local folder. Each project gets its own Docker workspace and AI chat.",
+      "Start blank, import from GitHub, or upload a folder. Each project gets an isolated container and AI chat.",
     placement: "bottom",
     navigateTo: "/projects",
-    encourageClick: "Click + New project to open this dialog, then explore the form.",
+    encourageClick: "Click + New project to open the creation dialog.",
+    advanceWhenVisible: { selector: '[data-onboarding="new-project-dialog"]', stepId: "projects-new-dialog" },
+  },
+  {
+    id: "projects-new-dialog",
+    route: "/projects",
+    selector: '[data-onboarding="new-project-dialog"]',
+    title: "Project setup",
+    description:
+      "Pick a runtime image and describe what you want to build. You can also import GitHub repos or upload files.",
+    placement: "right",
+    encourageClick: "Explore the form, then click Next — or open an existing project below.",
+    skipIf: () => {
+      if (typeof document === "undefined") return true;
+      return !document.querySelector('[data-onboarding="new-project-dialog"]');
+    },
   },
   {
     id: "projects-open",
@@ -105,9 +126,10 @@ export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
     selector: '[data-onboarding="project-card-link"]',
     title: "Open a project",
     description:
-      "Click any project to enter the workspace — file tree, terminal, AI chat, and deployments live here.",
+      "Click any project card to enter the workspace — file tree, terminal, AI chat, and deployments live there.",
     placement: "bottom",
-    encourageClick: "Click a project — the tour will continue inside the workspace.",
+    encourageClick: "Click a project — the tour continues inside the workspace.",
+    advanceOnTargetClick: true,
     advanceOnNavigateTo: { prefix: "/projects/", stepId: "workspace-tabs" },
     skipIf: () => !hasProjects(),
   },
@@ -124,26 +146,16 @@ export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
     skipIf: () => !hasProjects(),
   },
   {
-    id: "docker-pill",
-    route: "/projects/",
-    selector: '[data-onboarding="docker-pill"]',
-    title: "Runtime environment",
-    description:
-      "Start or stop the Docker container for this project. Files and the terminal need the runtime to be running.",
-    placement: "left",
-    encourageClick: "Try starting the runtime if it's stopped.",
-    skipIf: () => !hasProjects(),
-  },
-  {
     id: "ai-chat",
     route: "/projects/",
     selector: '[data-onboarding="tab-chat"]',
     title: "AI chat",
     description:
-      "Describe what you want in plain English. Synaro analyzes your repo, asks clarifying questions when needed, and applies code changes.",
+      "Describe changes in plain English. Synaro analyzes your repo, asks clarifying questions when needed, and applies code.",
     placement: "bottom",
-    onEnter: () => dispatchWorkspaceTab("chat"),
-    encourageClick: "Click the AI chat tab if it's not already selected.",
+    encourageClick: "Click AI chat to select this tab.",
+    advanceOnTargetClick: true,
+    advanceOnWorkspaceTab: "chat",
     skipIf: () => !hasProjects(),
   },
   {
@@ -152,10 +164,9 @@ export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
     selector: '[data-onboarding="ai-composer"]',
     title: "Send a prompt",
     description:
-      "Type your request here and press Enter. You'll see live progress, file-change previews, and can expand the activity log on the response.",
+      "Type your request and press Enter. You'll see live progress, file-change previews, and markdown responses.",
     placement: "top",
     onEnter: () => dispatchWorkspaceTab("chat"),
-    encourageClick: "Try typing a small request — or continue with Next.",
     skipIf: () => !hasProjects(),
   },
   {
@@ -164,10 +175,22 @@ export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
     selector: '[data-onboarding="tab-tree"]',
     title: "File tree",
     description:
-      "Browse files in your container workspace. Open files to view and edit them — the tree refreshes when the AI writes changes.",
+      "Browse files in your container workspace. Open files to view and edit — the tree refreshes when the AI writes changes.",
     placement: "bottom",
-    onEnter: () => dispatchWorkspaceTab("tree"),
     encourageClick: "Click File tree to explore your project files.",
+    advanceOnTargetClick: true,
+    advanceOnWorkspaceTab: "tree",
+    skipIf: () => !hasProjects(),
+  },
+  {
+    id: "docker-pill",
+    route: "/projects/",
+    selector: '[data-onboarding="docker-pill"]',
+    title: "Runtime environment",
+    description:
+      "Start or stop the Docker container for this project. Files, terminal, and previews need the runtime running.",
+    placement: "left",
+    encourageClick: "Try starting the runtime if it's stopped.",
     skipIf: () => !hasProjects(),
   },
   {
@@ -176,10 +199,11 @@ export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
     selector: '[data-onboarding="tab-terminal"]',
     title: "Terminal",
     description:
-      "Run shell commands directly in your project container — install packages, run scripts, or debug alongside the AI.",
+      "Run shell commands in your project container — install packages, run scripts, or debug alongside the AI.",
     placement: "bottom",
-    onEnter: () => dispatchWorkspaceTab("terminal"),
     encourageClick: "Click Terminal to open the in-browser shell.",
+    advanceOnTargetClick: true,
+    advanceOnWorkspaceTab: "terminal",
     skipIf: () => !hasProjects(),
   },
   {
@@ -188,18 +212,72 @@ export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
     selector: '[data-onboarding="tab-deployments"]',
     title: "Deployments & preview",
     description:
-      "Run your app and open a live preview. Use Run in the toolbar when the container is active, then preview from here.",
+      "Run your app and open a live preview. Use Run in the toolbar when the container is active.",
     placement: "bottom",
-    onEnter: () => dispatchWorkspaceTab("deployments"),
     encourageClick: "Click Deployments to see preview options.",
+    advanceOnTargetClick: true,
+    advanceOnWorkspaceTab: "deployments",
     skipIf: () => !hasProjects(),
+  },
+  {
+    id: "nav-agents",
+    route: "/dashboard",
+    selector: '[data-onboarding="nav-agents"]',
+    title: "AI agents",
+    description:
+      "Agents are separate from project chat — use them for web research, HTTP calls, and scheduled tasks that return a text answer.",
+    placement: "right",
+    navigateTo: "/dashboard",
+    encourageClick: "Click Agents in the sidebar.",
+    advanceOnTargetClick: true,
+    advanceOnNavigateTo: { prefix: "/agents", stepId: "agents-intro" },
+  },
+  {
+    id: "agents-intro",
+    route: "/agents",
+    selectors: [
+      '[data-onboarding="new-agent-dialog"]',
+      '[data-onboarding="new-agent"]',
+      '[data-onboarding="agents-grid"]',
+    ],
+    title: "Build an agent",
+    description:
+      "Create agents with a system prompt and tools (web search, HTTP GET/POST). Run them on demand or on a cron schedule.",
+    placement: "bottom",
+    navigateTo: "/agents",
+    encourageClick: "Click + New agent to see the setup form.",
+    advanceWhenVisible: { selector: '[data-onboarding="new-agent-dialog"]', stepId: "agents-create-dialog" },
+  },
+  {
+    id: "agents-create-dialog",
+    route: "/agents",
+    selector: '[data-onboarding="new-agent-dialog"]',
+    title: "Agent configuration",
+    description:
+      "Name your agent, write a system prompt, pick tools, and set max steps. Optional cron syntax runs the agent automatically.",
+    placement: "right",
+    encourageClick: "Review the options, then continue with Next.",
+    skipIf: () => {
+      if (typeof document === "undefined") return true;
+      return !document.querySelector('[data-onboarding="new-agent-dialog"]');
+    },
+  },
+  {
+    id: "header",
+    route: "/dashboard",
+    selector: '[data-onboarding="header-actions"]',
+    title: "Header tools",
+    description:
+      "Notifications alert you when AI tasks finish. The ? menu replays this tour or opens documentation. The pill shows background AI work.",
+    placement: "bottom",
+    navigateTo: "/dashboard",
   },
   {
     id: "finish",
     route: "/dashboard",
     title: "You're ready to build",
     description:
-      "Create a project, start the runtime, and describe your first change in AI chat. Press ? anytime to replay this tour.",
+      "Create a project for code changes, or an agent for research tasks. Press ? anytime for the intro tour or docs.",
     placement: "center",
     navigateTo: "/dashboard",
   },
@@ -240,6 +318,16 @@ export function resolveStepSelectors(step: OnboardingTourStep): string[] {
   return [];
 }
 
+export function findClickedTourTarget(selectors: string[], clicked: Node): HTMLElement | null {
+  for (const sel of selectors) {
+    for (const node of document.querySelectorAll(sel)) {
+      if (!(node instanceof HTMLElement)) continue;
+      if (node === clicked || node.contains(clicked)) return node;
+    }
+  }
+  return null;
+}
+
 export function findVisibleTourTarget(selectors: string[]): Element | null {
   for (const sel of selectors) {
     const nodes = document.querySelectorAll(sel);
@@ -253,4 +341,8 @@ export function findVisibleTourTarget(selectors: string[]): Element | null {
     }
   }
   return null;
+}
+
+export function isElementVisible(selector: string): boolean {
+  return findVisibleTourTarget([selector]) !== null;
 }

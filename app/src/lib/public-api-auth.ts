@@ -1,6 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
 import { hashApiKey } from "@/lib/api-key-crypto";
+import {
+  applyRateLimitHeaders,
+  applyRetryAfterHeader,
+  checkPublicApiRateLimit,
+} from "@/lib/public-api/rate-limit";
 import { prisma } from "@/lib/prisma";
 
 export type PublicApiAuth = {
@@ -44,5 +49,20 @@ export async function requirePublicApiAuth(
     });
     return null;
   }
+
+  const rate = checkPublicApiRateLimit(auth.apiKeyId);
+  if (!rate.allowed) {
+    applyRateLimitHeaders(res, rate);
+    applyRetryAfterHeader(res, rate);
+    res.status(429).json({
+      error: "rate_limit_exceeded",
+      detail: `API rate limit exceeded. Retry after ${Math.max(1, Math.ceil((rate.reset_at - Date.now()) / 1000))} seconds.`,
+      limit: rate.limit,
+      reset_at: new Date(rate.reset_at).toISOString(),
+    });
+    return null;
+  }
+
+  applyRateLimitHeaders(res, rate);
   return auth;
 }

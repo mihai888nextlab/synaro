@@ -1,38 +1,18 @@
 /** @jest-environment node */
 
-import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { describe, expect, it, jest } from "@jest/globals";
 import { createMocks } from "node-mocks-http";
 import type { NextApiRequest, NextApiResponse } from "next";
 
-import { getServerSession } from "next-auth/next";
-
 import handler from "@/pages/api/agents/index";
-
-const getServerSessionMock = getServerSession as jest.MockedFunction<typeof getServerSession>;
-
-const origFetch = globalThis.fetch;
-const origAgentKey = process.env.AGENT_SERVICE_KEY;
-const origAgentUrl = process.env.AGENT_SERVICE_URL;
-
-function requestUrl(input: RequestInfo | URL): string {
-  if (typeof input === "string") return input;
-  if (input instanceof URL) return input.href;
-  return input.url;
-}
+import {
+  getServerSessionMock,
+  requestUrl,
+  setupAgentServiceRouteTests,
+} from "@/testing/agents-route-test-helpers";
 
 describe("API /api/agents", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    process.env.AGENT_SERVICE_KEY = "test-agent-key";
-    process.env.AGENT_SERVICE_URL = "http://agent-service.test";
-    globalThis.fetch = jest.fn() as unknown as typeof fetch;
-  });
-
-  afterEach(() => {
-    globalThis.fetch = origFetch;
-    process.env.AGENT_SERVICE_KEY = origAgentKey;
-    process.env.AGENT_SERVICE_URL = origAgentUrl;
-  });
+  const fetchMock = setupAgentServiceRouteTests();
 
   it("returns 401 when unauthenticated", async () => {
     getServerSessionMock.mockResolvedValue(null);
@@ -43,7 +23,7 @@ describe("API /api/agents", () => {
 
   it("proxies GET with userId and service key header", async () => {
     getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } } as never);
-    (globalThis.fetch as jest.Mock).mockResolvedValue(
+    fetchMock().mockResolvedValue(
       new Response(JSON.stringify([{ id: "a1", name: "Research" }]), { status: 200 }),
     );
 
@@ -51,7 +31,7 @@ describe("API /api/agents", () => {
     await handler(req, res);
 
     expect(res.statusCode).toBe(200);
-    const [url, init] = (globalThis.fetch as jest.Mock).mock.calls[0] as [
+    const [url, init] = fetchMock().mock.calls[0] as [
       string,
       RequestInit,
     ];
@@ -62,7 +42,7 @@ describe("API /api/agents", () => {
 
   it("returns 502 when agent service is unreachable", async () => {
     getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } } as never);
-    (globalThis.fetch as jest.Mock).mockRejectedValue(new Error("ECONNREFUSED"));
+    fetchMock().mockRejectedValue(new Error("ECONNREFUSED"));
 
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({ method: "GET" });
     await handler(req, res);
@@ -71,8 +51,29 @@ describe("API /api/agents", () => {
     expect(JSON.parse(res._getData() as string).error).toMatch(/agent service/i);
   });
 
+  it("proxies POST with userId merged into body", async () => {
+    fetchMock().mockResolvedValue(
+      new Response(JSON.stringify({ id: "a1", name: "Research" }), { status: 201 }),
+    );
+
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: "POST",
+      body: { name: "Research", prompt: "Find papers" },
+    });
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(201);
+    const [url, init] = fetchMock().mock.calls[0] as [string, RequestInit];
+    expect(requestUrl(url)).toBe("http://agent-service.test/api/agents");
+    expect(JSON.parse(init.body as string)).toEqual({
+      name: "Research",
+      prompt: "Find papers",
+      userId: "user-1",
+    });
+    expect(JSON.parse(res._getData() as string)).toEqual({ id: "a1", name: "Research" });
+  });
+
   it("returns 405 for unsupported methods", async () => {
-    getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } } as never);
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({ method: "DELETE" });
     await handler(req, res);
     expect(res.statusCode).toBe(405);

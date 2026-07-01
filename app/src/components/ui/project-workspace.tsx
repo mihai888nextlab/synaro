@@ -80,7 +80,6 @@ type LiveExplorerTreeProps = {
   projectId?: string;
   environmentStatus: SynaroProjectEnvironmentStatus;
   items: Record<string, WorkspaceExplorerItem>;
-  truncated: boolean;
   loadState: "idle" | "loading" | "ready" | "hint";
   /** True while the File tree tab is visible — used to auto-expand the root folder on each visit. */
   treeTabActive: boolean;
@@ -94,7 +93,7 @@ function LiveExplorerTree({
   loadState,
   treeTabActive,
   onTreeMutated,
-}: Omit<LiveExplorerTreeProps, "truncated">) {
+}: LiveExplorerTreeProps) {
   /** Restore from localStorage on every mount (tab switches remount this tree via `treeKey`). */
   const [expandedItems, setExpandedItems] = React.useState<string[]>([]);
   const initialHydratedRef = React.useRef(false);
@@ -504,7 +503,6 @@ function TreePanel({
   const [items, setItems] = React.useState<Record<string, WorkspaceExplorerItem>>(() =>
     placeholderTreeItems("Connect to a project to load the repository tree."),
   );
-  const [truncated, setTruncated] = React.useState(false);
   const [treeKey, setTreeKey] = React.useState("initial");
   const [loadState, setLoadState] = React.useState<"idle" | "loading" | "ready" | "hint">("idle");
   const treeNonce = React.useRef(0);
@@ -574,7 +572,6 @@ function TreePanel({
               : `Request failed (${res.status})`;
           if (!cancelled) {
             setItems(placeholderTreeItems(msg));
-            setTruncated(false);
             setLoadState("hint");
             bumpTreeKey();
           }
@@ -589,7 +586,6 @@ function TreePanel({
             setItems(
               placeholderTreeItems("Start the runtime (pill) to create a container and clone the repository."),
             );
-            setTruncated(false);
             setLoadState("hint");
             bumpTreeKey();
           }
@@ -599,7 +595,6 @@ function TreePanel({
         if (wf.reason === "not_active") {
           if (!cancelled) {
             setItems(placeholderTreeItems("Environment is stopped. Start the runtime to load files from the clone."));
-            setTruncated(false);
             setLoadState("hint");
             bumpTreeKey();
           }
@@ -613,7 +608,6 @@ function TreePanel({
                 "Git clone is still finishing in the container. This page will refresh the tree automatically.",
               ),
             );
-            setTruncated(false);
             setLoadState("loading");
             bumpTreeKey();
           }
@@ -623,7 +617,6 @@ function TreePanel({
           if (!cancelled) {
             const msg = wf.detail?.trim() ? `Environment service: ${wf.detail}` : "Could not list workspace files.";
             setItems(placeholderTreeItems(msg));
-            setTruncated(false);
             setLoadState("hint");
             bumpTreeKey();
           }
@@ -641,7 +634,6 @@ function TreePanel({
         });
         if (!cancelled) {
           setItems(next);
-          setTruncated(wf.truncated);
           setLoadState("ready");
           treeWasReadyRef.current = true;
           bumpTreeKey();
@@ -679,7 +671,6 @@ function TreePanel({
         projectId={projectId}
         environmentStatus={environmentStatus}
         items={items}
-        truncated={truncated}
         loadState={loadState}
         treeTabActive={treeTabActive}
         onTreeMutated={onTreeMutated}
@@ -734,8 +725,6 @@ export type ProjectWorkspaceProps = {
   projectSlug?: string;
   /** Prisma project id — enables Docker start/stop in the header. */
   projectId?: string;
-  /** True when this project was created from a GitHub repo URL (not folder-only / blank). */
-  projectHasGitRemote: boolean;
   /** Merged DB + environment-service status from SSR. */
   initialEnvironmentStatus?: SynaroProjectEnvironmentStatus;
   /** Only the project owner can create invite links. */
@@ -750,7 +739,7 @@ export function ProjectWorkspace({
   projectId,
   initialEnvironmentStatus = "INACTIVE",
   canManageInvites = false,
-}: Omit<ProjectWorkspaceProps, "projectHasGitRemote">) {
+}: ProjectWorkspaceProps) {
   const router = useRouter();
   const [tab, setTab] = React.useState<TabKey>("chat");
 

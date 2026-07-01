@@ -16,14 +16,12 @@ type ProjectWorkspacePageProps = {
   projectId: string;
   initialEnvironmentStatus: SynaroProjectEnvironmentStatus;
   viewerIsOwner: boolean;
-  projectHasGitRemote: boolean;
 };
 
 export default function ProjectWorkspacePage({
   projectId,
   initialEnvironmentStatus,
   viewerIsOwner,
-  projectHasGitRemote,
 }: ProjectWorkspacePageProps) {
   const router = useRouter();
   const raw = router.query.projectSlug;
@@ -42,7 +40,6 @@ export default function ProjectWorkspacePage({
     <ProjectWorkspace
       projectSlug={slug}
       projectId={projectId}
-      projectHasGitRemote={projectHasGitRemote}
       initialEnvironmentStatus={initialEnvironmentStatus}
       canManageInvites={viewerIsOwner}
     />
@@ -79,7 +76,6 @@ export const getServerSideProps: GetServerSideProps<ProjectWorkspacePageProps> =
       projectId: project.id,
       initialEnvironmentStatus: environmentStatus,
       viewerIsOwner: project.userId === session.user.id,
-      projectHasGitRemote: Boolean(project.cloneRepositoryUrl?.trim()),
     },
   };
 };

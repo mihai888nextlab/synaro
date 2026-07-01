@@ -10,6 +10,7 @@ const customJestConfig = {
     "<rootDir>/node_modules/",
     "<rootDir>/.next/",
     "<rootDir>/dist/",
+    "<rootDir>/e2e/",
     "<rootDir>/src/__tests__/mocks/",
   ],
   moduleNameMapper: {

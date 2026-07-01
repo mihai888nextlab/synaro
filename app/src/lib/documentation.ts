@@ -510,6 +510,8 @@ export const DOC_PAGES: Record<string, DocPage> = {
           "Errors return JSON with an error field; many responses also include detail",
           "Collaborators with project access can use the same endpoints as the owner",
           "HTTP 401 means missing or invalid API key; 404 usually means the resource is missing or not visible to your user",
+          "HTTP 429 means rate limit exceeded — default is 120 requests per 60 seconds per API key (SYNARO_API_RATE_LIMIT and SYNARO_API_RATE_WINDOW_SEC)",
+          "Responses include X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset; 429 responses also include Retry-After",
         ],
       },
       {
@@ -1260,4 +1262,65 @@ export function getDocAdjacent(slug: string): {
     prev: index > 0 ? DOC_NAV_ORDER[index - 1]! : null,
     next: index < DOC_NAV_ORDER.length - 1 ? DOC_NAV_ORDER[index + 1]! : null,
   };
+}
+
+export type DocSearchResult = {
+  slug: string;
+  label: string;
+  group: string;
+};
+
+function docBlockToSearchText(block: DocBlock): string {
+  switch (block.type) {
+    case "p":
+    case "h2":
+    case "h3":
+      return block.text;
+    case "ul":
+    case "ol":
+      return block.items.join(" ");
+    case "code":
+      return [block.title, block.code].filter(Boolean).join(" ");
+    case "table":
+      return [...block.headers, ...block.rows.flat()].join(" ");
+    case "callout":
+      return [block.title, block.text].filter(Boolean).join(" ");
+    default:
+      return "";
+  }
+}
+
+function docPageSearchText(slug: string, label: string): string {
+  const page = DOC_PAGES[slug];
+  if (!page) return label;
+  return [label, page.title, page.description, ...page.blocks.map(docBlockToSearchText)].join(" ");
+}
+
+/** Filter documentation pages by title, nav label, description, and body text. */
+export function searchDocumentation(query: string): DocSearchResult[] {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return [];
+
+  const results: DocSearchResult[] = [];
+  for (const group of DOC_NAV) {
+    for (const item of group.items) {
+      if (docPageSearchText(item.slug, item.label).toLowerCase().includes(normalized)) {
+        results.push({ slug: item.slug, label: item.label, group: group.title });
+      }
+    }
+  }
+  return results;
+}
+
+/** Sidebar groups with items filtered by search query (empty query returns full nav). */
+export function filterDocNav(query: string): DocNavGroup[] {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return DOC_NAV;
+
+  return DOC_NAV.map((group) => ({
+    ...group,
+    items: group.items.filter((item) =>
+      docPageSearchText(item.slug, item.label).toLowerCase().includes(normalized),
+    ),
+  })).filter((group) => group.items.length > 0);
 }

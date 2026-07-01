@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { Check, ChevronLeft, ChevronRight, Copy, Menu, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Copy, Menu, Search, X } from "lucide-react";
 
 import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { SiteHeader } from "@/components/ui/site-header";
@@ -12,6 +12,7 @@ import {
   type DocBlock,
   type DocPage,
   docHref,
+  filterDocNav,
   getDocAdjacent,
 } from "@/lib/documentation";
 import { cn } from "@/lib/utils";
@@ -131,45 +132,181 @@ function DocBlockView({ block }: { block: DocBlock }) {
   }
 }
 
+function DocsSidebarSearch({
+  query,
+  onQueryChange,
+  inputId,
+  onKeyDown,
+  activeDescendantId,
+}: {
+  query: string;
+  onQueryChange: (value: string) => void;
+  inputId: string;
+  onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
+  activeDescendantId?: string;
+}) {
+  return (
+    <div className="relative mb-4 px-3">
+      <Search
+        className="pointer-events-none absolute left-6 top-1/2 size-4 -translate-y-1/2 text-zinc-500"
+        aria-hidden
+      />
+      <input
+        id={inputId}
+        type="search"
+        role="combobox"
+        aria-expanded={query.length > 0}
+        aria-controls="docs-sidebar-results"
+        aria-autocomplete="list"
+        aria-activedescendant={activeDescendantId}
+        value={query}
+        onChange={(event) => onQueryChange(event.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="Search docs…"
+        className="h-9 w-full rounded-lg border border-white/10 bg-zinc-950/80 py-2 pl-9 pr-8 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-white/20 focus:outline-none focus:ring-1 focus:ring-white/10"
+        aria-label="Search documentation"
+      />
+      {query ? (
+        <button
+          type="button"
+          onClick={() => onQueryChange("")}
+          className="absolute right-5 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-zinc-500 transition hover:bg-white/5 hover:text-zinc-300"
+          aria-label="Clear search"
+        >
+          <X className="size-3.5" aria-hidden />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function DocsSidebar({
   activeSlug,
   onNavigate,
   className,
+  searchQuery,
+  onSearchQueryChange,
+  searchInputId = "docs-sidebar-search",
 }: {
   activeSlug: string;
   onNavigate?: () => void;
   className?: string;
+  searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
+  searchInputId?: string;
 }) {
+  const router = useRouter();
+  const filteredNav = React.useMemo(() => filterDocNav(searchQuery), [searchQuery]);
+  const flatItems = React.useMemo(() => filteredNav.flatMap((group) => group.items), [filteredNav]);
+  const [highlightedIndex, setHighlightedIndex] = React.useState(-1);
+  const itemRefs = React.useRef<Map<string, HTMLAnchorElement>>(new Map());
+  const hasResults = filteredNav.length > 0;
+
+  React.useEffect(() => {
+    setHighlightedIndex(-1);
+  }, [searchQuery]);
+
+  React.useEffect(() => {
+    if (highlightedIndex < 0) return;
+    const slug = flatItems[highlightedIndex]?.slug;
+    if (!slug) return;
+    itemRefs.current.get(slug)?.scrollIntoView({ block: "nearest" });
+  }, [flatItems, highlightedIndex]);
+
+  const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    const keyboardNavEnabled = searchQuery.trim().length > 0 && flatItems.length > 0;
+    if (!keyboardNavEnabled && event.key !== "Escape") return;
+
+    if (event.key === "ArrowDown") {
+      if (!keyboardNavEnabled) return;
+      event.preventDefault();
+      setHighlightedIndex((index) => (index < flatItems.length - 1 ? index + 1 : 0));
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      if (!keyboardNavEnabled) return;
+      event.preventDefault();
+      setHighlightedIndex((index) => (index > 0 ? index - 1 : flatItems.length - 1));
+      return;
+    }
+
+    if (event.key === "Enter" && highlightedIndex >= 0) {
+      event.preventDefault();
+      const item = flatItems[highlightedIndex];
+      if (!item) return;
+      void router.push(docHref(item.slug));
+      onNavigate?.();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (searchQuery) {
+        onSearchQueryChange("");
+      } else {
+        setHighlightedIndex(-1);
+        event.currentTarget.blur();
+      }
+    }
+  };
+
+  const highlightedSlug = highlightedIndex >= 0 ? flatItems[highlightedIndex]?.slug : undefined;
+
   return (
-    <nav className={cn("flex flex-col gap-6", className)} aria-label="Documentation">
-      {DOC_NAV.map((group) => (
-        <div key={group.title}>
-          <p className="mb-2 px-3 text-[0.65rem] font-medium uppercase tracking-[0.12em] text-zinc-500">
-            {group.title}
-          </p>
-          <ul className="flex flex-col gap-0.5">
-            {group.items.map((item) => {
-              const active = item.slug === activeSlug;
-              return (
-                <li key={item.slug}>
-                  <Link
-                    href={docHref(item.slug)}
-                    onClick={onNavigate}
-                    className={cn(
-                      "block rounded-lg px-3 py-2 text-sm transition",
-                      active
-                        ? "bg-white/10 font-medium text-white"
-                        : "text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200",
-                    )}
-                  >
-                    {item.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+    <nav className={cn("flex flex-col", className)} aria-label="Documentation">
+      <DocsSidebarSearch
+        query={searchQuery}
+        onQueryChange={onSearchQueryChange}
+        inputId={searchInputId}
+        onKeyDown={handleSearchKeyDown}
+        activeDescendantId={highlightedSlug ? `docs-nav-${highlightedSlug}` : undefined}
+      />
+
+      {hasResults ? (
+        <div id="docs-sidebar-results" className="flex flex-col gap-6" role="listbox">
+          {filteredNav.map((group) => (
+            <div key={group.title}>
+              <p className="mb-2 px-3 text-[0.65rem] font-medium uppercase tracking-[0.12em] text-zinc-500">
+                {group.title}
+              </p>
+              <ul className="flex flex-col gap-0.5">
+                {group.items.map((item) => {
+                  const active = item.slug === activeSlug;
+                  const highlighted = item.slug === highlightedSlug;
+                  return (
+                    <li key={item.slug} role="presentation">
+                      <Link
+                        id={`docs-nav-${item.slug}`}
+                        href={docHref(item.slug)}
+                        onClick={onNavigate}
+                        ref={(node) => {
+                          if (node) itemRefs.current.set(item.slug, node);
+                          else itemRefs.current.delete(item.slug);
+                        }}
+                        role="option"
+                        aria-selected={highlighted}
+                        className={cn(
+                          "block rounded-lg px-3 py-2 text-sm transition",
+                          highlighted
+                            ? "bg-white/15 font-medium text-white ring-1 ring-white/20"
+                            : active
+                              ? "bg-white/10 font-medium text-white"
+                              : "text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200",
+                        )}
+                      >
+                        {item.label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
         </div>
-      ))}
+      ) : searchQuery.trim() ? (
+        <p className="px-3 text-sm text-zinc-500">No pages match your search.</p>
+      ) : null}
     </nav>
   );
 }
@@ -180,10 +317,12 @@ const docNavLinkClass =
 export function DocumentationView({ page }: { page: DocPage }) {
   const router = useRouter();
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+  const [sidebarSearch, setSidebarSearch] = React.useState("");
   const { prev, next } = getDocAdjacent(page.slug);
 
   React.useEffect(() => {
     setMobileNavOpen(false);
+    setSidebarSearch("");
   }, [router.asPath]);
 
   return (
@@ -196,8 +335,12 @@ export function DocumentationView({ page }: { page: DocPage }) {
 
         <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 overflow-hidden px-4 sm:px-6 lg:flex-row lg:px-8">
           <aside className="hidden min-h-0 w-56 shrink-0 overflow-y-auto border-r border-white/10 lg:block xl:w-60">
-            <div className="py-8 pr-4">
-              <DocsSidebar activeSlug={page.slug} />
+            <div className="py-6 pr-4">
+              <DocsSidebar
+                activeSlug={page.slug}
+                searchQuery={sidebarSearch}
+                onSearchQueryChange={setSidebarSearch}
+              />
             </div>
           </aside>
 
@@ -291,8 +434,14 @@ export function DocumentationView({ page }: { page: DocPage }) {
                 <X className="size-4" />
               </button>
             </div>
-            <div className="overflow-y-auto p-4 pt-6">
-              <DocsSidebar activeSlug={page.slug} onNavigate={() => setMobileNavOpen(false)} />
+            <div className="overflow-y-auto p-4 pt-4">
+              <DocsSidebar
+                activeSlug={page.slug}
+                onNavigate={() => setMobileNavOpen(false)}
+                searchQuery={sidebarSearch}
+                onSearchQueryChange={setSidebarSearch}
+                searchInputId="docs-mobile-sidebar-search"
+              />
             </div>
           </div>
         </div>

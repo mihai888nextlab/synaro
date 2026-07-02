@@ -6,6 +6,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { getProviders, signIn } from "next-auth/react";
 
 import { getLastLoginMethod, setLastLoginMethod, type LastLoginMethod } from "@/lib/last-login-storage";
+import { useTranslation } from "@/components/ui/locale-provider";
 import { cn } from "@/lib/utils";
 
 const GitHubIcon = () => (
@@ -95,6 +96,7 @@ const FloatingField = ({
 );
 
 function LastUsedPill({ className }: { className?: string }) {
+  const { t } = useTranslation();
   return (
     <span
       className={cn(
@@ -103,7 +105,7 @@ function LastUsedPill({ className }: { className?: string }) {
         className,
       )}
     >
-      Used last time
+      {t("auth.usedLastTime")}
     </span>
   );
 }
@@ -127,6 +129,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   formError,
   isSubmitting = false,
 }) => {
+  const { t } = useTranslation();
   const [showPassword, setShowPassword] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
@@ -143,16 +146,14 @@ export const SignInPage: React.FC<SignInPageProps> = ({
     try {
       const providers = await getProviders();
       if (!providers?.google) {
-        setGoogleError(
-          "Google sign-in is not available. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, then restart the dev server.",
-        );
+        setGoogleError(t("auth.googleSignInUnavailable"));
         return;
       }
 
       /* OAuth always triggers a full-page redirect from next-auth’s client. */
       await signIn("google", { callbackUrl: oauthCallbackUrl });
     } catch (e) {
-      setGoogleError(e instanceof Error ? e.message : "Google sign-in failed.");
+      setGoogleError(e instanceof Error ? e.message : t("auth.googleSignInFailed"));
     } finally {
       setGoogleBusy(false);
     }
@@ -165,14 +166,12 @@ export const SignInPage: React.FC<SignInPageProps> = ({
     try {
       const providers = await getProviders();
       if (!providers?.github) {
-        setGithubError(
-          "GitHub sign-in is not available. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET, then restart the dev server.",
-        );
+        setGithubError(t("auth.githubSignInUnavailable"));
         return;
       }
       await signIn("github", { callbackUrl: oauthCallbackUrl });
     } catch (e) {
-      setGithubError(e instanceof Error ? e.message : "GitHub sign-in failed.");
+      setGithubError(e instanceof Error ? e.message : t("auth.githubSignInFailed"));
     } finally {
       setGithubBusy(false);
     }
@@ -204,12 +203,12 @@ export const SignInPage: React.FC<SignInPageProps> = ({
             >
               {mode === "signup" && (
                 <div>
-                  <FloatingField name="fullName" type="text" label="Full Name" />
+                  <FloatingField name="fullName" type="text" label={t("auth.fullName")} />
                 </div>
               )}
 
               <div>
-                <FloatingField name="email" type="email" label="Email Address" />
+                <FloatingField name="email" type="email" label={t("auth.emailAddress")} />
               </div>
 
               <div>
@@ -223,7 +222,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
                       className="auth-floating-input w-full rounded-2xl bg-transparent p-4 pr-12 text-sm text-white placeholder:text-transparent focus:outline-none"
                     />
                     <label htmlFor="password" className="auth-floating-label text-sm font-medium text-zinc-400">
-                      Password
+                      {t("auth.password")}
                     </label>
                     <button
                       type="button"
@@ -245,7 +244,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
                   <FloatingField
                     name="confirmPassword"
                     type={showPassword ? "text" : "password"}
-                    label="Confirm Password"
+                    label={t("auth.confirmPassword")}
                   />
                 </div>
               )}
@@ -253,14 +252,14 @@ export const SignInPage: React.FC<SignInPageProps> = ({
               <div className="flex items-center justify-between text-sm">
                 <label className="flex cursor-pointer items-center gap-3">
                   <input type="checkbox" name="rememberMe" className="custom-checkbox" />
-                  <span className="text-zinc-300">Keep me signed in</span>
+                  <span className="text-zinc-300">{t("auth.keepMeSignedIn")}</span>
                 </label>
                 {resetPasswordHref ? (
                   <Link
                     href={resetPasswordHref}
                     className="text-violet-400 transition-colors hover:underline"
                   >
-                    Reset password
+                    {t("auth.resetPassword")}
                   </Link>
                 ) : (
                   <a
@@ -271,7 +270,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
                     }}
                     className="text-violet-400 transition-colors hover:underline"
                   >
-                    Reset password
+                    {t("auth.resetPassword")}
                   </a>
                 )}
               </div>
@@ -287,7 +286,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
                 disabled={isSubmitting}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-4 font-medium text-black transition-colors hover:bg-zinc-200 disabled:pointer-events-none disabled:opacity-60"
               >
-                <span>{isSubmitting ? "Please wait…" : submitLabel}</span>
+                <span>{isSubmitting ? t("auth.pleaseWait") : submitLabel}</span>
                 {showLastUsed && lastLoginMethod === "email" ? <LastUsedPill /> : null}
               </button>
             </form>
@@ -295,7 +294,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
             <div className="relative flex items-center justify-center">
               <span className="w-full border-t border-white/10" />
               <span className="absolute bg-black px-4 text-sm text-zinc-500">
-                Or continue with
+                {t("auth.orContinueWith")}
               </span>
             </div>
 
@@ -308,7 +307,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
               >
                 <GoogleIcon />
                 <span className="flex items-center gap-2">
-                  {googleBusy ? "Redirecting…" : "Continue with Google"}
+                  {googleBusy ? t("auth.redirecting") : t("auth.continueWithGoogle")}
                   {showLastUsed && lastLoginMethod === "google" ? <LastUsedPill /> : null}
                 </span>
               </button>
@@ -320,7 +319,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
               >
                 <GitHubIcon />
                 <span className="flex items-center gap-2">
-                  {githubBusy ? "Redirecting…" : "Continue with GitHub"}
+                  {githubBusy ? t("auth.redirecting") : t("auth.continueWithGitHub")}
                   {showLastUsed && lastLoginMethod === "github" ? <LastUsedPill /> : null}
                 </span>
               </button>

@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { CheckIcon, Loader2, SaveIcon, XIcon } from "lucide-react";
 
 import type { SynaroProjectEnvironmentStatus } from "@/components/ui/project-cards-grid";
+import { useTranslation } from "@/components/ui/locale-provider";
 import { cn } from "@/lib/utils";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
@@ -63,6 +64,7 @@ async function fetchFileContent(
   projectId: string,
   path: string,
   signal: AbortSignal,
+  t: (key: string, params?: Record<string, string | number>) => string,
 ): Promise<{ content: string; contentTruncated: boolean }> {
   const res = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/workspace-selection?path=${encodeURIComponent(path)}`,
@@ -74,10 +76,10 @@ async function fetchFileContent(
     kind?: string;
     contentTruncated?: boolean;
   };
-  if (!res.ok) throw new Error(data.error ?? `Failed to load (${res.status})`);
-  if (data.kind === "directory") throw new Error("Cannot open a directory as a file.");
+  if (!res.ok) throw new Error(data.error ?? t("workspace.failedToLoad", { status: res.status }));
+  if (data.kind === "directory") throw new Error(t("workspace.cannotOpenDirectory"));
   if (data.kind === "missing" || data.kind === "notfile") {
-    throw new Error("This path is not a readable file in the workspace.");
+    throw new Error(t("workspace.notReadableFile"));
   }
   return {
     content: data.content ?? "",
@@ -108,6 +110,7 @@ export function WorkspaceFileEditorPanel({
   onRegisterRenameTab?: (renameTab: (from: string, to: string, isFolder?: boolean) => void) => void;
   className?: string;
 }) {
+  const { t } = useTranslation();
   const [tabs, setTabs] = React.useState<EditorTab[]>([]);
   const [activePath, setActivePath] = React.useState<string | null>(null);
   const [saveStatus, setSaveStatus] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -131,48 +134,48 @@ export function WorkspaceFileEditorPanel({
       const gen = ++loadGenRef.current;
 
       setTabs((prev) =>
-        prev.map((t) =>
-          t.path === path ? { ...t, loading: true, loadError: null } : t,
+        prev.map((tab) =>
+          tab.path === path ? { ...tab, loading: true, loadError: null } : tab,
         ),
       );
 
       const ac = new AbortController();
-      void fetchFileContent(projectId, path, ac.signal)
+      void fetchFileContent(projectId, path, ac.signal, t)
         .then(({ content, contentTruncated }) => {
           if (gen !== loadGenRef.current) return;
           setTabs((prev) =>
-            prev.map((t) =>
-              t.path === path
+            prev.map((tab) =>
+              tab.path === path
                 ? {
-                    ...t,
+                    ...tab,
                     content,
                     contentTruncated,
                     loading: false,
                     loadError: null,
                     isDirty: false,
                   }
-                : t,
+                : tab,
             ),
           );
         })
         .catch((e) => {
           if (ac.signal.aborted || gen !== loadGenRef.current) return;
           setTabs((prev) =>
-            prev.map((t) =>
-              t.path === path
+            prev.map((tab) =>
+              tab.path === path
                 ? {
-                    ...t,
+                    ...tab,
                     loading: false,
-                    loadError: e instanceof Error ? e.message : "Failed to load file",
+                    loadError: e instanceof Error ? e.message : t("workspace.failedToLoadFile"),
                   }
-                : t,
+                : tab,
             ),
           );
         });
 
       return () => ac.abort();
     },
-    [projectId, environmentStatus],
+    [projectId, environmentStatus, t],
   );
 
   const ensureTabOpen = React.useCallback(
@@ -281,7 +284,7 @@ export function WorkspaceFileEditorPanel({
       if (!res.ok) {
         const data = (await res.json()) as { error?: string };
         setSaveStatus("error");
-        setSaveError(data.error ?? "Save failed");
+        setSaveError(data.error ?? t("workspace.saveFailed"));
         return;
       }
       setTabs((prev) =>
@@ -291,9 +294,9 @@ export function WorkspaceFileEditorPanel({
       setTimeout(() => setSaveStatus("idle"), 2000);
     } catch {
       setSaveStatus("error");
-      setSaveError("Network error");
+      setSaveError(t("workspace.networkError"));
     }
-  }, [projectId, activeTab]);
+  }, [projectId, activeTab, t]);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -320,7 +323,7 @@ export function WorkspaceFileEditorPanel({
       <div className="flex shrink-0 items-stretch border-b border-border/60 bg-zinc-950/50">
         <div className="flex min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {tabs.length === 0 ? (
-            <span className="px-3 py-2 text-xs text-muted-foreground">Open a file from the tree</span>
+            <span className="px-3 py-2 text-xs text-muted-foreground">{t("workspace.openFileFromTree")}</span>
           ) : (
             tabs.map((tab) => {
               const isActive = tab.path === activePath;
@@ -339,7 +342,7 @@ export function WorkspaceFileEditorPanel({
                 >
                   <span className="truncate">{tab.label}</span>
                   {tab.isDirty ? (
-                    <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-label="Unsaved" />
+                    <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-label={t("workspace.unsaved")} />
                   ) : null}
                   <span
                     role="button"
@@ -356,7 +359,7 @@ export function WorkspaceFileEditorPanel({
                       }
                     }}
                     className="ml-0.5 shrink-0 rounded p-0.5 opacity-0 transition hover:bg-muted group-hover:opacity-100"
-                    aria-label={`Close ${tab.label}`}
+                    aria-label={t("workspace.closeTab", { label: tab.label })}
                   >
                     <XIcon className="size-3" />
                   </span>
@@ -379,7 +382,7 @@ export function WorkspaceFileEditorPanel({
                   ? "text-foreground hover:bg-muted"
                   : "text-muted-foreground opacity-40",
             )}
-            title="Save (⌘S / Ctrl+S)"
+            title={t("workspace.saveShortcut")}
           >
             {saveStatus === "saving" ? (
               <Loader2 className="size-3 animate-spin" />
@@ -388,7 +391,7 @@ export function WorkspaceFileEditorPanel({
             ) : (
               <SaveIcon className="size-3" />
             )}
-            Save
+            {t("common.save")}
           </button>
         </div>
       </div>
@@ -396,16 +399,16 @@ export function WorkspaceFileEditorPanel({
       <div className="relative min-h-0 flex-1 bg-zinc-950/80">
         {environmentStatus !== "RUNNING" ? (
           <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
-            Start the project environment to edit files.
+            {t("workspace.startEnvironmentToEdit")}
           </div>
         ) : !activeTab ? (
           <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
-            Select a file in the tree to open it in a new tab.
+            {t("workspace.selectFileToOpen")}
           </div>
         ) : activeTab.loading ? (
           <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
-            <span className="text-sm">Loading…</span>
+            <span className="text-sm">{t("common.loading")}</span>
           </div>
         ) : activeTab.loadError ? (
           <div className="flex h-full items-center justify-center p-6">
@@ -415,7 +418,7 @@ export function WorkspaceFileEditorPanel({
           <>
             {activeTab.contentTruncated ? (
               <p className="absolute left-3 right-3 top-2 z-10 text-[0.65rem] text-amber-700 dark:text-amber-400">
-                Large file — content may be truncated in the workspace.
+                {t("workspace.largeFileTruncated")}
               </p>
             ) : null}
             <MonacoEditor

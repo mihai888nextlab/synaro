@@ -21,6 +21,7 @@ import {
   XIcon,
 } from "lucide-react";
 
+import { useTranslation } from "@/components/ui/locale-provider";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -198,18 +199,17 @@ function ProgressBar() {
   );
 }
 
-const CLARIFY_PHASES = [
-  "Thinking about your request…",
-  "Reading your codebase…",
-  "Preparing clarifying questions…",
-];
-
 function ThinkingMessage() {
+  const { t } = useTranslation();
+  const phases = React.useMemo(
+    () => [t("aiChat.thinkingRequest"), t("aiChat.readingCodebase"), t("aiChat.preparingQuestions")],
+    [t],
+  );
   const [index, setIndex] = React.useState(0);
   React.useEffect(() => {
-    const id = setInterval(() => setIndex((i) => (i + 1) % CLARIFY_PHASES.length), 2000);
+    const id = setInterval(() => setIndex((i) => (i + 1) % phases.length), 2000);
     return () => clearInterval(id);
-  }, []);
+  }, [phases.length]);
   return (
     <div className="flex items-center gap-2 text-sm text-muted-foreground">
       <TypingDots />
@@ -221,7 +221,7 @@ function ThinkingMessage() {
           exit={{ opacity: 0, y: -4 }}
           transition={{ duration: 0.3 }}
         >
-          {CLARIFY_PHASES[index]}
+          {phases[index]}
         </motion.span>
       </AnimatePresence>
     </div>
@@ -248,6 +248,7 @@ function MessageBubble({
   onPlaybackComplete?: (messageId: string) => void;
   onOpenFile?: (path: string) => void;
 }) {
+  const { t } = useTranslation();
   const isUser = message.role === "user";
   const isClarification = Boolean(message.questions && message.questions.length > 0);
   const isRunning =
@@ -266,7 +267,7 @@ function MessageBubble({
     activeFromLog && activeFromLog.length > 0
       ? activeFromLog
       : message.taskProgress?.trim() ||
-          (message.taskStatus ? statusLabel(message.taskStatus) : "Working…");
+          (message.taskStatus ? statusLabel(message.taskStatus, t) : t("aiChat.working"));
 
   const hasActivityLog = (message.activityLog?.length ?? 0) > 0;
   const showActivityToggle = (isDone || isFailed) && hasActivityLog;
@@ -345,7 +346,7 @@ function MessageBubble({
                   }
                 },
                 "aria-expanded": activityLogOpen,
-                "aria-label": activityLogOpen ? "Hide activity log" : "Show activity log",
+                "aria-label": activityLogOpen ? t("aiChat.hideActivityLog") : t("aiChat.showActivityLog"),
               }
             : {})}
         >
@@ -353,7 +354,7 @@ function MessageBubble({
             <div className="space-y-3">
               <div className="flex items-center gap-2 font-medium text-foreground">
                 <HelpCircleIcon className="h-4 w-4 text-primary" />
-                Before I start, a few quick questions:
+                {t("aiChat.clarifyingIntro")}
               </div>
               <ol className="space-y-2 pl-1">
                 {message.questions!.map((q, i) => (
@@ -366,16 +367,25 @@ function MessageBubble({
                 ))}
               </ol>
               <p className="text-xs text-muted-foreground/70 italic">
-                Answer below and press Enter — or press Enter to skip and generate now.
+                {t("aiChat.clarifyingHint")}
               </p>
             </div>
           ) : hasAnswerText && (isRunning || isDone || isFailed) ? (
             <>
               {miniMeta ? (
                 <div className="mb-2 text-[0.7rem] leading-none text-muted-foreground">
-                  Explored {miniMeta.exploredFiles} file
-                  {miniMeta.exploredFiles === 1 ? "" : "s"}, {miniMeta.aiSteps} AI step
-                  {miniMeta.aiSteps === 1 ? "" : "s"}
+                  {t("aiChat.exploredMeta", {
+                    files: miniMeta.exploredFiles,
+                    filesLabel:
+                      miniMeta.exploredFiles === 1
+                        ? t("aiChat.exploredFileOne")
+                        : t("aiChat.exploredFileMany"),
+                    steps: miniMeta.aiSteps,
+                    stepsLabel:
+                      miniMeta.aiSteps === 1
+                        ? t("aiChat.exploredStepOne")
+                        : t("aiChat.exploredStepMany"),
+                  })}
                 </div>
               ) : null}
               <div className="flex items-end gap-2">
@@ -392,7 +402,7 @@ function MessageBubble({
               </div>
               {isRunning ? (
                 <p className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <span>Writing…</span>
+                  <span>{t("aiChat.writing")}</span>
                   <span className="font-mono tabular-nums opacity-50">{elapsed}</span>
                 </p>
               ) : null}
@@ -420,7 +430,7 @@ function MessageBubble({
             </>
           ) : isRunning ? (
             <div className="flex items-center justify-between gap-3 text-muted-foreground">
-              <p>Working on your request…</p>
+              <p>{t("aiChat.workingOnRequest")}</p>
               <span className="font-mono text-xs tabular-nums opacity-50">{elapsed}</span>
             </div>
           ) : (
@@ -456,7 +466,7 @@ function MessageBubble({
           >
             {message.taskResult?.git?.htmlUrl ? (
               <p className="text-muted-foreground">
-                Repository:{" "}
+                {t("aiChat.repository")}{" "}
                 <a
                   href={message.taskResult.git.htmlUrl}
                   target="_blank"
@@ -470,7 +480,7 @@ function MessageBubble({
             {message.taskResult?.git?.branch && !message.taskResult.git.noChanges ? (
               <p className="flex items-center gap-1.5 text-muted-foreground">
                 <CheckCircleIcon className="h-3.5 w-3.5 shrink-0 text-green-500" />
-                Pushed to{" "}
+                {t("aiChat.pushedTo")}{" "}
                 <span className="font-mono text-foreground">{message.taskResult.git.branch}</span>
                 {message.taskResult.git.commitSha ? (
                   <span className="font-mono">({message.taskResult.git.commitSha.slice(0, 7)})</span>
@@ -483,7 +493,7 @@ function MessageBubble({
         {isFailed && (
           <div className="flex items-center gap-1.5 text-xs text-destructive/90">
             <AlertCircleIcon className="h-3.5 w-3.5 shrink-0" />
-            <span>Task failed</span>
+            <span>{t("aiChat.taskFailed")}</span>
           </div>
         )}
       </div>
@@ -497,27 +507,27 @@ function MessageBubble({
   );
 }
 
-function statusLabel(status: TaskStatus): string {
+function statusLabel(status: TaskStatus, t: (key: string) => string): string {
   switch (status) {
-    case "PENDING": return "Starting…";
-    case "ANALYZING": return "Analyzing repository…";
-    case "GENERATING": return "Generating code…";
-    case "APPLYING": return "Applying changes…";
-    case "DONE": return "Done";
-    case "FAILED": return "Failed";
+    case "PENDING": return t("aiChat.statusStarting");
+    case "ANALYZING": return t("aiChat.statusAnalyzing");
+    case "GENERATING": return t("aiChat.statusGenerating");
+    case "APPLYING": return t("aiChat.statusApplying");
+    case "DONE": return t("aiChat.statusDone");
+    case "FAILED": return t("aiChat.statusFailed");
   }
 }
 
-function thinkingForStatus(status: TaskStatus): string | null {
+function thinkingForStatus(status: TaskStatus, t: (key: string) => string): string | null {
   switch (status) {
     case "PENDING":
-      return "Thinking — preparing your task…";
+      return t("aiChat.thinkingPending");
     case "ANALYZING":
-      return "Thinking — scanning the repo and choosing files to read…";
+      return t("aiChat.thinkingAnalyzing");
     case "GENERATING":
-      return "Thinking — working on your response…";
+      return t("aiChat.thinkingGenerating");
     case "APPLYING":
-      return "Thinking — writing files into your workspace…";
+      return t("aiChat.thinkingApplying");
     default:
       return null;
   }
@@ -534,27 +544,29 @@ function buildActivityLog(
   prev: string[] | undefined,
   status: TaskStatus,
   progress: string | null | undefined,
-  prevStatus?: TaskStatus,
+  prevStatus: TaskStatus | undefined,
+  t: (key: string) => string,
 ): string[] {
   let log = prev ?? [];
   if (status !== prevStatus) {
-    const thinking = thinkingForStatus(status);
+    const thinking = thinkingForStatus(status, t);
     if (thinking) log = appendActivityLine(log, thinking);
   }
   if (progress?.trim()) {
     log = appendActivityLine(log, progress.trim());
   } else if (status !== prevStatus) {
-    log = appendActivityLine(log, statusLabel(status));
+    log = appendActivityLine(log, statusLabel(status, t));
   }
   return log;
 }
 
-function mergeMessageWithRemoteTask(m: Message, task: RemoteTask): Message {
+function mergeMessageWithRemoteTask(m: Message, task: RemoteTask, t: (key: string) => string): Message {
   const activityLog = buildActivityLog(
     m.activityLog,
     task.status,
     task.progress,
     m.taskStatus,
+    t,
   );
   const isTerminal = isTerminalTaskStatus(task.status);
   const result = task.result as TaskResult | null | undefined;
@@ -602,6 +614,7 @@ function RunAppSuggestion({
   dismissedFor: string | null;
   onDismiss: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   if (!onRunApp || !environmentStatus || environmentStatus === "PROVISIONING") return null;
 
   const lastMsg = messages[messages.length - 1];
@@ -628,9 +641,7 @@ function RunAppSuggestion({
           <div className="flex items-center gap-2 text-foreground mb-3">
             <PlayIcon className="h-4 w-4 text-primary shrink-0" />
             <span>
-              {isAlreadyRunning
-                ? "Want to restart the app to apply your changes?"
-                : "Want to run the app to see your changes?"}
+              {isAlreadyRunning ? t("aiChat.restartAppPrompt") : t("aiChat.runAppPrompt")}
             </span>
           </div>
           <div className="flex gap-2">
@@ -643,14 +654,14 @@ function RunAppSuggestion({
               className="inline-flex items-center gap-1.5 rounded-xl bg-foreground px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90"
             >
               <PlayIcon className="h-3 w-3" />
-              {isAlreadyRunning ? "Restart" : "Run the app"}
+              {isAlreadyRunning ? t("aiChat.restart") : t("aiChat.runTheApp")}
             </button>
             <button
               type="button"
               onClick={() => onDismiss(msgId)}
               className="inline-flex items-center rounded-xl border border-border/70 bg-card/80 px-3 py-1.5 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
             >
-              Maybe later
+              {t("agents.maybeLater")}
             </button>
           </div>
         </div>
@@ -673,6 +684,7 @@ export function AnimatedAIChat({
   onRunApp?: () => void;
 }) {
   const storageKey = projectId ? `synaro:chat:${projectId}` : null;
+  const { t } = useTranslation();
   const { activeTask, polledTask, setActiveTask } = useAiBackgroundTask();
   const chatPreview = useWorkspaceChatPreview();
   const handleOpenWorkspaceFile = React.useCallback(
@@ -756,7 +768,7 @@ export function AnimatedAIChat({
                 let touched = false;
                 const next = prev.map((m) => {
                   if (m.taskId !== task.id) return m;
-                  const merged = mergeMessageWithRemoteTask(m, task);
+                  const merged = mergeMessageWithRemoteTask(m, task, t);
                   if (messagesEqualForRemoteTask(m, merged)) return m;
                   touched = true;
                   return merged;
@@ -817,30 +829,30 @@ export function AnimatedAIChat({
     () => [
       {
         icon: <ImageIcon className="h-4 w-4" />,
-        label: "Clone UI",
-        description: "Generate a UI from a screenshot",
+        label: t("aiChat.cloneUi"),
+        description: t("aiChat.cloneUiDesc"),
         prefix: "/clone",
       },
       {
         icon: <Figma className="h-4 w-4" />,
-        label: "Import Figma",
-        description: "Import a design from Figma",
+        label: t("aiChat.importFigma"),
+        description: t("aiChat.importFigmaDesc"),
         prefix: "/figma",
       },
       {
         icon: <MonitorIcon className="h-4 w-4" />,
-        label: "Create Page",
-        description: "Generate a new page scaffold",
+        label: t("aiChat.createPage"),
+        description: t("aiChat.createPageDesc"),
         prefix: "/page",
       },
       {
         icon: <Sparkles className="h-4 w-4" />,
-        label: "Improve",
-        description: "Improve existing UI design",
+        label: t("aiChat.improve"),
+        description: t("aiChat.improveDesc"),
         prefix: "/improve",
       },
     ],
-    [],
+    [t],
   );
 
   const showCommandPalette = value.startsWith("/") && !value.includes(" ");
@@ -875,7 +887,7 @@ export function AnimatedAIChat({
       let touched = false;
       const next = prev.map((m) => {
         if (m.taskId !== polledTask.id) return m;
-        const merged = mergeMessageWithRemoteTask(m, polledTask as RemoteTask);
+        const merged = mergeMessageWithRemoteTask(m, polledTask as RemoteTask, t);
         if (!terminal && messagesEqualForRemoteTask(m, merged)) return m;
         touched = true;
         return merged;
@@ -908,7 +920,7 @@ export function AnimatedAIChat({
       {
         id: asstMsgId,
         role: "assistant",
-        content: "Working on your request…",
+        content: t("aiChat.workingOnRequest"),
         taskId: activeTask.taskId,
         taskStatus: activeTask.status,
         taskProgress: activeTask.progress ?? null,
@@ -930,10 +942,10 @@ export function AnimatedAIChat({
         {
           id: asstMsgId,
           role: "assistant",
-          content: "Working on your request…",
+          content: t("aiChat.workingOnRequest"),
           taskStatus: "PENDING",
-          taskProgress: "Starting…",
-          activityLog: buildActivityLog([], "PENDING", "Starting…", undefined),
+          taskProgress: t("aiChat.statusStarting"),
+          activityLog: buildActivityLog([], "PENDING", t("aiChat.statusStarting"), undefined, t),
           playbackComplete: false,
         },
       ]);
@@ -954,9 +966,9 @@ export function AnimatedAIChat({
               m.id === asstMsgId
                 ? {
                     ...m,
-                    content: "Task submission failed.",
+                    content: t("aiChat.taskSubmissionFailed"),
                     taskStatus: "FAILED",
-                    taskError: data.error ?? `Error ${res.status}`,
+                    taskError: data.error ?? t("aiChat.errorStatus", { status: res.status }),
                     taskProgress: null,
                   }
                 : m,
@@ -984,7 +996,7 @@ export function AnimatedAIChat({
             m.id === asstMsgId
               ? {
                   ...m,
-                  content: "Network error — could not reach the AI service.",
+                  content: t("aiChat.networkErrorAi"),
                   taskStatus: "FAILED",
                   taskProgress: null,
                 }
@@ -994,7 +1006,7 @@ export function AnimatedAIChat({
         setIsSubmitting(false);
       }
     },
-    [projectId, projectSlug, setActiveTask],
+    [projectId, projectSlug, setActiveTask, t],
   );
 
   const handleSend = React.useCallback(async (promptOverride?: string) => {
@@ -1013,7 +1025,7 @@ export function AnimatedAIChat({
         {
           id: `asst-${Date.now()}`,
           role: "assistant",
-          content: "No project is connected. Open a project workspace to use AI coding assistance.",
+          content: t("aiChat.noProjectConnected"),
         },
       ]);
       return;
@@ -1187,8 +1199,8 @@ export function AnimatedAIChat({
 
   const hasMessages = messages.length > 0;
   const placeholder = pendingClarification
-    ? "Answer the questions above, or press Enter to skip…"
-    : "Ask Synaro a question…";
+    ? t("aiChat.answerOrSkip")
+    : t("aiChat.askQuestion");
 
   return (
     <div className={cn("lab-bg relative flex h-full w-full flex-col overflow-hidden", className)}>
@@ -1217,11 +1229,11 @@ export function AnimatedAIChat({
           >
             <div className="text-center">
               <h2 className="text-2xl font-medium tracking-tight text-foreground sm:text-3xl max-xl:text-xl max-xl:sm:text-xl">
-                Let&apos;s build your idea!
+                {t("aiChat.buildIdeaTitle")}
               </h2>
               <div className="mx-auto mt-2 h-px w-56 max-w-full bg-gradient-to-r from-transparent via-foreground/15 to-transparent max-xl:w-40" />
               <p className="mt-3 hidden text-sm text-muted-foreground xl:block">
-                Describe what you want to build — I&apos;ll ask a few questions, then generate it.
+                {t("aiChat.buildIdeaSubtitle")}
               </p>
             </div>
 
@@ -1339,7 +1351,7 @@ export function AnimatedAIChat({
               >
                 <SpeechWaveform levels={micLevels} />
                 <p className="mt-1 text-center text-xs text-muted-foreground">
-                  Listening… stops after 3s of silence (tap mic to cancel)
+                  {t("aiChat.listeningHint")}
                 </p>
               </motion.div>
             ) : null}
@@ -1371,7 +1383,7 @@ export function AnimatedAIChat({
                         type="button"
                         onClick={() => removeAttachment(idx)}
                         className="text-muted-foreground hover:text-foreground"
-                        aria-label="Remove attachment"
+                        aria-label={t("aiChat.removeAttachment")}
                       >
                         <XIcon className="h-3 w-3" />
                       </button>
@@ -1396,7 +1408,7 @@ export function AnimatedAIChat({
                 }}
                 className="inline-flex items-center rounded-lg border border-border/70 bg-card/80 px-2.5 py-1 text-[0.6875rem] text-muted-foreground transition hover:bg-muted hover:text-foreground sm:text-xs"
               >
-                Skip questions
+                {t("aiChat.skipQuestions")}
               </motion.button>
             </div>
           ) : null}
@@ -1413,7 +1425,7 @@ export function AnimatedAIChat({
                   adjustHeight();
                 }}
                 onKeyDown={handleKeyDown}
-                placeholder={isListening ? "Listening…" : placeholder}
+                placeholder={isListening ? t("aiChat.listening") : placeholder}
                 disabled={isBusy || isListening}
                 rows={1}
                 className={cn(
@@ -1437,7 +1449,7 @@ export function AnimatedAIChat({
                       isListening && "border-primary/50 bg-primary/10 text-primary",
                       isBusy && "pointer-events-none opacity-50",
                     )}
-                    aria-label={isListening ? "Stop voice input" : "Start voice input"}
+                    aria-label={isListening ? t("aiChat.stopVoice") : t("aiChat.startVoice")}
                     aria-pressed={isListening}
                   >
                     <Mic className={cn("h-4 w-4", isListening && "animate-pulse")} />
@@ -1453,7 +1465,7 @@ export function AnimatedAIChat({
                         "rounded-[28%] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                         showCommandPalette && "bg-muted text-foreground",
                       )}
-                      aria-label="More actions"
+                      aria-label={t("aiChat.moreActions")}
                     >
                       <Plus className="h-4 w-4" />
                     </button>
@@ -1470,11 +1482,11 @@ export function AnimatedAIChat({
                       onSelect={() => openFilePicker()}
                     >
                       <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span>Attach file</span>
+                      <span>{t("aiChat.attachFile")}</span>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator className="my-1" />
                     <DropdownMenuLabel className="px-2 py-1 text-xs font-medium text-muted-foreground">
-                      Commands
+                      {t("aiChat.commands")}
                     </DropdownMenuLabel>
                     {commandSuggestions.map((s, idx) => (
                       <DropdownMenuItem
@@ -1500,7 +1512,7 @@ export function AnimatedAIChat({
                   whileTap={{ scale: 0.98 }}
                   disabled={isBusy || !value.trim()}
                   aria-label={
-                    isAsking ? "Thinking" : isSubmitting ? "Building" : "Send message"
+                    isAsking ? t("aiChat.thinking") : isSubmitting ? t("aiChat.building") : t("aiChat.sendMessage")
                   }
                   className={cn(
                     "inline-flex shrink-0 items-center justify-center rounded-[28%] transition",
@@ -1518,7 +1530,7 @@ export function AnimatedAIChat({
                     <SendIcon className="h-4 w-4" />
                   )}
                   <span className="hidden xl:inline">
-                    {isAsking ? "Thinking…" : isSubmitting ? "Building…" : "Send"}
+                    {isAsking ? t("aiChat.thinkingEllipsis") : isSubmitting ? t("aiChat.buildingEllipsis") : t("aiChat.send")}
                   </span>
                 </motion.button>
             </div>

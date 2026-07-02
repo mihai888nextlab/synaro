@@ -33,6 +33,8 @@
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
 
+  --dashboard-edit-border: rgba(0, 0, 0, 0.1);
+
   /* Matches chart snippet reference: chartConfig uses `var(--color-cyan-600)` */
   --color-cyan-600: #0891b2;
 }
@@ -93,6 +95,8 @@ html[data-theme="dark"] {
 
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
+
+  --dashboard-edit-border: rgba(255, 255, 255, 0.24);
 
   --color-cyan-600: #22d3ee;
 }
@@ -267,4 +271,63 @@ html.theme-transition * {
   top: -0.45rem;
   font-size: 0.75rem;
   color: rgb(167 139 250);
+}
+
+/* Dashboard widget grid */
+.dashboard-grid-root .react-grid-layout {
+  min-height: 0;
+}
+
+.dashboard-grid-root .react-grid-item {
+  overflow: visible !important;
+  transition: box-shadow 150ms ease;
+}
+
+.dashboard-grid-root .react-grid-item.react-draggable-dragging {
+  z-index: 30;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+}
+
+.dashboard-grid-item__content {
+  min-height: 100%;
+}
+
+/* Edit mode: light grey border on the full grid cell (widget slot) */
+.dashboard-grid--editing .react-grid-item {
+  cursor: grab;
+}
+
+.dashboard-grid--editing .react-grid-item::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  border: 2px solid var(--dashboard-edit-border);
+  border-radius: 0.75rem;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.dashboard-grid--editing .react-grid-item.react-draggable-dragging::before {
+  border-color: color-mix(in srgb, var(--dashboard-edit-border) 70%, var(--foreground) 30%);
+}
+
+.dashboard-grid--editing .react-grid-item.react-draggable-dragging {
+  cursor: grabbing;
+}
+
+.dashboard-grid--editing .react-grid-item.react-grid-placeholder {
+  border-radius: 0.75rem;
+  background: var(--muted) !important;
+  opacity: 1;
+}
+
+.dashboard-grid-root--drop-target .react-grid-layout {
+  outline: 2px dashed var(--dashboard-edit-border);
+  outline-offset: 6px;
+  border-radius: 1rem;
+}
+
+.dashboard-grid-root--drop-target .react-grid-item.react-draggable-dragging {
+  opacity: 0.85;
 }

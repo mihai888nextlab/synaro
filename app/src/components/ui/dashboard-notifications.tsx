@@ -11,25 +11,30 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useTranslation } from "@/components/ui/locale-provider";
 import {
   canUseBrowserNotifications,
   requestBrowserNotificationPermission,
   useNotifications,
 } from "@/components/ui/notifications";
 
-function timeAgo(ms: number) {
+function timeAgo(
+  ms: number,
+  t: (key: string, params?: Record<string, string | number>) => string,
+) {
   const diff = Date.now() - ms;
   const s = Math.floor(diff / 1000);
-  if (s < 60) return `${s}s ago`;
+  if (s < 60) return t("notifications.timeAgoSeconds", { count: s });
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
+  if (m < 60) return t("notifications.timeAgoMinutes", { count: m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24) return t("notifications.timeAgoHours", { count: h });
   const d = Math.floor(h / 24);
-  return `${d}d ago`;
+  return t("notifications.timeAgoDays", { count: d });
 }
 
 export function DashboardNotifications() {
+  const { t } = useTranslation();
   const { notifications, unreadCount, markAllRead, clearAll } = useNotifications();
   const [open, setOpen] = React.useState(false);
 
@@ -49,7 +54,7 @@ export function DashboardNotifications() {
           variant="outline"
           size="icon"
           className="relative h-9 w-9 rounded-xl border-border/70 bg-card text-muted-foreground shadow-sm shadow-black/5 hover:bg-muted hover:text-foreground"
-          aria-label="Open notifications"
+          aria-label={t("notifications.openAria")}
         >
           <Bell className="size-4" />
           {unreadCount > 0 && (
@@ -66,14 +71,14 @@ export function DashboardNotifications() {
       >
         <div className="flex items-center justify-between gap-2 px-1 py-1.5">
           <span className="text-xs font-medium text-muted-foreground">
-            Notifications
+            {t("notifications.title")}
           </span>
           <button
             type="button"
             onClick={() => clearAll()}
             className="rounded-md px-2 py-1 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
           >
-            Clear
+            {t("notifications.clear")}
           </button>
         </div>
 
@@ -84,7 +89,7 @@ export function DashboardNotifications() {
               onClick={() => void requestBrowserNotificationPermission()}
               className="w-full rounded-lg border border-border/60 bg-muted/40 px-2 py-2 text-left text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
             >
-              Enable browser notifications
+              {t("notifications.enableBrowser")}
             </button>
           </div>
         ) : null}
@@ -92,7 +97,7 @@ export function DashboardNotifications() {
         <div className="max-h-[360px] overflow-auto py-1">
           {notifications.length === 0 ? (
             <div className="px-2 py-6 text-center text-xs text-muted-foreground">
-              No notifications yet.
+              {t("notifications.noNotifications")}
             </div>
           ) : (
             notifications.map((n) => (
@@ -107,7 +112,7 @@ export function DashboardNotifications() {
                       <div className="flex items-center justify-between gap-3">
                         <span className="truncate text-sm font-medium">{n.title}</span>
                         <span className="shrink-0 text-xs text-muted-foreground">
-                          {timeAgo(n.createdAtMs)}
+                          {timeAgo(n.createdAtMs, t)}
                         </span>
                       </div>
                       {n.description ? (
@@ -120,7 +125,7 @@ export function DashboardNotifications() {
                     <div className="flex items-center justify-between gap-3">
                       <span className="truncate text-sm font-medium">{n.title}</span>
                       <span className="shrink-0 text-xs text-muted-foreground">
-                        {timeAgo(n.createdAtMs)}
+                        {timeAgo(n.createdAtMs, t)}
                       </span>
                     </div>
                     {n.description ? (
@@ -136,4 +141,3 @@ export function DashboardNotifications() {
     </DropdownMenu>
   );
 }
-

@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { useTranslation } from "@/components/ui/locale-provider";
 import { cn } from "@/lib/utils";
 
 const dialogShellClass =
@@ -21,7 +22,7 @@ export function ExplorerNameDialog({
   description,
   label,
   defaultValue = "",
-  confirmLabel = "Create",
+  confirmLabel,
   busy,
   onOpenChange,
   onConfirm,
@@ -36,6 +37,8 @@ export function ExplorerNameDialog({
   onOpenChange: (open: boolean) => void;
   onConfirm: (value: string) => void | Promise<void>;
 }) {
+  const { t } = useTranslation();
+  const resolvedConfirmLabel = confirmLabel ?? t("common.create");
   const [value, setValue] = React.useState(defaultValue);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -95,7 +98,7 @@ export function ExplorerNameDialog({
               onClick={() => onOpenChange(false)}
               disabled={busy}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               type="button"
@@ -104,7 +107,7 @@ export function ExplorerNameDialog({
               onClick={submit}
               disabled={busy || !value.trim()}
             >
-              {confirmLabel}
+              {resolvedConfirmLabel}
             </Button>
           </div>
         </div>
@@ -128,20 +131,17 @@ export function ExplorerDeleteDialog({
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void | Promise<void>;
 }) {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={dialogShellClass}>
         <div className="space-y-4">
           <div className="space-y-1.5">
             <DialogTitle className="text-base font-semibold tracking-tight">
-              Delete {isFolder ? "folder" : "file"}?
+              {isFolder ? t("workspace.deleteFolderTitle") : t("workspace.deleteFileTitle")}
             </DialogTitle>
             <DialogDescription className="text-sm text-muted-foreground">
-              This removes{" "}
-              <span className={cn("font-mono text-foreground/90", isFolder && "break-all")}>
-                {path}
-              </span>{" "}
-              from your workspace container. This cannot be undone.
+              {t("workspace.deleteDescription", { path })}
             </DialogDescription>
           </div>
           <div className="flex justify-end gap-2 pt-1">
@@ -153,7 +153,7 @@ export function ExplorerDeleteDialog({
               onClick={() => onOpenChange(false)}
               disabled={busy}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               type="button"
@@ -163,7 +163,7 @@ export function ExplorerDeleteDialog({
               onClick={() => void onConfirm()}
               disabled={busy}
             >
-              Delete
+              {t("common.delete")}
             </Button>
           </div>
         </div>

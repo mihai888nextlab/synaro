@@ -20,6 +20,7 @@ import {
   ExplorerDeleteDialog,
   ExplorerNameDialog,
 } from "@/components/ui/workspace-explorer-dialogs";
+import { useTranslation } from "@/components/ui/locale-provider";
 import { relativePathFromTreeItemId } from "@/lib/workspace-path-tree";
 import {
   createWorkspaceFile,
@@ -69,6 +70,7 @@ export function WorkspaceExplorerContextMenu({
   onPathRenamed,
   externalNameDialog,
 }: ExplorerContextMenuProps) {
+  const { t } = useTranslation();
   const [busy, setBusy] = React.useState(false);
   const [nameDialog, setNameDialog] = React.useState<{
     mode: "newFile" | "newFolder" | "rename";
@@ -99,12 +101,12 @@ export function WorkspaceExplorerContextMenu({
         onTreeMutated();
         onClose();
       } catch (err) {
-        window.alert(err instanceof Error ? err.message : "Action failed");
+        window.alert(err instanceof Error ? err.message : t("workspace.actionFailed"));
       } finally {
         setBusy(false);
       }
     },
-    [projectId, canMutate, busy, onTreeMutated, onClose],
+    [projectId, canMutate, busy, onTreeMutated, onClose, t],
   );
 
   const activeNameDialog = React.useMemo(
@@ -146,7 +148,7 @@ export function WorkspaceExplorerContextMenu({
         externalNameDialog?.onOpenChange(false);
         onClose();
       } catch (err) {
-        window.alert(err instanceof Error ? err.message : "Action failed");
+        window.alert(err instanceof Error ? err.message : t("workspace.actionFailed"));
       } finally {
         setBusy(false);
       }
@@ -203,7 +205,7 @@ export function WorkspaceExplorerContextMenu({
               }}
             >
               <FileIcon className="size-3.5 text-muted-foreground" />
-              Open
+              {t("workspace.openFile")}
             </DropdownMenuItem>
           ) : null}
 
@@ -213,7 +215,7 @@ export function WorkspaceExplorerContextMenu({
             onSelect={() => setNameDialog({ mode: "newFile", defaultValue: "untitled.txt" })}
           >
             <FilePlus2 className="size-3.5 text-muted-foreground" />
-            New file…
+            {t("workspace.newFileEllipsis")}
           </DropdownMenuItem>
           <DropdownMenuItem
             className={menuItemClass}
@@ -221,7 +223,7 @@ export function WorkspaceExplorerContextMenu({
             onSelect={() => setNameDialog({ mode: "newFolder", defaultValue: "new-folder" })}
           >
             <FolderPlus className="size-3.5 text-muted-foreground" />
-            New folder…
+            {t("workspace.newFolderEllipsis")}
           </DropdownMenuItem>
 
           {target && target.kind !== "background" ? (
@@ -238,7 +240,7 @@ export function WorkspaceExplorerContextMenu({
                 }
               >
                 <Pencil className="size-3.5 text-muted-foreground" />
-                Rename…
+                {t("workspace.renameEllipsis")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 className={cn(
@@ -254,7 +256,7 @@ export function WorkspaceExplorerContextMenu({
                 }
               >
                 <Trash2 className="size-3.5" />
-                Delete
+                {t("common.delete")}
               </DropdownMenuItem>
             </>
           ) : null}
@@ -271,26 +273,30 @@ export function WorkspaceExplorerContextMenu({
         }}
         title={
           activeNameDialog?.mode === "rename"
-            ? "Rename"
+            ? t("workspace.rename")
             : activeNameDialog?.mode === "newFolder"
-              ? "New folder"
-              : "New file"
+              ? t("workspace.newFolder")
+              : t("workspace.newFile")
         }
         description={
           activeNameDialog?.mode === "rename"
-            ? "Enter a new name for this item."
+            ? t("workspace.renameDescription")
             : nameDialogParentDir
-              ? `Inside ${nameDialogParentDir}`
-              : "At the workspace root"
+              ? t("workspace.insideFolder", { path: nameDialogParentDir })
+              : t("workspace.atWorkspaceRoot")
         }
-        label={activeNameDialog?.mode === "newFolder" ? "Folder name" : "File name"}
+        label={
+          activeNameDialog?.mode === "newFolder"
+            ? t("workspace.folderName")
+            : t("workspace.fileName")
+        }
         defaultValue={activeNameDialog?.defaultValue ?? ""}
         confirmLabel={
           activeNameDialog?.mode === "rename"
-            ? "Rename"
+            ? t("workspace.rename")
             : activeNameDialog?.mode === "newFolder"
-              ? "Create folder"
-              : "Create file"
+              ? t("workspace.createFolder")
+              : t("workspace.createFile")
         }
         busy={busy}
         onConfirm={handleNameConfirm}

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { useTranslation } from "@/components/ui/locale-provider";
 import { cn } from "@/lib/utils";
 
 export type DashboardLogRow = {
@@ -139,19 +140,20 @@ function LogRowCard({
 }
 
 function StatusPill({ status }: { status: DashboardLogRow["status"] }) {
+  const { t } = useTranslation();
   const map = {
     done: {
-      label: "done",
+      label: t("logs.statusDone"),
       className:
         "border-emerald-200/90 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/[0.06] dark:text-emerald-400",
     },
     running: {
-      label: "running",
+      label: t("logs.statusRunning"),
       className:
         "border-sky-200/90 bg-sky-50 text-sky-800 dark:border-sky-500/40 dark:bg-sky-500/[0.08] dark:text-sky-300",
     },
     stopped: {
-      label: "stopped",
+      label: t("logs.statusStopped"),
       className:
         "border-border/50 bg-muted/60 text-muted-foreground dark:border-border/80 dark:bg-muted/25",
     },
@@ -177,13 +179,15 @@ const cardShell =
 export function DashboardLogsTable({
   logs = DASHBOARD_PLACEHOLDER_LOGS,
   className,
-  title = "Recent activity",
+  title,
   headerEnd,
-  emptyMessage = "No activity yet. Start or stop a project container to see events here.",
+  emptyMessage,
   /** Omit title row / toolbar (e.g. `/logs` full-page list). */
   hideHeader = false,
   /** No outer card: no border, radius, or lifted surface — table sits flush on the page. */
   frameless = false,
+  /** Show full list height (dashboard customize mode). */
+  expandContent = false,
 }: {
   logs?: DashboardLogRow[];
   className?: string;
@@ -193,20 +197,25 @@ export function DashboardLogsTable({
   emptyMessage?: string;
   hideHeader?: boolean;
   frameless?: boolean;
+  expandContent?: boolean;
 }) {
+  const { t } = useTranslation();
+  const resolvedTitle = title ?? t("dashboard.activityTitle");
+  const resolvedEmptyMessage = emptyMessage ?? t("dashboard.noLogsBody");
   const isEmpty = logs.length === 0;
 
   return (
     <section
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden",
+        "flex flex-col",
+        expandContent ? "min-h-0 overflow-visible" : "min-h-0 overflow-hidden",
         frameless ? "border-0 bg-transparent shadow-none" : cardShell,
         className,
       )}
     >
       {!hideHeader ? (
         <div className="flex items-center justify-between gap-3 border-b border-border/60 px-5 py-4 max-lg:px-4 max-lg:py-3.5 sm:px-6">
-          <h2 className="min-w-0 text-lg font-semibold tracking-tight text-foreground max-lg:text-base">{title}</h2>
+          <h2 className="min-w-0 text-lg font-semibold tracking-tight text-foreground max-lg:text-base">{resolvedTitle}</h2>
           {headerEnd ? <div className="flex shrink-0 items-center">{headerEnd}</div> : null}
         </div>
       ) : null}
@@ -218,17 +227,27 @@ export function DashboardLogsTable({
             hideHeader ? "px-4 py-16 max-lg:py-12 sm:py-24" : "px-5 py-12 max-lg:px-4 max-lg:py-10 sm:px-6 sm:py-16",
           )}
         >
-          <p className="text-base font-medium text-foreground">There are no logs</p>
-          <p className="mt-2 max-w-md text-sm text-muted-foreground max-lg:px-2">{emptyMessage}</p>
+          <p className="text-base font-medium text-foreground">{t("dashboard.noLogsTitle")}</p>
+          <p className="mt-2 max-w-md text-sm text-muted-foreground max-lg:px-2">{resolvedEmptyMessage}</p>
         </div>
       ) : (
         <>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:hidden">
+          <div
+            className={cn(
+              "lg:hidden",
+              expandContent ? "overflow-visible" : "min-h-0 flex-1 overflow-y-auto overscroll-contain",
+            )}
+          >
             {logs.map((row) => (
               <LogRowCard key={row.id} row={row} frameless={frameless} />
             ))}
           </div>
-          <div className="hidden min-h-0 flex-1 overflow-x-auto overflow-y-auto lg:block">
+          <div
+            className={cn(
+              "hidden lg:block",
+              expandContent ? "overflow-visible" : "min-h-0 flex-1 overflow-x-auto overflow-y-auto",
+            )}
+          >
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead>
             <tr className="border-b border-border/60">

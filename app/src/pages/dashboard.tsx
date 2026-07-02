@@ -1,32 +1,31 @@
 import type { GetServerSideProps } from "next";
 import { getServerSession } from "next-auth/next";
+
+import { DashboardPageClient } from "@/components/ui/dashboard/dashboard-page-client";
+import type { SynaroAgentCardModel } from "@/components/ui/agent-cards-grid";
 import type { SynaroProjectCardModel } from "@/components/ui/project-cards-grid";
-import { DashboardKpiStrip, type DashboardKpiItem } from "@/components/ui/dashboard-kpi-strip";
-import { DashboardSectionLink } from "@/components/ui/dashboard-section-link";
-import { DashboardLogsTable, type DashboardLogRow } from "@/components/ui/dashboard-logs-table";
-import { DashboardProjectsShowcase } from "@/components/ui/dashboard-projects-showcase";
+import type { DashboardKpiItem } from "@/components/ui/dashboard-kpi-strip";
+import type { DashboardLogRow } from "@/components/ui/dashboard-logs-table";
+import { DEFAULT_DASHBOARD_LAYOUT } from "@/lib/dashboard/default-layout";
+import type { DashboardLayout } from "@/lib/dashboard/layout-schema";
+import { getUserDashboardLayout } from "@/lib/dashboard/layout-storage";
 import { authOptions } from "@/lib/next-auth-options";
+import { prisma } from "@/lib/prisma";
+import { getUserAgentCards } from "@/lib/user-agents";
 import { getDashboardProjectPayload } from "@/lib/user-project-cards";
 
 type DashboardPageProps = {
+  initialLayout: DashboardLayout;
+  isDefaultLayout: boolean;
   projects: SynaroProjectCardModel[];
+  agents: SynaroAgentCardModel[];
   kpiItems: DashboardKpiItem[];
   activityLogs: DashboardLogRow[];
+  apiKeysCount: number;
 };
 
-export default function DashboardPage({ projects, kpiItems, activityLogs }: DashboardPageProps) {
-  return (
-    <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-6 sm:gap-10">
-      <DashboardKpiStrip items={kpiItems} />
-
-      <DashboardProjectsShowcase projects={projects} />
-
-      <DashboardLogsTable
-        logs={activityLogs}
-        headerEnd={<DashboardSectionLink href="/logs" label="View logs" />}
-      />
-    </div>
-  );
+export default function DashboardPage(props: DashboardPageProps) {
+  return <DashboardPageClient {...props} />;
 }
 
 export const getServerSideProps: GetServerSideProps<DashboardPageProps> = async (ctx) => {
@@ -35,6 +34,25 @@ export const getServerSideProps: GetServerSideProps<DashboardPageProps> = async 
     return { redirect: { destination: "/login", permanent: false } };
   }
 
-  const { projects, kpiItems, activityLogs } = await getDashboardProjectPayload(session.user.id);
-  return { props: { projects, kpiItems, activityLogs } };
+  const userId = session.user.id;
+
+  const [{ projects, kpiItems, activityLogs }, agents, storedLayout, apiKeysCount] =
+    await Promise.all([
+      getDashboardProjectPayload(userId),
+      getUserAgentCards(userId),
+      getUserDashboardLayout(userId),
+      prisma.apiKey.count({ where: { userId, revokedAt: null } }),
+    ]);
+
+  return {
+    props: {
+      initialLayout: storedLayout ?? DEFAULT_DASHBOARD_LAYOUT,
+      isDefaultLayout: storedLayout === null,
+      projects,
+      agents,
+      kpiItems,
+      activityLogs,
+      apiKeysCount,
+    },
+  };
 };

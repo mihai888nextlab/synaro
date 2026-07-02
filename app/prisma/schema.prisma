@@ -24,6 +24,9 @@ model User {
   invitesCreated   ProjectInvite[] @relation("ProjectInviteCreatedBy")
   activityLogs     ActivityLog[]
   apiKeys          ApiKey[]
+  dashboardLayout      Json?
+  dashboardLayoutVersion Int @default(1)
+  preferredLocale      String @default("en")
 }
 
 /// Per-user API keys for `/api/v1` (Bearer auth). Only `keyHash` is stored.

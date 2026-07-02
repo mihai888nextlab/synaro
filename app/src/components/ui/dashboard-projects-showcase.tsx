@@ -1,9 +1,12 @@
+import { useTranslation } from "@/components/ui/locale-provider";
 import { DashboardSectionLink } from "@/components/ui/dashboard-section-link";
 import type { SynaroProjectCardModel } from "@/components/ui/project-cards-grid";
 import {
   DEFAULT_SYNARO_PROJECT_CARDS,
   SynaroProjectsCardsGrid,
 } from "@/components/ui/project-cards-grid";
+import type { WidgetLayoutMode } from "@/components/ui/dashboard/widget-layout-utils";
+import { showcaseSectionClass } from "@/components/ui/dashboard/widget-layout-utils";
 import { cn } from "@/lib/utils";
 
 /** @deprecated Prefer importing `SynaroProjectCardModel` from `project-cards-grid`. */
@@ -12,21 +15,21 @@ export type DashboardProjectShowcaseItem = SynaroProjectCardModel;
 export function DashboardProjectsShowcase({
   projects = DEFAULT_SYNARO_PROJECT_CARDS,
   className,
+  layoutMode = "grid",
 }: {
   projects?: SynaroProjectCardModel[];
   className?: string;
+  layoutMode?: WidgetLayoutMode;
 }) {
+  const { t } = useTranslation();
   return (
     <section
       data-onboarding="dashboard-projects"
-      className={cn(
-        "flex flex-col overflow-hidden rounded-2xl border-0 bg-muted/15 shadow-none dark:bg-muted/10",
-        className,
-      )}
+      className={showcaseSectionClass(layoutMode, className)}
     >
       <div className="flex items-center justify-between gap-3 border-b border-border/50 px-5 py-4 max-sm:px-4 max-sm:py-3.5 sm:px-6">
-        <h2 className="min-w-0 text-lg font-semibold tracking-tight text-foreground max-sm:text-base">Projects</h2>
-        <DashboardSectionLink href="/projects" label="View all" />
+        <h2 className="min-w-0 text-lg font-semibold tracking-tight text-foreground max-sm:text-base">{t("dashboard.projectsTitle")}</h2>
+        <DashboardSectionLink href="/projects" label={t("common.viewAll")} />
       </div>
 
       <div className="px-4 py-4 max-sm:px-3 max-sm:py-3 sm:px-5 sm:py-5">

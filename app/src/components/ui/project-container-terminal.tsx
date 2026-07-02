@@ -4,6 +4,7 @@ import * as React from "react";
 import { Loader2, TerminalSquare } from "lucide-react";
 
 import type { SynaroProjectEnvironmentStatus } from "@/components/ui/project-cards-grid";
+import { useTranslation } from "@/components/ui/locale-provider";
 import {
   readTerminalScrollback,
   writeTerminalScrollback,
@@ -28,6 +29,7 @@ export function ProjectContainerTerminal({
   visible?: boolean;
   className?: string;
 }) {
+  const { t } = useTranslation();
   const running = environmentStatus === "RUNNING";
   const hostRef = React.useRef<HTMLDivElement>(null);
   const termRef = React.useRef<import("@xterm/xterm").Terminal | null>(null);
@@ -67,16 +69,16 @@ export function ProjectContainerTerminal({
   }, [persistScrollback]);
 
   const inactiveMessage = !running
-    ? "Start the container to attach an interactive shell."
+    ? t("workspace.startContainerForShell")
     : !projectId
-      ? "Project not loaded."
+      ? t("workspace.projectNotLoaded")
       : null;
 
   const headerStatus =
     !running || !projectId
-      ? "offline"
+      ? t("workspace.terminalOffline")
       : connection === "open"
-        ? "live shell"
+        ? t("workspace.terminalLiveShell")
         : connection;
 
   React.useEffect(() => {
@@ -139,10 +141,12 @@ export function ProjectContainerTerminal({
 
         if (!sessionRes.ok || !session || !session.ok) {
           const err =
-            session && !session.ok ? session.error : `Session failed (${sessionRes.status})`;
+            session && !session.ok
+              ? session.error
+              : t("workspace.sessionFailed", { status: sessionRes.status });
           term.writeln(`\r\n\x1b[31m${err}\x1b[0m`);
           setConnection("error");
-          setErrorText(err ?? "Could not start terminal session");
+          setErrorText(err ?? t("workspace.couldNotStartTerminal"));
           return;
         }
 
@@ -169,16 +173,14 @@ export function ProjectContainerTerminal({
         ws.onerror = () => {
           if (cancelled) return;
           setConnection("error");
-          setErrorText("WebSocket connection failed");
+          setErrorText(t("workspace.websocketFailed"));
         };
 
         ws.onclose = (event) => {
           if (cancelled) return;
           setConnection("closed");
           if (event.code === 4401) {
-            setErrorText(
-              "Terminal session was rejected (auth mismatch). Restart environment-service after changing NEXTAUTH_SECRET, then refresh this page.",
-            );
+            setErrorText(t("workspace.sessionRejected"));
           } else {
             setErrorText(null);
           }
@@ -198,7 +200,7 @@ export function ProjectContainerTerminal({
         }
       } catch (err) {
         if (cancelled) return;
-        const msg = err instanceof Error ? err.message : "Failed to load terminal";
+        const msg = err instanceof Error ? err.message : t("workspace.failedToLoadTerminal");
         setConnection("error");
         setErrorText(msg);
       }
@@ -208,7 +210,7 @@ export function ProjectContainerTerminal({
       cancelled = true;
       disconnect();
     };
-  }, [disconnect, projectId, running, sendResize]);
+  }, [disconnect, projectId, running, sendResize, t]);
 
   React.useEffect(() => {
     if (!visible) return;
@@ -231,7 +233,7 @@ export function ProjectContainerTerminal({
     >
       <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2 text-xs text-zinc-400">
         <TerminalSquare className="size-3.5 shrink-0" aria-hidden />
-        <span>Container terminal</span>
+        <span>{t("workspace.containerTerminal")}</span>
         <span className="truncate text-zinc-500">{headerStatus}</span>
         {connection === "connecting" ? (
           <Loader2 className="ms-auto size-3.5 shrink-0 animate-spin" aria-hidden />

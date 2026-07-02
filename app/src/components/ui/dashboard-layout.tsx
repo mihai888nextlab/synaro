@@ -24,24 +24,15 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { useOnboarding } from "@/components/ui/onboarding";
+import { useTranslation } from "@/components/ui/locale-provider";
 import { humanizeProjectSlug } from "@/lib/project-slug";
 import { cn } from "@/lib/utils";
 
 type BreadcrumbSegment = { label: string; href?: string };
 
-/** Static dashboard route titles for breadcrumbs (dynamic project routes resolved separately). */
-const titles: Record<string, string> = {
-  "/dashboard": "Dashboard",
-  "/projects": "Projects",
-  "/logs": "Logs",
-  "/settings": "Settings",
-  "/settings/preferences": "Preferences",
-  "/settings/profile": "Profile",
-  "/settings/api-keys": "API keys",
-};
-
 export function DashboardLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const { t } = useTranslation();
   const { openOnboarding } = useOnboarding();
   const { collapsed, setCollapsed } = usePersistentSidebarCollapse();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -49,27 +40,41 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const breadcrumbs = useMemo((): BreadcrumbSegment[] => {
     const path = router.pathname;
     const q = router.query;
+    const titles: Record<string, string> = {
+      "/dashboard": t("nav.dashboard"),
+      "/projects": t("nav.projects"),
+      "/agents": t("nav.agents"),
+      "/logs": t("nav.logs"),
+      "/settings": t("nav.settings"),
+      "/settings/preferences": t("nav.preferences"),
+      "/settings/profile": t("nav.profile"),
+      "/settings/api-keys": t("nav.apiKeys"),
+    };
 
     if (path === "/dashboard") {
-      return [{ label: "Home" }];
+      return [{ label: t("workspace.home") }];
     }
 
     if (path === "/projects") {
-      return [{ label: "Home", href: "/dashboard" }, { label: "Projects" }];
+      return [{ label: t("workspace.home"), href: "/dashboard" }, { label: t("nav.projects") }];
+    }
+
+    if (path === "/agents") {
+      return [{ label: t("workspace.home"), href: "/dashboard" }, { label: t("nav.agents") }];
     }
 
     if (path === "/logs") {
-      return [{ label: "Home", href: "/dashboard" }, { label: "Logs" }];
+      return [{ label: t("workspace.home"), href: "/dashboard" }, { label: t("nav.logs") }];
     }
 
     if (path === "/projects/[projectSlug]/analytics") {
       const raw = q.projectSlug;
       const slug = typeof raw === "string" ? raw : Array.isArray(raw) ? (raw[0] ?? "") : "";
       return [
-        { label: "Home", href: "/dashboard" },
-        { label: "Projects", href: "/projects" },
+        { label: t("workspace.home"), href: "/dashboard" },
+        { label: t("nav.projects"), href: "/projects" },
         { label: humanizeProjectSlug(slug), href: `/projects/${encodeURIComponent(slug)}` },
-        { label: "Analytics" },
+        { label: t("workspace.analytics") },
       ];
     }
 
@@ -77,34 +82,41 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
       const raw = q.projectSlug;
       const slug = typeof raw === "string" ? raw : Array.isArray(raw) ? (raw[0] ?? "") : "";
       return [
-        { label: "Home", href: "/dashboard" },
-        { label: "Projects", href: "/projects" },
+        { label: t("workspace.home"), href: "/dashboard" },
+        { label: t("nav.projects"), href: "/projects" },
         { label: humanizeProjectSlug(slug) },
       ];
     }
 
     if (path.startsWith("/projects/")) {
-      const leaf = titles[path] ?? "Project";
-      return [{ label: "Home", href: "/dashboard" }, { label: "Projects", href: "/projects" }, { label: leaf }];
-    }
-
-    if (path === "/settings") {
-      return [{ label: "Home", href: "/dashboard" }, { label: "Settings" }];
-    }
-
-    if (path.startsWith("/settings/")) {
-      const leaf = titles[path] ?? "Preferences";
+      const leaf = titles[path] ?? t("nav.projects");
       return [
-        { label: "Home", href: "/dashboard" },
-        { label: "Settings", href: "/settings" },
+        { label: t("workspace.home"), href: "/dashboard" },
+        { label: t("nav.projects"), href: "/projects" },
         { label: leaf },
       ];
     }
 
-    return [{ label: "Home", href: "/dashboard" }, { label: titles[path] ?? "Page" }];
-  }, [router.pathname, router.query]);
+    if (path === "/settings") {
+      return [{ label: t("workspace.home"), href: "/dashboard" }, { label: t("nav.settings") }];
+    }
 
-  const isHome = breadcrumbs.length === 1 && breadcrumbs[0]?.label === "Home";
+    if (path.startsWith("/settings/")) {
+      const leaf = titles[path] ?? t("nav.preferences");
+      return [
+        { label: t("workspace.home"), href: "/dashboard" },
+        { label: t("nav.settings"), href: "/settings" },
+        { label: leaf },
+      ];
+    }
+
+    return [
+      { label: t("workspace.home"), href: "/dashboard" },
+      { label: titles[path] ?? t("workspace.page") },
+    ];
+  }, [router.pathname, router.query, t]);
+
+  const isHome = breadcrumbs.length === 1 && breadcrumbs[0]?.label === t("workspace.home");
 
   const isProjectWorkspace =
     router.pathname === "/projects/[projectSlug]" ||
@@ -133,7 +145,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                 type="button"
                 onClick={() => setMobileOpen(true)}
                 className="inline-flex size-9 items-center justify-center rounded-md border border-border/70 text-muted-foreground transition hover:bg-muted lg:hidden"
-                aria-label="Open sidebar"
+                aria-label={t("workspace.openSidebar")}
               >
                 <Menu className="size-4" />
               </button>
@@ -143,7 +155,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                     <BreadcrumbItem>
                       <BreadcrumbPage className="flex items-center gap-2 font-medium text-foreground">
                         <HomeIcon className="size-4" />
-                        <span>Home</span>
+                        <span>{t("workspace.home")}</span>
                       </BreadcrumbPage>
                     </BreadcrumbItem>
                   ) : (
@@ -155,7 +167,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                         >
                           <Link href="/dashboard">
                             <HomeIcon className="size-4" />
-                            <span className="hidden sm:inline">Home</span>
+                            <span className="hidden sm:inline">{t("workspace.home")}</span>
                           </Link>
                         </BreadcrumbLink>
                       </BreadcrumbItem>
@@ -201,8 +213,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                     variant="outline"
                     size="icon"
                     className="h-9 w-9 rounded-xl border-border/70 bg-card text-muted-foreground shadow-sm shadow-black/5 hover:bg-muted hover:text-foreground"
-                    aria-label="Help"
-                    title="Help"
+                    aria-label={t("workspace.help")}
+                    title={t("workspace.help")}
                   >
                     <CircleHelp className="size-4" />
                   </Button>
@@ -217,12 +229,12 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                     onSelect={() => openOnboarding()}
                   >
                     <Sparkles className="size-4 shrink-0 text-muted-foreground" />
-                    Intro explainer
+                    {t("workspace.introExplainer")}
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild className="cursor-pointer rounded-lg">
                     <Link href="/documentation" className="flex items-center gap-2">
                       <BookOpen className="size-4 shrink-0 text-muted-foreground" />
-                      Documentation
+                      {t("nav.documentation")}
                     </Link>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -254,7 +266,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                   type="button"
                   onClick={() => setMobileOpen(false)}
                   className="inline-flex size-9 items-center justify-center rounded-md border border-white/10 bg-black/60 text-zinc-200 backdrop-blur transition hover:bg-white/10"
-                  aria-label="Close sidebar"
+                  aria-label={t("workspace.closeSidebar")}
                 >
                   <X className="size-4" />
                 </button>

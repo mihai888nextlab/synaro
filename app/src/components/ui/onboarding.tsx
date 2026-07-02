@@ -15,15 +15,16 @@ import {
   findClickedTourTarget,
   findVisibleTourTarget,
   getEffectiveStepIndex,
+  getOnboardingTourSteps,
   getPreviousEffectiveStepIndex,
   getStepIndexById,
   isElementVisible,
-  ONBOARDING_TOUR_STEPS,
   resolveNavigateTo,
   resolveStepSelectors,
   routeMatches,
   type OnboardingTourStep,
 } from "@/lib/onboarding-tour-steps";
+import { useTranslation } from "@/components/ui/locale-provider";
 import { cn } from "@/lib/utils";
 
 type Rect = { top: number; left: number; width: number; height: number };
@@ -139,6 +140,7 @@ function TourPopover({
   targetClicked: boolean;
   onSkipStep: () => void;
 }) {
+  const { t } = useTranslation();
   const isCenter =
     step.placement === "center" || (!step.selector && !(step.selectors?.length ?? 0));
 
@@ -198,7 +200,7 @@ function TourPopover({
         <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
           <Sparkles className="h-3.5 w-3.5 text-primary" />
           <span>
-            {stepIndex + 1} of {totalSteps}
+            {t("onboarding.stepProgress", { current: stepIndex + 1, total: totalSteps })}
           </span>
         </div>
         <div className="flex gap-1">
@@ -235,7 +237,7 @@ function TourPopover({
           ) : (
             <MousePointerClick className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
           )}
-          <span>{targetClicked ? "Got it — moving on…" : step.encourageClick}</span>
+          <span>{targetClicked ? t("onboarding.gotItMovingOn") : step.encourageClick}</span>
         </p>
       ) : null}
 
@@ -246,7 +248,7 @@ function TourPopover({
             onClick={onSkip}
             className="text-sm text-muted-foreground transition hover:text-foreground"
           >
-            Skip tour
+            {t("onboarding.skipTour")}
           </button>
           {waitingForClick && !targetClicked ? (
             <button
@@ -254,7 +256,7 @@ function TourPopover({
               onClick={onSkipStep}
               className="text-sm text-muted-foreground transition hover:text-foreground"
             >
-              Skip step
+              {t("onboarding.skipStep")}
             </button>
           ) : null}
         </div>
@@ -262,7 +264,7 @@ function TourPopover({
           {!isFirst ? (
             <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={onBack}>
               <ChevronLeft className="mr-1 h-4 w-4" />
-              Back
+              {t("onboarding.back")}
             </Button>
           ) : null}
           {waitingForClick && !targetClicked ? null : (
@@ -274,12 +276,12 @@ function TourPopover({
               disabled={targetClicked}
             >
               {targetClicked ? (
-                "Continuing…"
+                t("onboarding.continuing")
               ) : isLast ? (
-                "Finish"
+                t("onboarding.finish")
               ) : (
                 <>
-                  Next
+                  {t("onboarding.next")}
                   <ChevronRight className="ml-1 h-4 w-4" />
                 </>
               )}
@@ -303,6 +305,8 @@ function SpotlightTourLayer({
   onFinish: () => void;
 }) {
   const router = useRouter();
+  const { t } = useTranslation();
+  const tourSteps = React.useMemo(() => getOnboardingTourSteps(t), [t]);
   const [targetRect, setTargetRect] = React.useState<Rect | null>(null);
   const [mounted, setMounted] = React.useState(false);
   const [targetClicked, setTargetClicked] = React.useState(false);
@@ -310,12 +314,12 @@ function SpotlightTourLayer({
   const elevatedElRef = React.useRef<HTMLElement | null>(null);
   const interactionHandledRef = React.useRef(false);
 
-  const effectiveIndex = getEffectiveStepIndex(stepIndex);
-  const step = ONBOARDING_TOUR_STEPS[effectiveIndex]!;
+  const effectiveIndex = getEffectiveStepIndex(stepIndex, tourSteps);
+  const step = tourSteps[effectiveIndex]!;
   const stepSelectors = resolveStepSelectors(step);
-  const visibleSteps = ONBOARDING_TOUR_STEPS.filter((s) => !s.skipIf?.());
+  const visibleSteps = tourSteps.filter((s) => !s.skipIf?.());
   const displayIndex = visibleSteps.findIndex((s) => s.id === step.id);
-  const isFirst = effectiveIndex === getEffectiveStepIndex(0);
+  const isFirst = effectiveIndex === getEffectiveStepIndex(0, tourSteps);
   const isLast = step.id === "finish";
   const hasTarget = stepSelectors.length > 0;
   const waitingForClick = Boolean(step.advanceOnTargetClick && step.encourageClick);
@@ -329,12 +333,12 @@ function SpotlightTourLayer({
 
   const goToStep = React.useCallback(
     (nextRaw: number, options?: { hrefOverride?: string | null }) => {
-      const next = getEffectiveStepIndex(nextRaw);
-      if (next >= ONBOARDING_TOUR_STEPS.length) {
+      const next = getEffectiveStepIndex(nextRaw, tourSteps);
+      if (next >= tourSteps.length) {
         onFinish();
         return;
       }
-      const nextStep = ONBOARDING_TOUR_STEPS[next]!;
+      const nextStep = tourSteps[next]!;
       const href = options?.hrefOverride ?? resolveNavigateTo(nextStep);
       const needsNav = Boolean(href && !routeMatches(router.pathname, nextStep.route));
 
@@ -348,7 +352,7 @@ function SpotlightTourLayer({
       }
       complete();
     },
-    [onFinish, onStepIndexChange, router],
+    [onFinish, onStepIndexChange, router, tourSteps],
   );
 
   const advanceAfterInteraction = React.useCallback(
@@ -358,10 +362,10 @@ function SpotlightTourLayer({
       setTargetClicked(true);
 
       const targetIdx = step.advanceOnNavigateTo
-        ? getStepIndexById(step.advanceOnNavigateTo.stepId)
+        ? getStepIndexById(step.advanceOnNavigateTo.stepId, tourSteps)
         : effectiveIndex + 1;
-      const resolvedIdx = getEffectiveStepIndex(targetIdx);
-      const nextStep = ONBOARDING_TOUR_STEPS[resolvedIdx]!;
+      const resolvedIdx = getEffectiveStepIndex(targetIdx, tourSteps);
+      const nextStep = tourSteps[resolvedIdx]!;
 
       const finish = () => onStepIndexChange(resolvedIdx);
 
@@ -391,7 +395,7 @@ function SpotlightTourLayer({
       // Buttons / tabs — native handler runs first, then advance.
       window.setTimeout(finish, 200);
     },
-    [effectiveIndex, onStepIndexChange, router, step],
+    [effectiveIndex, onStepIndexChange, router, step, tourSteps],
   );
 
   const updateTarget = React.useCallback(
@@ -522,7 +526,7 @@ function SpotlightTourLayer({
   React.useEffect(() => {
     if (!active || !step.advanceWhenVisible) return;
     const { selector, stepId } = step.advanceWhenVisible;
-    const targetIdx = getStepIndexById(stepId);
+    const targetIdx = getStepIndexById(stepId, tourSteps);
     if (targetIdx < 0 || targetIdx === effectiveIndex) return;
 
     const check = () => {
@@ -545,7 +549,7 @@ function SpotlightTourLayer({
         : router.pathname === prefix || router.pathname.startsWith(`${prefix}/`);
     if (!matches) return;
 
-    const targetIdx = getStepIndexById(stepId);
+    const targetIdx = getStepIndexById(stepId, tourSteps);
     if (targetIdx < 0 || targetIdx === effectiveIndex) return;
 
     const t = window.setTimeout(() => goToStep(targetIdx), 350);
@@ -566,7 +570,7 @@ function SpotlightTourLayer({
           targetRect={hasTarget ? targetRect : null}
           isFirst={isFirst}
           isLast={isLast}
-          onBack={() => goToStep(getPreviousEffectiveStepIndex(effectiveIndex))}
+          onBack={() => goToStep(getPreviousEffectiveStepIndex(effectiveIndex, tourSteps))}
           onNext={() => {
             if (isLast) onFinish();
             else goToStep(effectiveIndex + 1);

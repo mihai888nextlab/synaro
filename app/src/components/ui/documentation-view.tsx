@@ -7,17 +7,20 @@ import { Check, ChevronLeft, ChevronRight, Copy, Menu, Search, X } from "lucide-
 
 import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { SiteHeader } from "@/components/ui/site-header";
+import { useLocale, useTranslation } from "@/components/ui/locale-provider";
+import type { Locale } from "@/i18n/config";
 import {
-  DOC_NAV,
   type DocBlock,
-  type DocPage,
   docHref,
   filterDocNav,
   getDocAdjacent,
+  getDocNav,
+  getDocPage,
 } from "@/lib/documentation";
 import { cn } from "@/lib/utils";
 
 function DocCodeExample({ code, title }: { code: string; title?: string }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = React.useState(false);
 
   async function handleCopy() {
@@ -38,10 +41,10 @@ function DocCodeExample({ code, title }: { code: string; title?: string }) {
           type="button"
           onClick={() => void handleCopy()}
           className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-zinc-400 transition hover:bg-white/5 hover:text-zinc-200"
-          aria-label={copied ? "Copied to clipboard" : "Copy code to clipboard"}
+          aria-label={copied ? t("documentation.copiedCode") : t("documentation.copyCode")}
         >
           {copied ? <Check className="size-3.5" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
-          {copied ? "Copied" : "Copy"}
+          {copied ? t("documentation.copied") : t("documentation.copy")}
         </button>
       </div>
       <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed text-zinc-200 sm:text-sm">
@@ -145,6 +148,7 @@ function DocsSidebarSearch({
   onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
   activeDescendantId?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="relative mb-4 px-3">
       <Search
@@ -162,16 +166,16 @@ function DocsSidebarSearch({
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}
         onKeyDown={onKeyDown}
-        placeholder="Search docs…"
+        placeholder={t("documentation.searchPlaceholder")}
+        aria-label={t("documentation.searchAriaLabel")}
         className="h-9 w-full rounded-lg border border-white/10 bg-zinc-950/80 py-2 pl-9 pr-8 text-sm text-zinc-200 placeholder:text-zinc-500 focus:border-white/20 focus:outline-none focus:ring-1 focus:ring-white/10"
-        aria-label="Search documentation"
       />
       {query ? (
         <button
           type="button"
           onClick={() => onQueryChange("")}
           className="absolute right-5 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-zinc-500 transition hover:bg-white/5 hover:text-zinc-300"
-          aria-label="Clear search"
+          aria-label={t("documentation.clearSearch")}
         >
           <X className="size-3.5" aria-hidden />
         </button>
@@ -182,6 +186,7 @@ function DocsSidebarSearch({
 
 function DocsSidebar({
   activeSlug,
+  locale,
   onNavigate,
   className,
   searchQuery,
@@ -189,6 +194,7 @@ function DocsSidebar({
   searchInputId = "docs-sidebar-search",
 }: {
   activeSlug: string;
+  locale: Locale;
   onNavigate?: () => void;
   className?: string;
   searchQuery: string;
@@ -196,7 +202,11 @@ function DocsSidebar({
   searchInputId?: string;
 }) {
   const router = useRouter();
-  const filteredNav = React.useMemo(() => filterDocNav(searchQuery), [searchQuery]);
+  const { t } = useTranslation();
+  const filteredNav = React.useMemo(
+    () => filterDocNav(searchQuery, locale),
+    [searchQuery, locale],
+  );
   const flatItems = React.useMemo(() => filteredNav.flatMap((group) => group.items), [filteredNav]);
   const [highlightedIndex, setHighlightedIndex] = React.useState(-1);
   const itemRefs = React.useRef<Map<string, HTMLAnchorElement>>(new Map());
@@ -254,7 +264,7 @@ function DocsSidebar({
   const highlightedSlug = highlightedIndex >= 0 ? flatItems[highlightedIndex]?.slug : undefined;
 
   return (
-    <nav className={cn("flex flex-col", className)} aria-label="Documentation">
+    <nav className={cn("flex flex-col", className)} aria-label={t("documentation.navAriaLabel")}>
       <DocsSidebarSearch
         query={searchQuery}
         onQueryChange={onSearchQueryChange}
@@ -305,7 +315,7 @@ function DocsSidebar({
           ))}
         </div>
       ) : searchQuery.trim() ? (
-        <p className="px-3 text-sm text-zinc-500">No pages match your search.</p>
+        <p className="px-3 text-sm text-zinc-500">{t("documentation.noSearchResults")}</p>
       ) : null}
     </nav>
   );
@@ -314,16 +324,25 @@ function DocsSidebar({
 const docNavLinkClass =
   "inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-zinc-400 transition hover:border-white/20 hover:text-white";
 
-export function DocumentationView({ page }: { page: DocPage }) {
+export function DocumentationView({ slug }: { slug: string }) {
   const router = useRouter();
+  const { locale } = useLocale();
+  const { t } = useTranslation();
+  const page = React.useMemo(() => getDocPage(slug, locale), [slug, locale]);
+  const docNav = React.useMemo(() => getDocNav(locale), [locale]);
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
   const [sidebarSearch, setSidebarSearch] = React.useState("");
-  const { prev, next } = getDocAdjacent(page.slug);
+  const { prev, next } = React.useMemo(
+    () => getDocAdjacent(slug, locale),
+    [slug, locale],
+  );
 
   React.useEffect(() => {
     setMobileNavOpen(false);
     setSidebarSearch("");
   }, [router.asPath]);
+
+  if (!page) return null;
 
   return (
     <main className="relative flex h-dvh flex-col overflow-hidden bg-black text-white">
@@ -338,6 +357,7 @@ export function DocumentationView({ page }: { page: DocPage }) {
             <div className="py-6 pr-4">
               <DocsSidebar
                 activeSlug={page.slug}
+                locale={locale}
                 searchQuery={sidebarSearch}
                 onSearchQueryChange={setSidebarSearch}
               />
@@ -350,12 +370,12 @@ export function DocumentationView({ page }: { page: DocPage }) {
                 type="button"
                 onClick={() => setMobileNavOpen(true)}
                 className="inline-flex size-9 items-center justify-center rounded-lg border border-white/15 text-zinc-300"
-                aria-label="Open documentation menu"
+                aria-label={t("documentation.openMenu")}
               >
                 <Menu className="size-4" />
               </button>
               <label className="min-w-0 flex-1">
-                <span className="sr-only">Jump to page</span>
+                <span className="sr-only">{t("documentation.jumpToPage")}</span>
                 <select
                   className="h-9 w-full rounded-lg border border-white/15 bg-zinc-950 px-3 text-sm text-zinc-200"
                   value={page.slug}
@@ -364,7 +384,7 @@ export function DocumentationView({ page }: { page: DocPage }) {
                     void router.push(href);
                   }}
                 >
-                  {DOC_NAV.flatMap((g) => g.items).map((item) => (
+                  {docNav.flatMap((g) => g.items).map((item) => (
                     <option key={item.slug} value={item.slug}>
                       {item.label}
                     </option>
@@ -392,7 +412,7 @@ export function DocumentationView({ page }: { page: DocPage }) {
                       "mt-12 flex flex-wrap items-center gap-3 border-t border-white/10 pt-8 text-sm",
                       prev && next ? "justify-between" : next ? "justify-end" : "justify-start",
                     )}
-                    aria-label="Documentation pagination"
+                    aria-label={t("documentation.paginationAriaLabel")}
                   >
                     {prev ? (
                       <Link href={docHref(prev.slug)} className={docNavLinkClass}>
@@ -419,7 +439,7 @@ export function DocumentationView({ page }: { page: DocPage }) {
           <button
             type="button"
             className="absolute inset-0 bg-black/70"
-            aria-label="Close menu"
+            aria-label={t("documentation.closeMenu")}
             onClick={() => setMobileNavOpen(false)}
           />
           <div className="absolute inset-y-0 left-0 flex w-[min(100%,280px)] flex-col border-r border-white/10 bg-zinc-950">
@@ -429,7 +449,7 @@ export function DocumentationView({ page }: { page: DocPage }) {
                 type="button"
                 onClick={() => setMobileNavOpen(false)}
                 className="inline-flex size-8 items-center justify-center rounded-md text-zinc-400"
-                aria-label="Close"
+                aria-label={t("documentation.close")}
               >
                 <X className="size-4" />
               </button>
@@ -437,6 +457,7 @@ export function DocumentationView({ page }: { page: DocPage }) {
             <div className="overflow-y-auto p-4 pt-4">
               <DocsSidebar
                 activeSlug={page.slug}
+                locale={locale}
                 onNavigate={() => setMobileNavOpen(false)}
                 searchQuery={sidebarSearch}
                 onSearchQueryChange={setSidebarSearch}

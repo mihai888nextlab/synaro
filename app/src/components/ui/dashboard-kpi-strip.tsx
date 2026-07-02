@@ -1,22 +1,27 @@
 import { cn } from "@/lib/utils";
 
+import type { KpiMetricKey } from "@/lib/dashboard/layout-schema";
+
 /** Matches `DashboardLogsTable` outer shell for visual parity. */
 const kpiCardShell =
   "flex min-w-0 flex-col rounded-2xl border border-border/60 bg-card px-5 py-4 shadow-sm shadow-black/[0.06] dark:border-border/50 dark:bg-card/90 dark:shadow-black/25 max-sm:px-4 max-sm:py-3 sm:px-6 sm:py-5";
 
 export type DashboardKpiItem = {
+  metricKey?: KpiMetricKey;
   label: string;
   value: string;
   foot: string;
+  footKey?: string;
+  footParams?: Record<string, string | number>;
   /** Footer uses emerald (same accent family as “done” / positive trends in activity). */
   footPositive?: boolean;
 };
 
 const DEFAULT_KPIS: DashboardKpiItem[] = [
-  { label: "Projects", value: "3", foot: "↑ 1 this week", footPositive: true },
-  { label: "Running now", value: "2", foot: "PEAK, iTECify" },
-  { label: "AI actions", value: "47", foot: "↑ 12 today", footPositive: true },
-  { label: "Uptime", value: "99.8%", foot: "Last 30 days" },
+  { metricKey: "projects", label: "Projects", value: "3", foot: "↑ 1 this week", footPositive: true },
+  { metricKey: "running", label: "Running now", value: "2", foot: "PEAK, iTECify" },
+  { metricKey: "starting", label: "AI actions", value: "47", foot: "↑ 12 today", footPositive: true },
+  { metricKey: "stopped_errors", label: "Uptime", value: "99.8%", foot: "Last 30 days" },
 ];
 
 export function DashboardKpiStrip({

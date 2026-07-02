@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { MarkdownLite } from "@/components/ui/markdown-lite";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/components/ui/locale-provider";
 import {
   Dialog,
   DialogContent,
@@ -47,18 +48,19 @@ type AgentRun = {
   createdAt: string;
 };
 
-const TOOL_OPTIONS = [
-  { id: "web_search", label: "Web Search", icon: Globe },
-  { id: "http_get", label: "HTTP GET", icon: Zap },
-  { id: "http_post", label: "HTTP POST", icon: Zap },
-];
+const TOOL_OPTION_IDS = [
+  { id: "web_search", labelKey: "agents.toolWebSearch", icon: Globe },
+  { id: "http_get", labelKey: "agents.toolHttpGet", icon: Zap },
+  { id: "http_post", labelKey: "agents.toolHttpPost", icon: Zap },
+] as const;
 
-function agentToolsLabel(agent: Agent): string {
+function agentToolsLabel(agent: Agent, t: (key: string, params?: Record<string, string | number>) => string): string {
   const count = agent.tools.length;
-  return `${count} tool${count === 1 ? "" : "s"}`;
+  return count === 1 ? t("agents.toolsCountOne", { count }) : t("agents.toolsCountMany", { count });
 }
 
 function AgentStatusPill({ enabled }: { enabled: boolean }) {
+  const { t } = useTranslation();
   if (enabled) {
     return (
       <span
@@ -72,7 +74,7 @@ function AgentStatusPill({ enabled }: { enabled: boolean }) {
           className="size-1.5 shrink-0 rounded-full bg-emerald-600 dark:bg-emerald-400"
           aria-hidden
         />
-        enabled
+        {t("agents.statusEnabled")}
       </span>
     );
   }
@@ -83,12 +85,13 @@ function AgentStatusPill({ enabled }: { enabled: boolean }) {
         "border-border bg-muted text-muted-foreground dark:border-border/80 dark:bg-muted/30",
       )}
     >
-      disabled
+      {t("agents.statusDisabled")}
     </span>
   );
 }
 
 function NewAgentCard({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation();
   return (
     <button
       type="button"
@@ -99,44 +102,46 @@ function NewAgentCard({ onClick }: { onClick: () => void }) {
         "hover:border-border hover:bg-muted/30 hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70 dark:border-border/55 dark:hover:bg-muted/15",
       )}
     >
-      + New agent
+      {t("agents.newAgent")}
     </button>
   );
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
+  const { t } = useTranslation();
+  const map: Record<string, { labelKey: string; cls: string; icon: React.ReactNode }> = {
     PENDING: {
-      label: "Pending",
+      labelKey: "agents.statusPending",
       cls: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
       icon: <Clock className="size-3" />,
     },
     RUNNING: {
-      label: "Running",
+      labelKey: "agents.statusRunning",
       cls: "bg-blue-500/10 text-blue-400 border-blue-500/20",
       icon: <Loader2 className="size-3 animate-spin" />,
     },
     DONE: {
-      label: "Done",
+      labelKey: "agents.statusDone",
       cls: "bg-green-500/10 text-green-400 border-green-500/20",
       icon: <CheckCircle2 className="size-3" />,
     },
     FAILED: {
-      label: "Failed",
+      labelKey: "agents.statusFailed",
       cls: "bg-red-500/10 text-red-400 border-red-500/20",
       icon: <XCircle className="size-3" />,
     },
   };
-  const s = map[status] ?? { label: status, cls: "bg-muted text-muted-foreground border-border/70", icon: null };
+  const s = map[status] ?? { labelKey: status, cls: "bg-muted text-muted-foreground border-border/70", icon: null };
   return (
     <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium", s.cls)}>
       {s.icon}
-      {s.label}
+      {map[status] ? t(s.labelKey) : status}
     </span>
   );
 }
 
 function RunCard({ run }: { run: AgentRun }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const date = new Date(run.createdAt).toLocaleString();
   return (
@@ -155,7 +160,7 @@ function RunCard({ run }: { run: AgentRun }) {
             onClick={() => setExpanded((v) => !v)}
             className="shrink-0 text-xs text-muted-foreground hover:text-foreground"
           >
-            {expanded ? "Hide" : "Show output"}
+            {expanded ? t("agents.hide") : t("agents.showOutput")}
           </button>
         )}
       </div>
@@ -181,6 +186,7 @@ function AgentCard({
   onViewRuns: (agent: Agent) => void;
   triggering: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className={cn(
@@ -201,8 +207,8 @@ function AgentCard({
             type="button"
             onClick={() => onDelete(agent.id)}
             className="shrink-0 rounded-lg p-1.5 text-muted-foreground/50 transition hover:bg-muted hover:text-red-400"
-            title="Delete agent"
-            aria-label={`Delete ${agent.name}`}
+            title={t("agents.deleteAgent")}
+            aria-label={t("agents.deleteAgent")}
           >
             <Trash2 className="size-3.5" />
           </button>
@@ -217,7 +223,7 @@ function AgentCard({
         <hr className="my-4 border-0 border-t border-border/60 dark:border-border/45" />
 
         <div className="flex items-end justify-between gap-3 text-xs">
-          <span className="min-w-0 truncate text-muted-foreground">{agentToolsLabel(agent)}</span>
+          <span className="min-w-0 truncate text-muted-foreground">{agentToolsLabel(agent, t)}</span>
           <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
@@ -230,14 +236,14 @@ function AgentCard({
               ) : (
                 <Play className="size-3" aria-hidden />
               )}
-              Run
+              {t("agents.run")}
             </button>
             <button
               type="button"
               onClick={() => onViewRuns(agent)}
               className="inline-flex items-center gap-0.5 text-muted-foreground transition hover:text-foreground"
             >
-              <span>runs</span>
+              <span>{t("agents.runs")}</span>
               <span aria-hidden>→</span>
             </button>
           </div>
@@ -258,6 +264,7 @@ const defaultForm = {
 };
 
 export function AgentsPageClient() {
+  const { t } = useTranslation();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -343,7 +350,7 @@ export function AgentsPageClient() {
   };
 
   const handleDelete = async (agentId: string) => {
-    if (!window.confirm("Delete this agent and all its runs?")) return;
+    if (!window.confirm(t("agents.deleteConfirm"))) return;
     await fetch(`/api/agents/${agentId}`, { method: "DELETE" });
     if (runsAgent?.id === agentId) setRunsOpen(false);
     await fetchAgents();
@@ -372,7 +379,7 @@ export function AgentsPageClient() {
         await fetchAgents();
       } else {
         const data = (await res.json()) as { error?: string };
-        setCreateError(data.error ?? "Failed to create agent");
+        setCreateError(data.error ?? t("agents.createFailed"));
       }
     } finally {
       setCreating(false);
@@ -394,7 +401,7 @@ export function AgentsPageClient() {
   return (
     <div className="relative w-full flex-1">
       <div className="mx-auto w-full max-w-7xl">
-        <h1 className="sr-only">Agents</h1>
+        <h1 className="sr-only">{t("agents.title")}</h1>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 lg:gap-4 xl:gap-5" data-onboarding="agents-grid">
           {loading ? (
@@ -449,63 +456,66 @@ export function AgentsPageClient() {
           className="max-w-xl rounded-2xl border border-border/70 bg-card p-0 shadow-2xl"
         >
           <div className="border-b border-border/70 px-6 py-4">
-            <DialogTitle className="text-base font-semibold text-foreground">New Agent</DialogTitle>
+            <DialogTitle className="text-base font-semibold text-foreground">{t("agents.newAgentDialogTitle")}</DialogTitle>
           </div>
           <form onSubmit={(e) => void handleCreate(e)} className="flex flex-col gap-4 px-6 py-5">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Name</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("agents.name")}</label>
               <input
                 required
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="My Research Agent"
+                placeholder={t("agents.namePlaceholder")}
                 className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Description <span className="text-muted-foreground/50">(optional)</span></label>
+              <label className="text-xs font-medium text-muted-foreground">
+                {t("agents.description")}{" "}
+                <span className="text-muted-foreground/50">{t("agents.optional")}</span>
+              </label>
               <input
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                placeholder="What does this agent do?"
+                placeholder={t("agents.descriptionPlaceholder")}
                 className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground">System Prompt</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("agents.systemPrompt")}</label>
               <textarea
                 required
                 rows={4}
                 value={form.systemPrompt}
                 onChange={(e) => setForm((f) => ({ ...f, systemPrompt: e.target.value }))}
-                placeholder="You are a helpful research assistant. When given a task, search the web and provide a detailed, accurate answer."
+                placeholder={t("agents.systemPromptPlaceholder")}
                 className="resize-none rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
             </div>
             <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-muted-foreground">Tools</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("agents.tools")}</label>
               <div className="flex flex-wrap gap-2">
-                {TOOL_OPTIONS.map((t) => (
+                {TOOL_OPTION_IDS.map((tool) => (
                   <button
-                    key={t.id}
+                    key={tool.id}
                     type="button"
-                    onClick={() => toggleTool(t.id)}
+                    onClick={() => toggleTool(tool.id)}
                     className={cn(
                       "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition",
-                      form.tools.includes(t.id)
+                      form.tools.includes(tool.id)
                         ? "border-primary/40 bg-primary/10 text-primary"
                         : "border-border/70 bg-background text-muted-foreground hover:bg-muted",
                     )}
                   >
-                    <t.icon className="size-3" />
-                    {t.label}
+                    <tool.icon className="size-3" />
+                    {t(tool.labelKey)}
                   </button>
                 ))}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Max Steps</label>
+                <label className="text-xs font-medium text-muted-foreground">{t("agents.maxSteps")}</label>
                 <input
                   type="number"
                   min={1}
@@ -517,12 +527,13 @@ export function AgentsPageClient() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-muted-foreground">
-                  Cron Schedule <span className="text-muted-foreground/50">(optional)</span>
+                  {t("agents.cronSchedule")}{" "}
+                  <span className="text-muted-foreground/50">{t("agents.optional")}</span>
                 </label>
                 <input
                   value={form.schedule}
                   onChange={(e) => setForm((f) => ({ ...f, schedule: e.target.value }))}
-                  placeholder="*/30 * * * *"
+                  placeholder={t("agents.cronPlaceholder")}
                   className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
                 />
               </div>
@@ -531,7 +542,7 @@ export function AgentsPageClient() {
             <div className="flex justify-end gap-2 pt-1">
               <DialogClose asChild>
                 <button type="button" className="rounded-xl border border-border/70 px-4 py-2 text-sm text-muted-foreground transition hover:bg-muted">
-                  Cancel
+                  {t("common.cancel")}
                 </button>
               </DialogClose>
               <button
@@ -540,7 +551,7 @@ export function AgentsPageClient() {
                 className="flex items-center gap-2 rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background transition hover:opacity-90 disabled:opacity-50"
               >
                 {creating && <Loader2 className="size-3.5 animate-spin" />}
-                Create Agent
+                {t("agents.createAgent")}
               </button>
             </div>
           </form>
@@ -552,26 +563,27 @@ export function AgentsPageClient() {
         <DialogContent className="max-w-md rounded-2xl border border-border/70 bg-card p-0 shadow-2xl">
           <div className="border-b border-border/70 px-6 py-4">
             <DialogTitle className="text-base font-semibold text-foreground">
-              Run {triggerTarget?.name}
+              {t("agents.runAgentTitle", { name: triggerTarget?.name ?? "" })}
             </DialogTitle>
           </div>
           <div className="flex flex-col gap-4 px-6 py-5">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-muted-foreground">
-                Input <span className="text-muted-foreground/50">(optional)</span>
+                {t("agents.input")}{" "}
+                <span className="text-muted-foreground/50">{t("agents.optional")}</span>
               </label>
               <textarea
                 rows={3}
                 value={form.input}
                 onChange={(e) => setForm((f) => ({ ...f, input: e.target.value }))}
-                placeholder="What should the agent do? Leave empty to use the system prompt goal."
+                placeholder={t("agents.inputPlaceholder")}
                 className="resize-none rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
             </div>
             <div className="flex justify-end gap-2">
               <DialogClose asChild>
                 <button type="button" className="rounded-xl border border-border/70 px-4 py-2 text-sm text-muted-foreground transition hover:bg-muted">
-                  Cancel
+                  {t("common.cancel")}
                 </button>
               </DialogClose>
               <button
@@ -580,7 +592,7 @@ export function AgentsPageClient() {
                 className="flex items-center gap-2 rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background transition hover:opacity-90"
               >
                 <Play className="size-3.5" />
-                Run Agent
+                {t("agents.runAgent")}
               </button>
             </div>
           </div>
@@ -592,14 +604,14 @@ export function AgentsPageClient() {
         <DialogContent className="max-w-2xl rounded-2xl border border-border/70 bg-card p-0 shadow-2xl">
           <div className="flex flex-row items-center justify-between border-b border-border/70 px-6 py-4">
             <DialogTitle className="text-base font-semibold text-foreground">
-              Runs — {runsAgent?.name}
+              {t("agents.runsTitle", { name: runsAgent?.name ?? "" })}
             </DialogTitle>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => runsAgent && void fetchRuns(runsAgent.id)}
                 className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                title="Refresh"
+                title={t("agents.refresh")}
               >
                 <RefreshCw className={cn("size-4", runsLoading && "animate-spin")} />
               </button>
@@ -617,7 +629,7 @@ export function AgentsPageClient() {
               </div>
             ) : runs.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
-                No runs yet. Click <strong>Run</strong> to start one.
+                {t("agents.noRunsYet")}
               </div>
             ) : (
               runs.map((run) => <RunCard key={run.id} run={run} />)

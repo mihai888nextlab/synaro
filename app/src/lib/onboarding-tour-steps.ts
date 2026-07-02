@@ -60,8 +60,44 @@ function hasProjects(): boolean {
   return Boolean(firstProjectHref());
 }
 
-export function getStepIndexById(id: string): number {
-  return ONBOARDING_TOUR_STEPS.findIndex((s) => s.id === id);
+export function getStepIndexById(id: string, steps: OnboardingTourStep[] = ONBOARDING_TOUR_STEPS): number {
+  return steps.findIndex((s) => s.id === id);
+}
+
+const ONBOARDING_STEP_I18N_KEYS: Record<string, string> = {
+  welcome: "welcome",
+  sidebar: "sidebar",
+  "nav-projects": "navProjects",
+  "projects-new": "projectsNew",
+  "projects-new-dialog": "projectsNewDialog",
+  "projects-open": "projectsOpen",
+  "workspace-tabs": "workspaceTabs",
+  "ai-chat": "aiChat",
+  "ai-composer": "aiComposer",
+  "file-tree": "fileTree",
+  "docker-pill": "dockerPill",
+  terminal: "terminal",
+  deployments: "deployments",
+  "nav-agents": "navAgents",
+  "agents-intro": "agentsIntro",
+  "agents-create-dialog": "agentsCreateDialog",
+  header: "header",
+  finish: "finish",
+};
+
+export function getOnboardingTourSteps(t: (key: string) => string): OnboardingTourStep[] {
+  return ONBOARDING_TOUR_STEPS.map((step) => {
+    const key = ONBOARDING_STEP_I18N_KEYS[step.id];
+    if (!key) return step;
+    return {
+      ...step,
+      title: t(`onboarding.steps.${key}.title`),
+      description: t(`onboarding.steps.${key}.description`),
+      encourageClick: step.encourageClick
+        ? t(`onboarding.steps.${key}.encourageClick`)
+        : undefined,
+    };
+  });
 }
 
 export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
@@ -283,27 +319,33 @@ export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
   },
 ];
 
-export function getPreviousEffectiveStepIndex(index: number): number {
+export function getPreviousEffectiveStepIndex(
+  index: number,
+  steps: OnboardingTourStep[] = ONBOARDING_TOUR_STEPS,
+): number {
   let i = index - 1;
   while (i >= 0) {
-    const step = ONBOARDING_TOUR_STEPS[i];
+    const step = steps[i];
     if (!step?.skipIf?.()) return i;
     i--;
   }
   return 0;
 }
 
-export function getEffectiveStepIndex(index: number): number {
+export function getEffectiveStepIndex(
+  index: number,
+  steps: OnboardingTourStep[] = ONBOARDING_TOUR_STEPS,
+): number {
   let i = index;
-  while (i < ONBOARDING_TOUR_STEPS.length) {
-    const step = ONBOARDING_TOUR_STEPS[i];
+  while (i < steps.length) {
+    const step = steps[i];
     if (step?.skipIf?.()) {
       i++;
       continue;
     }
     break;
   }
-  return Math.min(i, ONBOARDING_TOUR_STEPS.length - 1);
+  return Math.min(i, steps.length - 1);
 }
 
 export function resolveNavigateTo(step: OnboardingTourStep): string | null {

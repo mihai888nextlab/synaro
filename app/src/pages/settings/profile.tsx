@@ -9,6 +9,7 @@ import { getServerSession } from "next-auth/next";
 
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/next-auth-options";
+import { useTranslation } from "@/components/ui/locale-provider";
 
 type ProfilePageProps = {
   linkedGoogle: boolean;
@@ -16,18 +17,17 @@ type ProfilePageProps = {
   hasPassword: boolean;
 };
 
-function oauthErrorMessage(code: string): string {
+function oauthErrorMessage(code: string, t: (key: string) => string): string {
   const map: Record<string, string> = {
-    OAuthSignin: "Could not start sign-in with the provider.",
-    OAuthCallback: "The provider rejected the sign-in callback.",
-    OAuthCreateAccount: "Could not create an account from the provider response.",
-    EmailCreateAccount: "Could not create an account with this email.",
-    Callback: "Something went wrong during sign-in.",
-    OAuthAccountNotLinked:
-      "This sign-in is already used by another account, or the email does not match your Synaro email.",
-    SessionRequired: "Please sign in.",
-    AccessDenied: "Access was denied.",
-    Default: "Sign-in failed. Try again.",
+    OAuthSignin: t("profile.oauthSignin"),
+    OAuthCallback: t("profile.oauthCallback"),
+    OAuthCreateAccount: t("profile.oauthCreateAccount"),
+    EmailCreateAccount: t("profile.emailCreateAccount"),
+    Callback: t("profile.callback"),
+    OAuthAccountNotLinked: t("profile.oauthAccountNotLinked"),
+    SessionRequired: t("profile.sessionRequired"),
+    AccessDenied: t("profile.accessDenied"),
+    Default: t("profile.oauthSignInFailed"),
   };
   return map[code] ?? map.Default;
 }
@@ -38,6 +38,7 @@ export default function ProfilePage({
   hasPassword,
 }: ProfilePageProps) {
   const router = useRouter();
+  const { t } = useTranslation();
   const { data, update } = useSession();
   const email = data?.user?.email ?? "—";
   const savedName = data?.user?.name ?? "";
@@ -63,7 +64,7 @@ export default function ProfilePage({
     const raw = router.query.error;
     const code = typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : null;
     if (code) {
-      setGithubMessage(oauthErrorMessage(code));
+      setGithubMessage(oauthErrorMessage(code, t));
       void router.replace("/settings/profile", undefined, { shallow: true });
     }
   }, [router]);
@@ -125,9 +126,7 @@ export default function ProfilePage({
     try {
       const providers = await getProviders();
       if (!providers?.github) {
-        setGithubMessage(
-          "GitHub OAuth is not configured. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET, then restart the server.",
-        );
+        setGithubMessage(t("profile.githubOAuthNotConfigured"));
         return;
       }
       await signIn("github", {
@@ -136,7 +135,7 @@ export default function ProfilePage({
         authorizationParams: { prompt: "consent" },
       });
     } catch {
-      setGithubMessage("Could not start GitHub sign-in.");
+      setGithubMessage(t("profile.couldNotStartGithub"));
     } finally {
       setGithubBusy(false);
     }
@@ -165,7 +164,7 @@ export default function ProfilePage({
             {isEditing ? (
               <>
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">
-                  Name
+                  {t("profile.name")}
                 </p>
                 <div className="mt-3 flex items-center gap-3">
                   <input
@@ -173,7 +172,7 @@ export default function ProfilePage({
                     value={name}
                     onChange={(event) => setName(event.target.value)}
                     className="min-w-0 flex-1 rounded-lg border border-border/70 bg-background px-3 py-2 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
-                    placeholder="Your name"
+                    placeholder={t("profile.yourNamePlaceholder")}
                     autoComplete="name"
                     maxLength={80}
                   />
@@ -182,7 +181,7 @@ export default function ProfilePage({
                     disabled={!canSave}
                     className="shrink-0 rounded-full border border-border/70 bg-card/70 px-3 py-2 text-xs font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {isSaving ? "Saving..." : "Save"}
+                    {isSaving ? t("common.saving") : t("common.save")}
                   </button>
                 </div>
               </>
@@ -190,7 +189,7 @@ export default function ProfilePage({
               <div className="flex items-center justify-between gap-4">
                 <div className="min-w-0">
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">
-                    Name
+                    {t("profile.name")}
                   </p>
                   <p className="mt-2 truncate text-sm font-medium text-foreground">
                     {savedName || "—"}
@@ -200,8 +199,8 @@ export default function ProfilePage({
                   type="button"
                   onClick={handleEditStart}
                   className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-card text-muted-foreground shadow-sm shadow-black/5 transition hover:bg-muted hover:text-foreground"
-                  aria-label="Edit name"
-                  title="Edit name"
+                  aria-label={t("profile.editName")}
+                  title={t("profile.editName")}
                 >
                   <Pencil className="size-4" />
                 </button>
@@ -211,7 +210,7 @@ export default function ProfilePage({
 
           <div className="rounded-xl border border-border/70 bg-card/80 p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">
-              Email
+              {t("profile.email")}
             </p>
             <p className="mt-3 break-all text-sm font-medium text-foreground">
               {email}
@@ -221,13 +220,13 @@ export default function ProfilePage({
 
         <div className="rounded-xl border border-border/70 bg-card/80 p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">
-            GitHub
+            {t("profile.github")}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             {linkedGithub ? (
               <>
                 <span className="inline-flex items-center rounded-full border border-emerald-500/35 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                  Connected
+                  {t("profile.connected")}
                 </span>
                 <button
                   type="button"
@@ -235,7 +234,7 @@ export default function ProfilePage({
                   onClick={() => void handleConnectGithub()}
                   className="text-sm text-muted-foreground underline-offset-4 transition hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {githubBusy ? "Redirecting…" : "Reconnect (refresh permissions)"}
+                  {githubBusy ? t("profile.redirecting") : t("profile.reconnectPermissions")}
                 </button>
               </>
             ) : (
@@ -245,7 +244,7 @@ export default function ProfilePage({
                 onClick={() => void handleConnectGithub()}
                 className="inline-flex items-center rounded-full border border-border/70 bg-card px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {githubBusy ? "Redirecting…" : "Connect GitHub"}
+                {githubBusy ? t("profile.redirecting") : t("profile.connectGitHub")}
               </button>
             )}
             {linkedGithub && canDisconnectGithub ? (
@@ -255,13 +254,13 @@ export default function ProfilePage({
                 onClick={() => void handleDisconnectGithub()}
                 className="text-sm text-muted-foreground underline-offset-4 transition hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {githubDisconnectBusy ? "Disconnecting…" : "Disconnect"}
+                {githubDisconnectBusy ? t("profile.disconnecting") : t("profile.disconnect")}
               </button>
             ) : null}
           </div>
           {linkedGithub && !canDisconnectGithub ? (
             <p className="mt-3 text-xs text-muted-foreground">
-              To disconnect GitHub, add a password or connect Google first so you can still sign in.
+              {t("profile.githubDisconnectHint")}
             </p>
           ) : null}
           {githubMessage ? (

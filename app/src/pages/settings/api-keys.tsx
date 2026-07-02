@@ -4,6 +4,7 @@ import type { GetServerSideProps } from "next";
 
 import { requireAuth } from "@/lib/auth-redirect";
 import { readJsonResponse } from "@/lib/read-json-response";
+import { useTranslation } from "@/components/ui/locale-provider";
 
 type ApiKeyRow = {
   key_id: string;
@@ -16,6 +17,7 @@ type ApiKeyRow = {
 type CreatedKey = ApiKeyRow & { secret: string };
 
 export default function ApiKeysPage() {
+  const { t } = useTranslation();
   const [keys, setKeys] = useState<ApiKeyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -31,10 +33,10 @@ export default function ApiKeysPage() {
     try {
       const res = await fetch("/api/account/api-keys");
       const data = await readJsonResponse<{ keys?: ApiKeyRow[]; error?: string }>(res);
-      if (!res.ok) throw new Error(data.error ?? "Failed to load API keys");
+      if (!res.ok) throw new Error(data.error ?? t("apiKeys.loadFailed"));
       setKeys(data.keys ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load API keys");
+      setError(err instanceof Error ? err.message : t("apiKeys.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -103,19 +105,17 @@ export default function ApiKeysPage() {
     <div>
       <div className="rounded-2xl border border-border/70 bg-card/80 p-6">
         <div>
-          <p className="text-sm text-muted-foreground">API keys</p>
+          <p className="text-sm text-muted-foreground">{t("apiKeys.title")}</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            Create keys for programmatic access to{" "}
-            <code className="text-foreground">/api/v1</code>. Use{" "}
-            <code className="text-foreground">Authorization: Bearer &lt;key&gt;</code>.
+            {t("apiKeys.description")}
           </p>
         </div>
 
         {createdKey ? (
           <div className="mt-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
-            <p className="font-medium text-foreground">Copy your new API key</p>
+            <p className="font-medium text-foreground">{t("apiKeys.copyNewKeyTitle")}</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              This is the only time the full key is shown. Store it securely.
+              {t("apiKeys.copyNewKeyBody")}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <code className="break-all rounded-lg border border-border/70 bg-background/80 px-3 py-2 text-sm">
@@ -127,7 +127,7 @@ export default function ApiKeysPage() {
                 className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card px-3 py-2 text-sm font-medium transition hover:bg-muted"
               >
                 <Copy className="size-4" />
-                {copied ? "Copied" : "Copy"}
+                {copied ? t("apiKeys.copied") : t("apiKeys.copy")}
               </button>
             </div>
             <button
@@ -135,7 +135,7 @@ export default function ApiKeysPage() {
               onClick={() => setCreatedKey(null)}
               className="mt-3 text-sm text-muted-foreground underline-offset-4 hover:underline"
             >
-              Dismiss
+              {t("apiKeys.dismiss")}
             </button>
           </div>
         ) : null}
@@ -143,13 +143,13 @@ export default function ApiKeysPage() {
         <form onSubmit={(e) => void handleCreate(e)} className="mt-6 flex flex-wrap items-end gap-3">
           <div className="min-w-[220px] flex-1">
             <label htmlFor="api-key-name" className="text-sm font-medium">
-              Key name
+              {t("apiKeys.keyName")}
             </label>
             <input
               id="api-key-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="CI deploy, local scripts…"
+              placeholder={t("apiKeys.keyNamePlaceholder")}
               maxLength={120}
               className="mt-1 w-full rounded-xl border border-border/70 bg-background/60 px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
             />
@@ -160,18 +160,18 @@ export default function ApiKeysPage() {
             className="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-sm font-medium text-background transition enabled:hover:opacity-90 disabled:opacity-50"
           >
             <KeyRound className="size-4" />
-            {creating ? "Creating…" : "Create key"}
+            {creating ? t("apiKeys.creating") : t("apiKeys.createKey")}
           </button>
         </form>
 
         {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
 
         <div className="mt-8">
-          <p className="text-sm font-medium">Active keys</p>
+          <p className="text-sm font-medium">{t("apiKeys.activeKeys")}</p>
           {loading ? (
-            <p className="mt-3 text-sm text-muted-foreground">Loading…</p>
+            <p className="mt-3 text-sm text-muted-foreground">{t("common.loading")}</p>
           ) : keys.length === 0 ? (
-            <p className="mt-3 text-sm text-muted-foreground">No API keys yet.</p>
+            <p className="mt-3 text-sm text-muted-foreground">{t("apiKeys.noKeysYet")}</p>
           ) : (
             <ul className="mt-3 divide-y divide-border/70 rounded-xl border border-border/70">
               {keys.map((key) => (
@@ -184,8 +184,8 @@ export default function ApiKeysPage() {
                     <p className="mt-0.5 text-sm text-muted-foreground">
                       <code>{key.key_prefix}…</code>
                       {key.last_used_at
-                        ? ` · last used ${new Date(key.last_used_at).toLocaleString()}`
-                        : " · never used"}
+                        ? ` · ${t("apiKeys.lastUsed", { date: new Date(key.last_used_at).toLocaleString() })}`
+                        : ` · ${t("apiKeys.neverUsed")}`}
                     </p>
                   </div>
                   <button
@@ -195,7 +195,7 @@ export default function ApiKeysPage() {
                     className="inline-flex items-center gap-2 rounded-full border border-border/70 px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-50"
                   >
                     <Trash2 className="size-4" />
-                    {revokingId === key.key_id ? "Revoking…" : "Revoke"}
+                    {revokingId === key.key_id ? t("apiKeys.revoking") : t("apiKeys.revoke")}
                   </button>
                 </li>
               ))}

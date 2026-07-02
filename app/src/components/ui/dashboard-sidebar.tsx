@@ -18,6 +18,7 @@ import {
 import { signOut, useSession } from "next-auth/react";
 
 import { SynaroLogo } from "@/components/ui/synaro-logo";
+import { useTranslation } from "@/components/ui/locale-provider";
 import {
   getProjectsNavHref,
   readLastProjectsPath,
@@ -26,17 +27,17 @@ import {
 import { cn } from "@/lib/utils";
 
 type NavItem = {
-  label: string;
+  labelKey: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
 };
 
 const navItems: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Projects", href: "/projects", icon: Folder },
-  { label: "Agents", href: "/agents", icon: Bot },
-  { label: "Logs", href: "/logs", icon: ScrollText },
-  { label: "Settings", href: "/settings", icon: Settings },
+  { labelKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { labelKey: "nav.projects", href: "/projects", icon: Folder },
+  { labelKey: "nav.agents", href: "/agents", icon: Bot },
+  { labelKey: "nav.logs", href: "/logs", icon: ScrollText },
+  { labelKey: "nav.settings", href: "/settings", icon: Settings },
 ];
 
 function isActiveRoute(current: string, href: string) {
@@ -57,6 +58,7 @@ export function DashboardSidebar({
   onNavigate?: () => void;
 }) {
   const router = useRouter();
+  const { t } = useTranslation();
   const { data, status } = useSession();
   const email = data?.user?.email ?? "";
   const [menuOpen, setMenuOpen] = useState(false);
@@ -141,7 +143,7 @@ export function DashboardSidebar({
             "size-7 rounded-full border border-border/70 bg-card text-muted-foreground shadow-[0_10px_30px_rgba(0,0,0,0.28)]",
             "transition hover:bg-muted hover:text-foreground lg:inline-flex",
           ].join(" ")}
-          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={isCollapsed ? t("workspace.expandSidebar") : t("workspace.collapseSidebar")}
         >
           {isCollapsed ? (
             <PanelLeftOpen className="size-4" />
@@ -160,11 +162,11 @@ export function DashboardSidebar({
                     href={item.href}
                     onClick={onNavigate}
                     data-onboarding={
-                      item.label === "Projects"
+                      item.href === "/projects" || item.href.startsWith("/projects")
                         ? "nav-projects"
-                        : item.label === "Agents"
+                        : item.href === "/agents"
                           ? "nav-agents"
-                          : item.label === "Dashboard"
+                          : item.href === "/dashboard"
                             ? "nav-dashboard"
                             : undefined
                     }
@@ -188,7 +190,7 @@ export function DashboardSidebar({
                           : "max-w-[180px] translate-x-0 opacity-100",
                       ].join(" ")}
                     >
-                      {item.label}
+                      {t(item.labelKey)}
                     </span>
                   </Link>
                 </li>
@@ -228,18 +230,18 @@ export function DashboardSidebar({
               >
                 {status === "loading" ? (
                   <>
-                    <p className="truncate text-sm font-medium text-foreground">Loading…</p>
-                    <p className="text-xs text-muted-foreground/70">Account</p>
+                    <p className="truncate text-sm font-medium text-foreground">{t("common.loading")}</p>
+                    <p className="text-xs text-muted-foreground/70">{t("nav.account")}</p>
                   </>
                 ) : status === "authenticated" ? (
                   <>
                     <p className="truncate text-sm font-medium text-foreground">{email}</p>
-                    <p className="text-xs text-muted-foreground/70">Account</p>
+                    <p className="text-xs text-muted-foreground/70">{t("nav.account")}</p>
                   </>
                 ) : (
                   <>
-                    <p className="truncate text-sm font-medium text-foreground">Not signed in</p>
-                    <p className="text-xs text-muted-foreground/70">Account</p>
+                    <p className="truncate text-sm font-medium text-foreground">{t("nav.notSignedIn")}</p>
+                    <p className="text-xs text-muted-foreground/70">{t("nav.account")}</p>
                   </>
                 )}
               </div>
@@ -268,7 +270,7 @@ export function DashboardSidebar({
                       role="menuitem"
                     >
                       <CircleUser className="size-4 shrink-0 text-muted-foreground" />
-                      Profile
+                      {t("nav.profile")}
                     </Link>
                     <button
                       type="button"
@@ -277,7 +279,7 @@ export function DashboardSidebar({
                       role="menuitem"
                     >
                       <LogOut className="size-4 shrink-0 text-muted-foreground" />
-                      Log out
+                      {t("nav.signOut")}
                     </button>
                   </>
                 ) : (

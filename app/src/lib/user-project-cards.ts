@@ -40,42 +40,72 @@ function buildKpiItems(rows: Project[], cards: SynaroProjectCardModel[]): Dashbo
   const errors = cards.filter((c) => c.environmentStatus === "ERROR").length;
   const stopped = cards.filter((c) => c.environmentStatus === "STOPPED").length;
 
+  function runningFootTitles(items: SynaroProjectCardModel[]) {
+    if (items.length <= 3) return items.map((c) => c.title).join(", ");
+    return `${items
+      .slice(0, 3)
+      .map((c) => c.title)
+      .join(", ")} +${items.length - 3} more`;
+  }
+
   const runningFoot =
     running.length === 0
-      ? "No environments running"
-      : running.length <= 3
-        ? running.map((c) => c.title).join(", ")
-        : `${running
-            .slice(0, 3)
-            .map((c) => c.title)
-            .join(", ")} +${running.length - 3} more`;
+      ? { footKey: "dashboard.kpiNoEnvironmentsRunning" as const, foot: "No environments running" }
+      : {
+          foot: runningFootTitles(running),
+        };
 
   return [
     {
+      metricKey: "projects" as const,
       label: "Projects",
       value: String(cards.length),
       foot:
         updatedThisWeek > 0
           ? `${updatedThisWeek} updated in the last 7 days`
           : "No project updates in the last 7 days",
+      footKey:
+        updatedThisWeek > 0 ? "dashboard.kpiProjectsUpdatedWeek" : "dashboard.kpiProjectsNoUpdates",
+      ...(updatedThisWeek > 0 ? { footParams: { count: updatedThisWeek } } : {}),
       footPositive: updatedThisWeek > 0,
     },
     {
+      metricKey: "running" as const,
       label: "Running",
       value: String(running.length),
-      foot: runningFoot,
+      foot: runningFoot.foot,
+      ...("footKey" in runningFoot ? { footKey: runningFoot.footKey } : {}),
       footPositive: running.length > 0,
     },
     {
+      metricKey: "starting" as const,
       label: "Starting",
       value: String(provisioning),
       foot: provisioning > 0 ? "Provisioning in progress" : "Nothing starting right now",
+      footKey: provisioning > 0 ? "dashboard.kpiProvisioning" : "dashboard.kpiNothingStarting",
       footPositive: provisioning > 0,
     },
     {
+      metricKey: "stopped_errors" as const,
       label: "Stopped / errors",
       value: String(stopped + errors),
-      foot: errors > 0 ? `${errors} need attention` : stopped > 0 ? `${stopped} stopped` : "All clear",
+      foot:
+        errors > 0
+          ? `${errors} need attention`
+          : stopped > 0
+            ? `${stopped} stopped`
+            : "All clear",
+      footKey:
+        errors > 0
+          ? "dashboard.kpiNeedAttention"
+          : stopped > 0
+            ? "dashboard.kpiStoppedCount"
+            : "dashboard.kpiAllClear",
+      ...(errors > 0
+        ? { footParams: { count: errors } }
+        : stopped > 0
+          ? { footParams: { count: stopped } }
+          : {}),
       footPositive: errors === 0,
     },
   ];

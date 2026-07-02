@@ -5,6 +5,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 
+import { isLocale, type Locale } from "@/i18n/config";
 import { prisma } from "@/lib/prisma";
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim();
@@ -140,8 +141,16 @@ export const authOptions: NextAuthOptions = {
       return baseUrl;
     },
     async jwt({ token, user, trigger, session }) {
-      if (user) {
+      if (user?.id) {
         token.id = user.id;
+        const dbUser = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { preferredLocale: true, name: true },
+        });
+        if (dbUser?.preferredLocale && isLocale(dbUser.preferredLocale)) {
+          token.preferredLocale = dbUser.preferredLocale;
+        }
+        if (dbUser?.name) token.name = dbUser.name;
       }
       if (trigger === "update") {
         const nextName =
@@ -153,12 +162,22 @@ export const authOptions: NextAuthOptions = {
         if (nextName) {
           token.name = nextName;
         }
+        const nextLocale = session?.preferredLocale;
+        if (isLocale(nextLocale)) {
+          token.preferredLocale = nextLocale;
+        }
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user && token?.id) {
         session.user.id = String(token.id);
+      }
+      if (session.user && isLocale(token.preferredLocale)) {
+        session.user.preferredLocale = token.preferredLocale;
+      }
+      if (session.user && typeof token.name === "string") {
+        session.user.name = token.name;
       }
       return session;
     },

@@ -17,87 +17,88 @@ import {
 
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { useTranslation } from "@/components/ui/locale-provider";
 import { cn } from "@/lib/utils";
 
 type SearchEntry = {
   id: string;
-  title: string;
-  description: string;
-  group: string;
+  titleKey: string;
+  descriptionKey: string;
+  groupKey: string;
   icon: React.ComponentType<{ className?: string }>;
   href?: string;
   keywords?: string[];
 };
 
-const baseEntries: SearchEntry[] = [
+const baseEntryDefs: SearchEntry[] = [
   {
     id: "dashboard",
-    title: "Dashboard",
-    description: "Go to your workspace overview.",
-    group: "Navigation",
+    titleKey: "search.dashboardTitle",
+    descriptionKey: "search.dashboardDescription",
+    groupKey: "search.groupNavigation",
     href: "/dashboard",
     icon: LayoutDashboard,
     keywords: ["home", "overview"],
   },
   {
     id: "projects",
-    title: "Projects",
-    description: "Open the projects workspace.",
-    group: "Navigation",
+    titleKey: "search.projectsTitle",
+    descriptionKey: "search.projectsDescription",
+    groupKey: "search.groupNavigation",
     href: "/projects",
     icon: Folder,
     keywords: ["repos", "files"],
   },
   {
     id: "logs",
-    title: "Logs",
-    description: "Inspect recent platform activity.",
-    group: "Navigation",
+    titleKey: "search.logsTitle",
+    descriptionKey: "search.logsDescription",
+    groupKey: "search.groupNavigation",
     href: "/logs",
     icon: ScrollText,
     keywords: ["events", "history"],
   },
   {
     id: "settings",
-    title: "Settings",
-    description: "Manage workspace preferences.",
-    group: "Navigation",
+    titleKey: "search.settingsTitle",
+    descriptionKey: "search.settingsDescription",
+    groupKey: "search.groupNavigation",
     href: "/settings",
     icon: Settings,
     keywords: ["config", "preferences"],
   },
   {
     id: "profile",
-    title: "Profile",
-    description: "View your personal information.",
-    group: "Navigation",
+    titleKey: "search.profileTitle",
+    descriptionKey: "search.profileDescription",
+    groupKey: "search.groupNavigation",
     href: "/settings/profile",
     icon: UserRound,
     keywords: ["account", "user"],
   },
   {
     id: "preferences",
-    title: "Preferences",
-    description: "Adjust theme and interface defaults.",
-    group: "Navigation",
+    titleKey: "search.preferencesTitle",
+    descriptionKey: "search.preferencesDescription",
+    groupKey: "search.groupNavigation",
     href: "/settings/preferences",
     icon: Sparkles,
     keywords: ["theme", "appearance"],
   },
   {
     id: "api-keys",
-    title: "API keys",
-    description: "Create keys for the public /api/v1 API.",
-    group: "Navigation",
+    titleKey: "search.apiKeysTitle",
+    descriptionKey: "search.apiKeysDescription",
+    groupKey: "search.groupNavigation",
     href: "/settings/api-keys",
     icon: KeyRound,
     keywords: ["token", "bearer", "developer", "v1"],
   },
   {
     id: "help",
-    title: "Help Center",
-    description: "Placeholder help action for the global search.",
-    group: "Quick actions",
+    titleKey: "search.helpCenterTitle",
+    descriptionKey: "search.helpCenterDescription",
+    groupKey: "search.groupQuickActions",
     icon: CircleHelp,
     keywords: ["support", "docs"],
   },
@@ -105,8 +106,20 @@ const baseEntries: SearchEntry[] = [
 
 export function GlobalSearch() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
+
+  const entries = React.useMemo(
+    () =>
+      baseEntryDefs.map((def) => ({
+        ...def,
+        title: t(def.titleKey),
+        description: t(def.descriptionKey),
+        group: t(def.groupKey),
+      })),
+    [t],
+  );
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -127,16 +140,16 @@ export function GlobalSearch() {
   }, [router.asPath]);
 
   const groupedEntries = React.useMemo(() => {
-    const groups = new Map<string, SearchEntry[]>();
+    const groups = new Map<string, typeof entries>();
 
-    for (const entry of baseEntries) {
+    for (const entry of entries) {
       const current = groups.get(entry.group) ?? [];
       current.push(entry);
       groups.set(entry.group, current);
     }
 
     return Array.from(groups.entries());
-  }, []);
+  }, [entries]);
 
   const handleOpenChange = React.useCallback((nextOpen: boolean) => {
     setOpen(nextOpen);
@@ -146,7 +159,7 @@ export function GlobalSearch() {
   }, []);
 
   const handleSelect = React.useCallback(
-    (entry: SearchEntry) => {
+    (entry: (typeof entries)[number]) => {
       handleOpenChange(false);
       if (entry.href && entry.href !== router.asPath) {
         void router.push(entry.href);
@@ -163,7 +176,7 @@ export function GlobalSearch() {
           "sm:bottom-4 sm:max-w-none",
         )}
       >
-        <DialogTitle className="sr-only">Global search</DialogTitle>
+        <DialogTitle className="sr-only">{t("search.title")}</DialogTitle>
 
         <Command className="overflow-visible bg-transparent">
           <CommandList className="mb-3 max-h-[min(45vh,420px)] rounded-2xl border border-border/70 bg-card/95 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur-xl">
@@ -172,16 +185,14 @@ export function GlobalSearch() {
                 <SearchIcon className="size-4" />
               </div>
               <div className="flex flex-col gap-1 text-center">
-                <p className="text-sm font-medium text-foreground">No matching results.</p>
-                <p className="text-xs text-muted-foreground">
-                  Try another page name or quick action.
-                </p>
+                <p className="text-sm font-medium text-foreground">{t("search.noResults")}</p>
+                <p className="text-xs text-muted-foreground">{t("search.noResultsHint")}</p>
               </div>
             </CommandEmpty>
 
-            {groupedEntries.map(([group, entries]) => (
+            {groupedEntries.map(([group, groupEntries]) => (
               <CommandGroup key={group} heading={group}>
-                {entries.map((entry) => (
+                {groupEntries.map((entry) => (
                   <CommandItem
                     key={entry.id}
                     value={[entry.title, entry.description, entry.group, ...(entry.keywords ?? [])].join(" ")}
@@ -210,7 +221,7 @@ export function GlobalSearch() {
                 autoFocus
                 value={query}
                 onValueChange={setQuery}
-                placeholder="Search pages, settings, and actions..."
+                placeholder={t("search.placeholder")}
                 className="h-auto flex-1"
               />
               <div className="hidden items-center gap-1 rounded-lg border border-border/70 bg-background px-2 py-1 text-[11px] text-muted-foreground sm:flex">

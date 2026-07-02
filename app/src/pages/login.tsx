@@ -6,11 +6,13 @@ import { signIn, useSession } from "next-auth/react";
 import type { GetServerSideProps } from "next";
 
 import { SignInPage } from "@/components/ui/sign-in";
+import { useTranslation } from "@/components/ui/locale-provider";
 import { setLastLoginMethod } from "@/lib/last-login-storage";
 import { redirectIfAuthed } from "@/lib/auth-redirect";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { data: session } = useSession();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -38,13 +40,13 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError("Invalid email or password");
+        setError(t("auth.invalidCredentials"));
       } else if (result?.ok) {
         setLastLoginMethod("email");
         router.push("/dashboard");
       }
     } catch {
-      setError("An unexpected error occurred");
+      setError(t("auth.unexpectedError"));
     } finally {
       setLoading(false);
     }
@@ -60,18 +62,18 @@ export default function LoginPage() {
               className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-zinc-950/70 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-900 hover:text-white"
             >
               <ArrowLeft className="size-4" />
-              Go back
+              {t("auth.goBack")}
             </Link>
             <span className="text-lg font-semibold text-white">Synaro</span>
           </div>
         </div>
         <SignInPage
-          title={<span className="font-light tracking-tighter text-white">Welcome Back</span>}
-          description="Sign in to your Synaro workspace and continue managing your cloud infrastructure."
+          title={<span className="font-light tracking-tighter text-white">{t("auth.welcomeBack")}</span>}
+          description={t("auth.signInDescription")}
           heroImageSrc="https://images.unsplash.com/photo-1642615835477-d303d7dc9ee9?w=2160&q=80"
-          submitLabel="Sign in"
-          footerPrompt="New to Synaro?"
-          footerActionLabel="Create account"
+          submitLabel={t("auth.signIn")}
+          footerPrompt={t("auth.newToSynaro")}
+          footerActionLabel={t("auth.createAccount")}
           footerActionHref="/signup"
           error={error}
           loading={loading}

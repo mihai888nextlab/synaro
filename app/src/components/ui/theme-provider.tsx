@@ -35,7 +35,6 @@ function subscribeToPrefersDark(onStoreChange: () => void) {
 function applyHtmlTheme(resolved: "light" | "dark") {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
-  // Trigger a short global transition so the whole UI shifts together.
   root.classList.add("theme-transition");
   root.classList.toggle("dark", resolved === "dark");
   root.setAttribute("data-theme", resolved);
@@ -46,27 +45,40 @@ function applyHtmlTheme(resolved: "light" | "dark") {
   }, 420);
 }
 
+function readStoredMode(): ThemeMode {
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY) as ThemeMode | null;
+    if (stored === "light" || stored === "dark" || stored === "system") return stored;
+  } catch {
+    // ignore
+  }
+  return "system";
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setModeState] = useState<ThemeMode>(() => {
-    if (typeof window === "undefined") return "system";
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY) as ThemeMode | null;
-      if (stored === "light" || stored === "dark" || stored === "system") return stored;
-    } catch {
-      // ignore
-    }
-    return "system";
-  });
+  // Keep SSR and the first client render identical; sync storage after hydration.
+  const [mode, setModeState] = useState<ThemeMode>("system");
+  const [hydrated, setHydrated] = useState(false);
+
   const prefersDark = useSyncExternalStore(
     subscribeToPrefersDark,
     () => getSystemPrefersDark(),
     () => false,
   );
-  const resolvedMode: "light" | "dark" = mode === "system" ? (prefersDark ? "dark" : "light") : mode;
+
+  const effectivePrefersDark = hydrated ? prefersDark : false;
+  const resolvedMode: "light" | "dark" =
+    mode === "system" ? (effectivePrefersDark ? "dark" : "light") : mode;
 
   useLayoutEffect(() => {
+    setModeState(readStoredMode());
+    setHydrated(true);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!hydrated) return;
     applyHtmlTheme(resolvedMode);
-  }, [resolvedMode]);
+  }, [resolvedMode, hydrated]);
 
   const setMode = (next: ThemeMode) => {
     setModeState(next);
@@ -93,4 +105,3 @@ export function useTheme() {
   if (!ctx) throw new Error("useTheme must be used within ThemeProvider");
   return ctx;
 }
-

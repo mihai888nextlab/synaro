@@ -2,6 +2,7 @@ import type { GetServerSideProps } from "next";
 import { getServerSession } from "next-auth/next";
 
 import { DashboardLogsTable, type DashboardLogRow } from "@/components/ui/dashboard-logs-table";
+import { useTranslation } from "@/components/ui/locale-provider";
 import { getUserActivityLogs } from "@/lib/activity-log";
 import { authOptions } from "@/lib/next-auth-options";
 
@@ -10,13 +11,15 @@ type LogsPageProps = {
 };
 
 export default function LogsPage({ logs }: LogsPageProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-1 flex-col overflow-hidden">
       <DashboardLogsTable
         hideHeader
         frameless
         logs={logs}
-        emptyMessage="Start or stop a project container to record activity. Logs reset each day."
+        emptyMessage={t("logs.noLogsPageBody")}
         className="flex min-h-0 flex-1 max-h-[calc(100dvh-11rem)]"
       />
     </div>

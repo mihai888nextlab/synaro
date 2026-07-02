@@ -29,6 +29,7 @@ import { PROJECT_DOCKER_IMAGE_OPTIONS } from "@/lib/project-docker-images";
 import { defaultProjectNameFromGithubUrl, normalizeGithubRepoUrl } from "@/lib/github-repo-url";
 import { defaultFolderImportName } from "@/lib/import-folder-paths";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/components/ui/locale-provider";
 
 type GithubRepoRow = {
   id: number;
@@ -140,6 +141,7 @@ export function ProjectsPageClient({
   linkedGithub: boolean;
 }) {
   const router = useRouter();
+  const { t } = useTranslation();
   const [projects, setProjects] = React.useState<SynaroProjectCardModel[]>(initialProjects);
   const [open, setOpen] = React.useState(false);
   const [tab, setTab] = React.useState<TabKey>("create");
@@ -167,6 +169,22 @@ export function ProjectsPageClient({
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
   /** Shown after a successful create when the Docker / environment-service step did not complete. */
   const [postCreateNotice, setPostCreateNotice] = React.useState<string | null>(null);
+
+  const dockerImageOptions = React.useMemo(
+    () =>
+      PROJECT_DOCKER_IMAGE_OPTIONS.map((opt) => {
+        const labelByValue: Record<string, string> = {
+          automatic: t("projects.runtimeAutomatic"),
+          "node:22-bookworm-slim": t("projects.runtimeNode22"),
+          "python:3.12-slim": t("projects.runtimePython312"),
+          "golang:1.23-bookworm": t("projects.runtimeGo123"),
+          "nginx:1.27-alpine": t("projects.runtimeNginx"),
+          "ubuntu:24.04": t("projects.runtimeUbuntu"),
+        };
+        return { value: opt.value, label: labelByValue[opt.value] ?? opt.label };
+      }),
+    [t],
+  );
   const [dockerBusyId, setDockerBusyId] = React.useState<string | null>(null);
 
   const folderInputRef = React.useRef<HTMLInputElement>(null);
@@ -435,7 +453,7 @@ export function ProjectsPageClient({
     if (trimmed) {
       const normalized = normalizeGithubRepoUrl(trimmed);
       if (!normalized) {
-        setSubmitError("Enter a valid GitHub repository URL (https://github.com/owner/repo).");
+        setSubmitError(t("projects.invalidGithubUrl"));
         return;
       }
       const name = defaultProjectNameFromGithubUrl(normalized);
@@ -571,14 +589,14 @@ export function ProjectsPageClient({
   return (
     <div className="relative w-full flex-1">
       <div className="mx-auto w-full max-w-7xl">
-        <h1 className="sr-only">Projects</h1>
+        <h1 className="sr-only">{t("projects.title")}</h1>
 
         {postCreateNotice ? (
           <p
             role="status"
             className="mb-4 rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-foreground dark:border-amber-500/25 dark:bg-amber-950/40"
           >
-            <span className="font-medium">Project created.</span> {postCreateNotice}
+            <span className="font-medium">{t("projects.projectCreated")}</span> {postCreateNotice}
           </p>
         ) : null}
 
@@ -629,10 +647,10 @@ export function ProjectsPageClient({
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <DialogTitle className="text-lg font-semibold tracking-tight text-foreground">
-                    New project
+                    {t("projects.newProjectDialogTitle")}
                   </DialogTitle>
                   <DialogDescription className="mt-1 text-sm text-muted-foreground">
-                    Create a workspace or import existing code.
+                    {t("projects.newProjectDialogDescription")}
                   </DialogDescription>
                 </div>
                 <DialogClose asChild>
@@ -641,7 +659,7 @@ export function ProjectsPageClient({
                     variant="outline"
                     size="icon"
                     className="h-9 w-9 shrink-0 rounded-xl border-border/70 bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
-                    aria-label="Close"
+                    aria-label={t("projects.close")}
                   >
                     <X className="size-4" />
                   </Button>
@@ -650,7 +668,7 @@ export function ProjectsPageClient({
 
               <div
                 role="tablist"
-                aria-label="Project setup"
+                aria-label={t("projects.tabListAriaLabel")}
                 className="mt-4 flex gap-1 rounded-xl border border-border/70 bg-muted/40 p-1"
               >
                 <button
@@ -665,7 +683,7 @@ export function ProjectsPageClient({
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  Create
+                  {t("projects.tabCreate")}
                 </button>
                 <button
                   type="button"
@@ -679,7 +697,7 @@ export function ProjectsPageClient({
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  Import
+                  {t("projects.tabImport")}
                 </button>
               </div>
             </div>
@@ -697,13 +715,13 @@ export function ProjectsPageClient({
                     htmlFor="project-title"
                     className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80"
                   >
-                    Project name
+                    {t("projects.projectName")}
                   </label>
                   <Input
                     id="project-title"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="e.g. Customer portal"
+                    placeholder={t("projects.projectNamePlaceholder")}
                     required
                     autoComplete="off"
                     disabled={submitting}
@@ -715,13 +733,13 @@ export function ProjectsPageClient({
                     htmlFor="project-description"
                     className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80"
                   >
-                    Description
+                    {t("projects.description")}
                   </label>
                   <textarea
                     id="project-description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="What does this project do?"
+                    placeholder={t("projects.descriptionPlaceholder")}
                     rows={4}
                     disabled={submitting}
                     className={cn(
@@ -735,7 +753,7 @@ export function ProjectsPageClient({
                     htmlFor="docker-image"
                     className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80"
                   >
-                    Runtime image
+                    {t("projects.runtimeImage")}
                   </label>
                   <select
                     id="docker-image"
@@ -747,7 +765,7 @@ export function ProjectsPageClient({
                       "focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/20",
                     )}
                   >
-                    {PROJECT_DOCKER_IMAGE_OPTIONS.map((opt) => (
+                    {dockerImageOptions.map((opt) => (
                       <option key={opt.value} value={opt.value}>
                         {opt.label}
                       </option>
@@ -763,11 +781,11 @@ export function ProjectsPageClient({
                       className="rounded-full border-border/70"
                       disabled={submitting}
                     >
-                      Cancel
+                      {t("common.cancel")}
                     </Button>
                   </DialogClose>
                   <Button type="submit" className="rounded-full" disabled={submitting}>
-                    {submitting ? "Creating…" : "Create project"}
+                    {submitting ? t("projects.creating") : t("projects.createProject")}
                   </Button>
                 </div>
               </form>
@@ -815,18 +833,20 @@ export function ProjectsPageClient({
                       <Upload className="size-5" />
                     </div>
                     <div className="flex flex-col items-center gap-1">
-                      <p className="text-sm font-medium text-foreground">Drop a folder here</p>
+                      <p className="text-sm font-medium text-foreground">{t("projects.dropFolder")}</p>
                     </div>
                   </button>
                   {importEntries.length > 0 ? (
                     <p className="text-center text-xs text-muted-foreground">
-                      {importEntries.length} file{importEntries.length === 1 ? "" : "s"} ready to import.
+                      {importEntries.length === 1
+                        ? t("projects.filesReadyOne", { count: importEntries.length })
+                        : t("projects.filesReadyMany", { count: importEntries.length })}
                     </p>
                   ) : null}
                 </section>
 
                 <section className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/15 p-4">
-                  <h3 className="text-sm font-semibold text-foreground">GitHub</h3>
+                  <h3 className="text-sm font-semibold text-foreground">{t("projects.github")}</h3>
 
                   {!linkedGithub ? (
                     <div className="flex flex-col gap-2">
@@ -837,7 +857,7 @@ export function ProjectsPageClient({
                         disabled={submitting || githubConnectBusy}
                         onClick={() => void handleConnectGithubFromProjects()}
                       >
-                        {githubConnectBusy ? "Redirecting…" : "Connect GitHub"}
+                        {githubConnectBusy ? t("auth.redirecting") : t("projects.connectGitHub")}
                       </Button>
                       {githubConnectMessage ? (
                         <p role="alert" className="text-sm text-destructive">
@@ -862,7 +882,7 @@ export function ProjectsPageClient({
                           disabled={submitting}
                           aria-expanded={githubReposMenuOpen}
                         >
-                          <span>My repositories</span>
+                          <span>{t("projects.myRepositories")}</span>
                           <ChevronDown
                             className={cn(
                               "size-4 shrink-0 text-muted-foreground transition-transform",
@@ -890,7 +910,7 @@ export function ProjectsPageClient({
                         {githubReposLoading && githubRepos.length === 0 ? (
                           <div className="flex items-center justify-center gap-2 px-3 py-8 text-sm text-muted-foreground">
                             <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
-                            Loading…
+                            {t("common.loading")}
                           </div>
                         ) : null}
                         {githubReposError ? (
@@ -904,7 +924,7 @@ export function ProjectsPageClient({
                                 href="/settings/profile"
                                 className="inline-block text-xs font-medium text-primary underline-offset-2 hover:underline"
                               >
-                                Open profile settings
+                                {t("projects.openProfileSettings")}
                               </Link>
                             </div>
                             <DropdownMenuItem
@@ -914,14 +934,14 @@ export function ProjectsPageClient({
                                 void fetchGithubRepos(1, false);
                               }}
                             >
-                              Try again
+                              {t("projects.tryAgain")}
                             </DropdownMenuItem>
                           </>
                         ) : null}
                         {!githubReposLoading && !githubReposError && githubRepos.length === 0 ? (
                           <>
                             <div className="px-3 py-4 text-center text-sm text-muted-foreground">
-                              No repositories in this page.
+                              {t("projects.noRepositoriesOnPage")}
                             </div>
                             <DropdownMenuItem
                               className="cursor-pointer justify-center text-center text-primary"
@@ -930,7 +950,7 @@ export function ProjectsPageClient({
                                 void fetchGithubRepos(1, false);
                               }}
                             >
-                              Try again
+                              {t("projects.tryAgain")}
                             </DropdownMenuItem>
                           </>
                         ) : null}
@@ -949,7 +969,7 @@ export function ProjectsPageClient({
                                 <span className="font-medium text-foreground">{repo.fullName}</span>
                                 {repo.private ? (
                                   <span className="ms-2 align-middle rounded-md border border-border/80 px-1 py-px text-[0.65rem] uppercase tracking-wide text-muted-foreground">
-                                    Private
+                                    {t("projects.private")}
                                   </span>
                                 ) : null}
                                 {repo.description ? (
@@ -973,10 +993,10 @@ export function ProjectsPageClient({
                             {githubReposLoading ? (
                               <span className="inline-flex items-center gap-2">
                                 <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
-                                Loading…
+                                {t("common.loading")}
                               </span>
                             ) : (
-                              "Load more"
+                              t("projects.loadMore")
                             )}
                           </DropdownMenuItem>
                         ) : null}
@@ -987,7 +1007,7 @@ export function ProjectsPageClient({
 
                   {githubUrl.trim() ? (
                     <p className="truncate rounded-lg border border-border/50 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                      <span className="text-muted-foreground/80">Selected </span>
+                      <span className="text-muted-foreground/80">{t("projects.selected")} </span>
                       <span className="font-mono text-foreground" title={githubUrl.trim()}>
                         {githubUrl.trim()}
                       </span>
@@ -1000,7 +1020,7 @@ export function ProjectsPageClient({
                     htmlFor="import-docker-image"
                     className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80"
                   >
-                    Runtime image
+                    {t("projects.runtimeImage")}
                   </label>
                   <select
                     id="import-docker-image"
@@ -1012,7 +1032,7 @@ export function ProjectsPageClient({
                       "focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/20",
                     )}
                   >
-                    {PROJECT_DOCKER_IMAGE_OPTIONS.map((opt) => (
+                    {dockerImageOptions.map((opt) => (
                       <option key={opt.value} value={opt.value}>
                         {opt.label}
                       </option>
@@ -1023,7 +1043,7 @@ export function ProjectsPageClient({
                 <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border/70 pt-4">
                   <DialogClose asChild>
                     <Button type="button" variant="outline" className="rounded-full border-border/70">
-                      Cancel
+                      {t("common.cancel")}
                     </Button>
                   </DialogClose>
                   <Button
@@ -1036,16 +1056,16 @@ export function ProjectsPageClient({
                     onClick={() => void handleImportContinue()}
                   >
                     {submitting && githubUrl.trim()
-                      ? "Importing…"
+                      ? t("projects.importing")
                       : submitting && importEntries.length > 0
-                        ? "Uploading…"
+                        ? t("projects.uploading")
                         : submitting
-                          ? "Working…"
+                          ? t("projects.working")
                           : githubUrl.trim()
-                            ? "Import project"
+                            ? t("projects.importProject")
                             : importEntries.length > 0
-                              ? "Import folder"
-                              : "Continue"}
+                              ? t("projects.importFolder")
+                              : t("projects.continue")}
                   </Button>
                 </div>
               </div>

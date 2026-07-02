@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/components/ui/locale-provider";
 
 export const SYNARO_PROJECT_CARD_ICONS = {
   brain: Brain,
@@ -252,6 +253,7 @@ export function SynaroProjectCard({
   /** `embedded` = lighter surface for dashboard / nested layouts (no “card on card”). */
   variant?: "default" | "embedded";
 }) {
+  const { t } = useTranslation();
   const href = `/projects/${encodeURIComponent(project.slug)}`;
   const analyticsHref = `/projects/${encodeURIComponent(project.slug)}/analytics`;
   const Icon = SYNARO_PROJECT_CARD_ICONS[project.icon] ?? Brain;
@@ -300,7 +302,7 @@ export function SynaroProjectCard({
                   variant="ghost"
                   size="icon"
                   className="size-9 shrink-0 rounded-lg p-0 leading-none text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:block"
-                  aria-label={`More options for ${project.title}`}
+                  aria-label={t("projects.moreOptionsFor", { title: project.title })}
                 >
                   <MoreVertical className="size-4 shrink-0" aria-hidden />
                 </Button>
@@ -309,7 +311,7 @@ export function SynaroProjectCard({
                 <DropdownMenuItem asChild className="cursor-pointer rounded-lg">
                   <Link href={analyticsHref} className="flex items-center gap-2">
                     <BarChart2 className="size-4 shrink-0" aria-hidden />
-                    Analytics
+                    {t("projects.analytics")}
                   </Link>
                 </DropdownMenuItem>
                 {project.viewerCanDelete && onDeleteProject ? (
@@ -321,7 +323,7 @@ export function SynaroProjectCard({
                         e.preventDefault();
                         if (
                           !window.confirm(
-                            `Delete “${project.title}”? This removes the project and its Docker environments. This cannot be undone.`,
+                            t("projects.deleteConfirm", { title: project.title }),
                           )
                         ) {
                           return;
@@ -331,7 +333,7 @@ export function SynaroProjectCard({
                     >
                       <span className="flex items-center gap-2">
                         <Trash2 className="size-4 shrink-0" aria-hidden />
-                        Delete project
+                        {t("projects.deleteProject")}
                       </span>
                     </DropdownMenuItem>
                   </>
@@ -411,6 +413,7 @@ export function SynaroNewProjectCard({
   className?: string;
   variant?: "default" | "embedded";
 }) {
+  const { t } = useTranslation();
   const styles = cn(
     "flex min-h-[11.25rem] cursor-pointer flex-col items-center justify-center rounded-xl px-5 py-8 text-sm font-medium text-muted-foreground transition sm:min-h-[12rem]",
     variant === "embedded"
@@ -422,14 +425,14 @@ export function SynaroNewProjectCard({
   if (onClick) {
     return (
       <button type="button" onClick={onClick} className={styles} data-onboarding="new-project">
-        + New project
+        {t("projects.newProject")}
       </button>
     );
   }
 
   return (
     <Link href={href} className={styles} data-onboarding="new-project">
-      + New project
+      {t("projects.newProject")}
     </Link>
   );
 }

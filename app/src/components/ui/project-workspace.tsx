@@ -22,6 +22,7 @@ import { hotkeysCoreFeature, syncDataLoaderFeature } from "@headless-tree/core";
 import { useTree } from "@headless-tree/react";
 
 import { AnimatedAIChat } from "@/components/ui/animated-ai-chat";
+import { useTranslation } from "@/components/ui/locale-provider";
 import { WorkspaceChatPreviewProvider, useWorkspaceChatPreview } from "@/components/ui/workspace-chat-preview";
 import { WorkspaceFileEditorPanel } from "@/components/ui/workspace-file-editor";
 import {
@@ -94,6 +95,7 @@ function LiveExplorerTree({
   treeTabActive,
   onTreeMutated,
 }: LiveExplorerTreeProps) {
+  const { t } = useTranslation();
   /** Restore from localStorage on every mount (tab switches remount this tree via `treeKey`). */
   const [expandedItems, setExpandedItems] = React.useState<string[]>([]);
   const initialHydratedRef = React.useRef(false);
@@ -354,21 +356,23 @@ function LiveExplorerTree({
       >
         <div className="flex shrink-0 flex-col gap-2 border-b border-border/60 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
           <p className="text-xs font-medium text-muted-foreground">
-            Project files
+            {t("workspace.projectFiles")}
             {loadState === "loading" ? (
-              <span className="ms-2 font-normal text-muted-foreground">· loading…</span>
+              <span className="ms-2 font-normal text-muted-foreground">· {t("common.loading")}</span>
             ) : null}
           </p>
           <div className="flex min-w-0 items-center gap-2">
-            <p className="shrink-0 text-xs text-muted-foreground">{visibleItems.length} items</p>
+            <p className="shrink-0 text-xs text-muted-foreground">
+              {t("workspace.itemsCount", { count: visibleItems.length })}
+            </p>
             {canMutate ? (
               <div className="flex shrink-0 items-center gap-0.5">
                 <button
                   type="button"
                   onClick={() => setToolbarNameDialog("newFile")}
                   className="inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                  title="New file"
-                  aria-label="New file"
+                  title={t("workspace.newFile")}
+                  aria-label={t("workspace.newFile")}
                 >
                   <FilePlus2 className="size-3.5" />
                 </button>
@@ -376,8 +380,8 @@ function LiveExplorerTree({
                   type="button"
                   onClick={() => setToolbarNameDialog("newFolder")}
                   className="inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                  title="New folder"
-                  aria-label="New folder"
+                  title={t("workspace.newFolder")}
+                  aria-label={t("workspace.newFolder")}
                 >
                   <FolderPlus className="size-3.5" />
                 </button>
@@ -388,7 +392,7 @@ function LiveExplorerTree({
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search"
+                placeholder={t("workspace.search")}
                 className="h-7 rounded-lg px-2 text-xs"
               />
             </div>
@@ -500,8 +504,9 @@ function TreePanel({
   treeTabActive,
   onTreeMutated,
 }: TreePanelProps) {
+  const { t } = useTranslation();
   const [items, setItems] = React.useState<Record<string, WorkspaceExplorerItem>>(() =>
-    placeholderTreeItems("Connect to a project to load the repository tree."),
+    placeholderTreeItems(t("workspace.connectToProject")),
   );
   const [treeKey, setTreeKey] = React.useState("initial");
   const [loadState, setLoadState] = React.useState<"idle" | "loading" | "ready" | "hint">("idle");
@@ -518,7 +523,7 @@ function TreePanel({
     if (!projectId) {
       treeWasReadyRef.current = false;
       prevProjectIdForTreeRef.current = undefined;
-      setItems(placeholderTreeItems("Connect to a project to load the repository tree."));
+      setItems(placeholderTreeItems(t("workspace.connectToProject")));
       setLoadState("hint");
       bumpTreeKey();
       return;
@@ -543,7 +548,7 @@ function TreePanel({
 
     async function load() {
       if (!cancelled && !treeWasReadyRef.current) {
-        setItems(placeholderTreeItems("Loading file list…"));
+        setItems(placeholderTreeItems(t("workspace.loadingFileList")));
         setLoadState("loading");
       }
       try {
@@ -556,7 +561,7 @@ function TreePanel({
           data = raw ? (JSON.parse(raw) as WorkspaceFilesResponse & { error?: string }) : {};
         } catch {
           if (!cancelled) {
-            setItems(placeholderTreeItems("Could not parse workspace response."));
+            setItems(placeholderTreeItems(t("workspace.couldNotParseWorkspace")));
             setLoadState("hint");
             bumpTreeKey();
           }
@@ -569,7 +574,7 @@ function TreePanel({
           const msg =
             typeof errJson.error === "string" && errJson.error.length > 0
               ? errJson.error
-              : `Request failed (${res.status})`;
+              : t("workspace.requestFailed", { status: res.status });
           if (!cancelled) {
             setItems(placeholderTreeItems(msg));
             setLoadState("hint");
@@ -584,7 +589,7 @@ function TreePanel({
         if (wf.reason === "no_environment") {
           if (!cancelled) {
             setItems(
-              placeholderTreeItems("Start the runtime (pill) to create a container and clone the repository."),
+              placeholderTreeItems(t("workspace.startRuntimeToClone")),
             );
             setLoadState("hint");
             bumpTreeKey();
@@ -594,7 +599,7 @@ function TreePanel({
         }
         if (wf.reason === "not_active") {
           if (!cancelled) {
-            setItems(placeholderTreeItems("Environment is stopped. Start the runtime to load files from the clone."));
+            setItems(placeholderTreeItems(t("workspace.environmentStopped")));
             setLoadState("hint");
             bumpTreeKey();
           }
@@ -604,9 +609,7 @@ function TreePanel({
         if (wf.reason === "clone_pending") {
           if (!cancelled) {
             setItems(
-              placeholderTreeItems(
-                "Git clone is still finishing in the container. This page will refresh the tree automatically.",
-              ),
+              placeholderTreeItems(t("workspace.gitCloneFinishing")),
             );
             setLoadState("loading");
             bumpTreeKey();
@@ -615,7 +618,9 @@ function TreePanel({
         }
         if (wf.reason === "unreachable") {
           if (!cancelled) {
-            const msg = wf.detail?.trim() ? `Environment service: ${wf.detail}` : "Could not list workspace files.";
+            const msg = wf.detail?.trim()
+              ? t("workspace.environmentService", { detail: wf.detail })
+              : t("workspace.couldNotListFiles");
             setItems(placeholderTreeItems(msg));
             setLoadState("hint");
             bumpTreeKey();
@@ -628,8 +633,8 @@ function TreePanel({
           emptyHint:
             wf.paths.length === 0
               ? hasGitRemote
-                ? "No files yet — Git clone may still be running, or this repo has no files under the workspace search paths."
-                : "No files yet — the workspace may still be syncing, or the folder/upload was empty."
+                ? t("workspace.noFilesCloneRunning")
+                : t("workspace.noFilesEmpty")
               : undefined,
         });
         if (!cancelled) {
@@ -643,7 +648,7 @@ function TreePanel({
         }
       } catch {
         if (!cancelled) {
-          setItems(placeholderTreeItems("Network error while loading the file tree."));
+          setItems(placeholderTreeItems(t("workspace.networkErrorFileTree")));
           setLoadState("hint");
           bumpTreeKey();
         }
@@ -662,7 +667,7 @@ function TreePanel({
       cancelled = true;
       stopPoll();
     };
-  }, [projectId, environmentStatus, treeRefreshKey, bumpTreeKey]);
+  }, [projectId, environmentStatus, treeRefreshKey, bumpTreeKey, t]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -741,6 +746,7 @@ export function ProjectWorkspace({
   canManageInvites = false,
 }: ProjectWorkspaceProps) {
   const router = useRouter();
+  const { t } = useTranslation();
   const [tab, setTab] = React.useState<TabKey>("chat");
 
   const tabFromQuery = router.query.tab;
@@ -919,7 +925,7 @@ export function ProjectWorkspace({
       const data = (await res.json()) as { previewUrl?: string; command?: string; error?: string };
       if (!res.ok) {
         setRunStatus("error");
-        setRunError(data.error ?? `Run failed (${res.status})`);
+        setRunError(data.error ?? t("workspace.runFailed", { status: res.status }));
         return;
       }
       const url = data.previewUrl ?? null;
@@ -949,9 +955,9 @@ export function ProjectWorkspace({
       }, 2000);
     } catch {
       setRunStatus("error");
-      setRunError("Could not reach the server.");
+      setRunError(t("workspace.couldNotReachServer"));
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   const handleDockerPress = React.useCallback(
     async (action: "start" | "stop") => {
@@ -970,23 +976,23 @@ export function ProjectWorkspace({
           try {
             data = JSON.parse(raw) as typeof data;
           } catch {
-            setDockerError("Invalid response from server.");
+            setDockerError(t("workspace.invalidServerResponse"));
             return;
           }
         }
         if (!res.ok) {
-          setDockerError(data.error ?? `Docker action failed (${res.status})`);
+          setDockerError(data.error ?? t("workspace.dockerActionFailed", { status: res.status }));
           return;
         }
         if (data.project) setEnvironmentStatus(data.project.environmentStatus);
         setTreeRefreshKey((k) => k + 1);
       } catch {
-        setDockerError("Could not reach the app to update Docker.");
+        setDockerError(t("workspace.couldNotUpdateDocker"));
       } finally {
         setDockerBusy(false);
       }
     },
-    [projectId],
+    [projectId, t],
   );
 
   const handleDownloadWorkspace = React.useCallback(async () => {
@@ -999,7 +1005,7 @@ export function ProjectWorkspace({
       );
       if (!res.ok) {
         const text = await res.text();
-        let message = `Download failed (${res.status})`;
+        let message = t("workspace.downloadFailed", { status: res.status });
         try {
           const j = JSON.parse(text) as { error?: string };
           if (j.error) message = j.error;
@@ -1017,11 +1023,11 @@ export function ProjectWorkspace({
       anchor.click();
       URL.revokeObjectURL(url);
     } catch {
-      setDownloadError("Could not download the workspace. Check your connection and try again.");
+      setDownloadError(t("workspace.downloadError"));
     } finally {
       setDownloadBusy(false);
     }
-  }, [projectId, projectSlug, environmentStatus]);
+  }, [projectId, projectSlug, environmentStatus, t]);
 
   const showPreviewPanel = runStatus === "running" && Boolean(previewUrl);
 
@@ -1090,7 +1096,7 @@ export function ProjectWorkspace({
                   className={tabButtonClass(tab === "chat")}
                 >
                   <MessageSquareText className="size-4" />
-                  AI chat
+                  {t("workspace.aiChat")}
                 </button>
                 <button
                   type="button"
@@ -1102,7 +1108,7 @@ export function ProjectWorkspace({
                   className={tabButtonClass(tab === "tree")}
                 >
                   <FolderTree className="size-4" />
-                  File tree
+                  {t("workspace.fileTree")}
                 </button>
                 <button
                   type="button"
@@ -1114,7 +1120,7 @@ export function ProjectWorkspace({
                   className={tabButtonClass(tab === "terminal")}
                 >
                   <TerminalSquare className="size-4" />
-                  Terminal
+                  {t("workspace.terminal")}
                 </button>
                 <button
                   type="button"
@@ -1126,7 +1132,7 @@ export function ProjectWorkspace({
                   className={tabButtonClass(tab === "deployments")}
                 >
                   <Rocket className="size-4" />
-                  Deployments
+                  {t("workspace.deployments")}
                 </button>
                 {!showPreviewPanel && projectId && environmentStatus === "RUNNING" ? (
                   <>
@@ -1150,7 +1156,11 @@ export function ProjectWorkspace({
                       ) : (
                         <PlayIcon className="size-4" />
                       )}
-                      {runStatus === "starting" ? "Starting…" : runStatus === "running" ? "Running" : "Run"}
+                      {runStatus === "starting"
+                        ? t("workspace.starting")
+                        : runStatus === "running"
+                          ? t("workspace.running")
+                          : t("workspace.run")}
                     </button>
                     {runStatus === "running" ? (
                       <button
@@ -1159,7 +1169,7 @@ export function ProjectWorkspace({
                         className={tabButtonClass(showLogs)}
                       >
                         <ScrollText className="size-4" />
-                        Logs
+                        {t("workspace.logs")}
                       </button>
                     ) : null}
                   </>
@@ -1187,7 +1197,7 @@ export function ProjectWorkspace({
                             className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-green-500/15 px-2.5 py-2 text-xs font-medium text-green-600 transition sm:gap-2 sm:px-3 sm:text-sm dark:text-green-400"
                           >
                             <PlayIcon className="size-4" />
-                            Running
+                            {t("workspace.running")}
                           </button>
                           {runStatus === "running" ? (
                             <button
@@ -1196,7 +1206,7 @@ export function ProjectWorkspace({
                               className={tabButtonClass(showLogs)}
                             >
                               <ScrollText className="size-4" />
-                              Logs
+                              {t("workspace.logs")}
                             </button>
                           ) : null}
                         </>
@@ -1208,8 +1218,8 @@ export function ProjectWorkspace({
                           type="button"
                           onClick={() => void handleDownloadWorkspace()}
                           disabled={downloadBusy}
-                          title="Download project folder as .tar.gz"
-                          aria-label="Download project folder"
+                          title={t("workspace.downloadProjectTitle")}
+                          aria-label={t("workspace.downloadProject")}
                           className={cn(
                             "inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/70",
                             "bg-background/40 text-muted-foreground transition",
@@ -1242,8 +1252,8 @@ export function ProjectWorkspace({
                         type="button"
                         onClick={() => void handleDownloadWorkspace()}
                         disabled={downloadBusy}
-                        title="Download project folder as .tar.gz"
-                        aria-label="Download project folder"
+                        title={t("workspace.downloadProjectTitle")}
+                        aria-label={t("workspace.downloadProject")}
                         className={cn(
                           "inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/70",
                           "bg-background/40 text-muted-foreground transition",
@@ -1346,9 +1356,9 @@ export function ProjectWorkspace({
               <div className="flex min-h-full w-full flex-col items-center justify-center py-4">
                 <div className="w-full max-w-lg space-y-6">
                   <div>
-                    <h2 className="text-base font-semibold text-foreground">Deployments</h2>
+                    <h2 className="text-base font-semibold text-foreground">{t("workspace.deployments")}</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Preview your running app or deploy it for permanent public access.
+                      {t("workspace.deploymentsDescription")}
                     </p>
                   </div>
 
@@ -1356,11 +1366,11 @@ export function ProjectWorkspace({
                   <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-3">
                   <div className="flex items-center gap-2">
                     <PlayIcon className="size-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">Preview</span>
-                    <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[0.7rem] text-muted-foreground">Temporary</span>
+                    <span className="text-sm font-medium">{t("workspace.preview")}</span>
+                    <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[0.7rem] text-muted-foreground">{t("workspace.previewTemporary")}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Start your project and preview it live in the browser. Preview runs while the container is active.
+                    {t("workspace.previewDescription")}
                   </p>
                   {runStatus === "running" && previewUrl ? (
                     <a
@@ -1370,11 +1380,13 @@ export function ProjectWorkspace({
                       className="inline-flex items-center gap-1.5 rounded-xl border border-border/60 bg-muted px-3 py-2 text-xs text-foreground transition hover:bg-accent"
                     >
                       <ExternalLink className="size-3.5" />
-                      Open preview
+                      {t("workspace.openPreview")}
                     </a>
                   ) : (
                     <p className="text-xs text-muted-foreground/60 italic">
-                      {environmentStatus === "RUNNING" ? "Click Run to start the app preview." : "Start the container first, then click Run."}
+                      {environmentStatus === "RUNNING"
+                        ? t("workspace.clickRunPreview")
+                        : t("workspace.startContainerFirst")}
                     </p>
                   )}
                 </div>
@@ -1383,11 +1395,11 @@ export function ProjectWorkspace({
                 <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-3">
                   <div className="flex items-center gap-2">
                     <Rocket className="size-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">Deploy</span>
-                    <span className="ml-auto rounded-full bg-violet-500/10 px-2 py-0.5 text-[0.7rem] text-violet-500">Coming soon</span>
+                    <span className="text-sm font-medium">{t("workspace.deployments")}</span>
+                    <span className="ml-auto rounded-full bg-violet-500/10 px-2 py-0.5 text-[0.7rem] text-violet-500">{t("common.comingSoon")}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Deploy your project to a permanent public URL like <span className="font-mono text-foreground/80">{projectSlug}.synaro.tech</span>. Custom domains supported.
+                    {t("workspace.deployDescription", { slug: projectSlug ?? "project" })}
                   </p>
                   <button
                     type="button"
@@ -1395,7 +1407,7 @@ export function ProjectWorkspace({
                     className="inline-flex items-center gap-1.5 rounded-xl border border-border/40 bg-muted px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed"
                   >
                     <Rocket className="size-3.5" />
-                    Deploy to production
+                    {t("workspace.deployToProduction")}
                   </button>
                 </div>
                 </div>
@@ -1409,20 +1421,20 @@ export function ProjectWorkspace({
               <div className="flex shrink-0 items-center justify-between px-3 py-1.5">
                 <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                   <ScrollText className="size-3.5" />
-                  App logs
+                  {t("workspace.appLogs")}
                 </p>
                 <button
                   type="button"
                   onClick={() => setShowLogs(false)}
                   className="rounded p-0.5 text-muted-foreground transition hover:text-foreground"
-                  aria-label="Close logs"
+                  aria-label={t("workspace.closeLogs")}
                 >
                   <X className="size-3.5" />
                 </button>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-2">
                 {logLines.length === 0 ? (
-                  <p className="py-2 text-[0.7rem] text-muted-foreground/60">(waiting for output…)</p>
+                  <p className="py-2 text-[0.7rem] text-muted-foreground/60">{t("workspace.waitingForOutput")}</p>
                 ) : (
                   logLines.map((line, i) => (
                     <div
@@ -1442,7 +1454,11 @@ export function ProjectWorkspace({
         {showPreviewPanel ? (
           <ProjectIframePreview
             className="order-last max-xl:max-h-[28vh] max-xl:min-h-[11rem] max-xl:shrink-0 xl:order-none xl:h-full xl:max-h-none xl:min-h-0"
-            title={projectSlug ? `Preview — ${humanizeProjectSlug(projectSlug)}` : "Preview"}
+            title={
+              projectSlug
+                ? t("workspace.previewTitle", { name: humanizeProjectSlug(projectSlug) })
+                : t("workspace.preview")
+            }
             previewUrl={previewUrl}
           />
         ) : null}

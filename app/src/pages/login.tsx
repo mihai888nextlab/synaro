@@ -7,6 +7,7 @@ import type { GetServerSideProps } from "next";
 
 import { SignInPage } from "@/components/ui/sign-in";
 import { useTranslation } from "@/components/ui/locale-provider";
+import { oauthErrorMessage } from "@/lib/auth-oauth-errors";
 import { setLastLoginMethod } from "@/lib/last-login-storage";
 import { redirectIfAuthed } from "@/lib/auth-redirect";
 
@@ -22,6 +23,14 @@ export default function LoginPage() {
       router.push("/dashboard");
     }
   }, [session, router]);
+
+  useEffect(() => {
+    const raw = router.query.error;
+    const code = typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : null;
+    if (!code) return;
+    setError(oauthErrorMessage(code, t));
+    void router.replace("/login", undefined, { shallow: true });
+  }, [router, t]);
 
   const handleSignIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -40,7 +49,7 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError(t("auth.invalidCredentials"));
+        setError(oauthErrorMessage(result.error, t));
       } else if (result?.ok) {
         setLastLoginMethod("email");
         router.push("/dashboard");
@@ -76,7 +85,7 @@ export default function LoginPage() {
           footerActionLabel={t("auth.createAccount")}
           footerActionHref="/signup"
           error={error}
-          loading={loading}
+          isSubmitting={loading}
           onSignIn={handleSignIn}
           onResetPassword={() => { }}
           onCreateAccount={() => { }}

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 
 import {
@@ -52,6 +52,12 @@ function resolveClientLocale(initialLocale: Locale, sessionLocale?: string | nul
   return detectBrowserLocale();
 }
 
+function resolveServerLocale(initialLocale: Locale, sessionLocale?: string | null): Locale {
+  if (isLocale(sessionLocale)) return sessionLocale;
+  if (isLocale(initialLocale)) return initialLocale;
+  return DEFAULT_LOCALE;
+}
+
 export function LocaleProvider({
   children,
   initialLocale = DEFAULT_LOCALE,
@@ -62,8 +68,12 @@ export function LocaleProvider({
   const { data: session, status, update } = useSession();
   const sessionLocale = session?.user?.preferredLocale;
   const [locale, setLocaleState] = useState<Locale>(() =>
-    resolveClientLocale(initialLocale, sessionLocale),
+    resolveServerLocale(initialLocale, sessionLocale),
   );
+
+  useLayoutEffect(() => {
+    setLocaleState(resolveClientLocale(initialLocale, sessionLocale));
+  }, [initialLocale, sessionLocale]);
 
   useEffect(() => {
     if (status !== "authenticated" || !isLocale(sessionLocale)) return;

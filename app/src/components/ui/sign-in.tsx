@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { getProviders, signIn } from "next-auth/react";
 
@@ -135,9 +135,15 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   const [googleError, setGoogleError] = useState<string | null>(null);
   const [githubBusy, setGithubBusy] = useState(false);
   const [githubError, setGithubError] = useState<string | null>(null);
-  const [lastLoginMethod] = useState<LastLoginMethod | null>(() => getLastLoginMethod());
+  const [lastLoginMethod, setLastLoginMethodState] = useState<LastLoginMethod | null>(null);
+  const [lastLoginReady, setLastLoginReady] = useState(false);
 
-  const showLastUsed = mode === "login" && lastLoginMethod !== null;
+  useEffect(() => {
+    setLastLoginMethodState(getLastLoginMethod());
+    setLastLoginReady(true);
+  }, []);
+
+  const showLastUsed = lastLoginReady && mode === "login" && lastLoginMethod !== null;
 
   const handleGoogleClick = async () => {
     setGoogleError(null);

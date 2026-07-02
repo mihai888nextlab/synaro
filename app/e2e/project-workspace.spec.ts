@@ -1,8 +1,13 @@
 import { expect, test } from "@playwright/test";
 
 import { E2E_PROJECT_PRIMARY_SLUG } from "./helpers/seed";
+import { useEnglishLocale } from "./helpers/locale";
 
 test.describe("Project workspace", () => {
+  test.beforeEach(async ({ page }) => {
+    await useEnglishLocale(page);
+  });
+
   test("workspace shell shows main tabs", async ({ page }) => {
     await page.goto(`/projects/${E2E_PROJECT_PRIMARY_SLUG}`);
 

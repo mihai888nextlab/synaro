@@ -3,6 +3,15 @@ import path from "node:path";
 
 const authFile = path.join(__dirname, "e2e/.auth/user.json");
 
+const guestSpecs = /(public|auth|documentation)\.spec\.ts/;
+const authenticatedSpecs = /(settings|dashboard|projects|project-workspace|agents)\.spec\.ts/;
+
+const browsers = [
+  { name: "chromium", use: devices["Desktop Chrome"] },
+  { name: "firefox", use: devices["Desktop Firefox"] },
+  { name: "webkit", use: devices["Desktop Safari"] },
+] as const;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -21,20 +30,22 @@ export default defineConfig({
       name: "setup",
       testMatch: /auth\.setup\.ts/,
     },
-    {
-      name: "guest",
-      testMatch: /(public|auth|documentation)\.spec\.ts/,
-      use: { ...devices["Desktop Chrome"] },
-    },
-    {
-      name: "authenticated",
-      testMatch: /(settings|dashboard|projects|project-workspace|agents)\.spec\.ts/,
-      use: {
-        ...devices["Desktop Chrome"],
-        storageState: authFile,
+    ...browsers.flatMap((browser) => [
+      {
+        name: `guest-${browser.name}`,
+        testMatch: guestSpecs,
+        use: { ...browser.use },
       },
-      dependencies: ["setup"],
-    },
+      {
+        name: `authenticated-${browser.name}`,
+        testMatch: authenticatedSpecs,
+        use: {
+          ...browser.use,
+          storageState: authFile,
+        },
+        dependencies: ["setup"],
+      },
+    ]),
   ],
   webServer: {
     command: process.env.CI ? "npm run start" : "npm run build && npm run start",

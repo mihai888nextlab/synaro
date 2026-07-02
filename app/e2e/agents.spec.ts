@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 
+import { useEnglishLocale } from "./helpers/locale";
+
 test.describe("Agents", () => {
+  test.beforeEach(async ({ page }) => {
+    await useEnglishLocale(page);
+  });
+
   test("loads agents page with empty list", async ({ page }) => {
     await page.route("**/api/agents", async (route) => {
       if (route.request().method() === "GET") {

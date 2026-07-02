@@ -1,13 +1,27 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { render, screen, waitFor } from "@testing-library/react";
+import { SessionProvider } from "next-auth/react";
 
+import { LocaleProvider } from "@/components/ui/locale-provider";
 import { SignInPage } from "@/components/ui/sign-in";
 import { setLastLoginMethod } from "@/lib/last-login-storage";
 
-jest.mock("next-auth/react", () => ({
-  getProviders: jest.fn().mockResolvedValue({}),
-  signIn: jest.fn(),
-}));
+jest.mock("next-auth/react", () => {
+  const actual = jest.requireActual<typeof import("next-auth/react")>("next-auth/react");
+  return {
+    ...actual,
+    getProviders: jest.fn().mockResolvedValue({}),
+    signIn: jest.fn(),
+  };
+});
+
+function renderSignIn(ui: React.ReactElement) {
+  return render(
+    <SessionProvider session={null}>
+      <LocaleProvider>{ui}</LocaleProvider>
+    </SessionProvider>,
+  );
+}
 
 describe("SignInPage last-used pill", () => {
   beforeEach(() => {
@@ -16,7 +30,7 @@ describe("SignInPage last-used pill", () => {
 
   it("shows Used last time on the Google button when google was last method (login mode)", async () => {
     setLastLoginMethod("google");
-    render(<SignInPage mode="login" submitLabel="Sign in" />);
+    renderSignIn(<SignInPage mode="login" submitLabel="Sign in" />);
 
     await waitFor(() => {
       expect(screen.getByText("Used last time")).toBeInTheDocument();
@@ -28,7 +42,7 @@ describe("SignInPage last-used pill", () => {
 
   it("shows Used last time on submit when email was last method", async () => {
     setLastLoginMethod("email");
-    render(<SignInPage mode="login" submitLabel="Sign in" />);
+    renderSignIn(<SignInPage mode="login" submitLabel="Sign in" />);
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Sign in/i })).toHaveTextContent("Used last time");
@@ -37,7 +51,7 @@ describe("SignInPage last-used pill", () => {
 
   it("does not show Used last time in signup mode", async () => {
     setLastLoginMethod("google");
-    render(<SignInPage mode="signup" submitLabel="Create account" />);
+    renderSignIn(<SignInPage mode="signup" submitLabel="Create account" />);
 
     await waitFor(() => {
       expect(screen.getByText("Create account")).toBeInTheDocument();
@@ -46,7 +60,7 @@ describe("SignInPage last-used pill", () => {
   });
 
   it("does not show Used last time when no method is stored", async () => {
-    render(<SignInPage mode="login" submitLabel="Sign in" />);
+    renderSignIn(<SignInPage mode="login" submitLabel="Sign in" />);
 
     await waitFor(() => {
       expect(screen.getByText("Sign in")).toBeInTheDocument();

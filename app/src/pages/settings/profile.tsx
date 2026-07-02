@@ -9,6 +9,7 @@ import { getServerSession } from "next-auth/next";
 
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/next-auth-options";
+import { oauthErrorMessage } from "@/lib/auth-oauth-errors";
 import { useTranslation } from "@/components/ui/locale-provider";
 
 type ProfilePageProps = {
@@ -16,21 +17,6 @@ type ProfilePageProps = {
   linkedGithub: boolean;
   hasPassword: boolean;
 };
-
-function oauthErrorMessage(code: string, t: (key: string) => string): string {
-  const map: Record<string, string> = {
-    OAuthSignin: t("profile.oauthSignin"),
-    OAuthCallback: t("profile.oauthCallback"),
-    OAuthCreateAccount: t("profile.oauthCreateAccount"),
-    EmailCreateAccount: t("profile.emailCreateAccount"),
-    Callback: t("profile.callback"),
-    OAuthAccountNotLinked: t("profile.oauthAccountNotLinked"),
-    SessionRequired: t("profile.sessionRequired"),
-    AccessDenied: t("profile.accessDenied"),
-    Default: t("profile.oauthSignInFailed"),
-  };
-  return map[code] ?? map.Default;
-}
 
 export default function ProfilePage({
   linkedGoogle: linkedGoogleInitial,

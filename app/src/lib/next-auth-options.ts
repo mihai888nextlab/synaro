@@ -143,14 +143,18 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, trigger, session }) {
       if (user?.id) {
         token.id = user.id;
-        const dbUser = await prisma.user.findUnique({
-          where: { id: user.id },
-          select: { preferredLocale: true, name: true },
-        });
-        if (dbUser?.preferredLocale && isLocale(dbUser.preferredLocale)) {
-          token.preferredLocale = dbUser.preferredLocale;
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { preferredLocale: true, name: true },
+          });
+          if (dbUser?.preferredLocale && isLocale(dbUser.preferredLocale)) {
+            token.preferredLocale = dbUser.preferredLocale;
+          }
+          if (dbUser?.name) token.name = dbUser.name;
+        } catch (err) {
+          console.error("[next-auth] jwt user lookup failed:", err);
         }
-        if (dbUser?.name) token.name = dbUser.name;
       }
       if (trigger === "update") {
         const nextName =

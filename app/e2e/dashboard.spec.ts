@@ -5,8 +5,13 @@ import {
   E2E_PROJECT_PRIMARY_NAME,
   E2E_PROJECT_SECONDARY_NAME,
 } from "./helpers/seed";
+import { useEnglishLocale } from "./helpers/locale";
 
 test.describe("Dashboard", () => {
+  test.beforeEach(async ({ page }) => {
+    await useEnglishLocale(page);
+  });
+
   test("shows seeded projects and activity", async ({ page }) => {
     await page.goto("/dashboard", { waitUntil: "networkidle" });
 

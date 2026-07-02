@@ -1,8 +1,13 @@
 import { expect, test } from "@playwright/test";
 
 import { E2E_USER_EMAIL, E2E_USER_NAME } from "./helpers/seed";
+import { useEnglishLocale } from "./helpers/locale";
 
 test.describe("Settings", () => {
+  test.beforeEach(async ({ page }) => {
+    await useEnglishLocale(page);
+  });
+
   test("profile shows user email and supports name edit", async ({ page }) => {
     await page.goto("/settings/profile");
     const main = page.getByRole("main");

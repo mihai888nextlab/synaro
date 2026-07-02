@@ -5,8 +5,13 @@ import {
   E2E_PROJECT_PRIMARY_SLUG,
   E2E_PROJECT_SECONDARY_NAME,
 } from "./helpers/seed";
+import { useEnglishLocale } from "./helpers/locale";
 
 test.describe("Projects", () => {
+  test.beforeEach(async ({ page }) => {
+    await useEnglishLocale(page);
+  });
+
   test("lists seeded project cards", async ({ page }) => {
     await page.goto("/projects");
     await expect(page.getByRole("link", { name: `Open project: ${E2E_PROJECT_PRIMARY_NAME}` })).toBeVisible();

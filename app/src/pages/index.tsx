@@ -50,7 +50,7 @@ function ProductScreenshotSection() {
 
 export default function Home() {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-black text-white">
+    <main id="main-content" className="relative min-h-screen overflow-hidden bg-black text-white">
       <PageBackgroundPattern />
       <div className="relative z-10">
         <SiteHeader />

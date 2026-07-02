@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 
+import { useTranslation } from "@/components/ui/locale-provider";
 import { cn } from "@/lib/utils";
 
 type SpeechWaveformProps = {
@@ -11,11 +12,13 @@ type SpeechWaveformProps = {
 
 /** Live bar waveform driven by microphone frequency data (0–1 per bar). */
 export function SpeechWaveform({ levels, className }: SpeechWaveformProps) {
+  const { t } = useTranslation();
+
   return (
     <div
       className={cn("flex h-12 items-center justify-center gap-[3px] px-2", className)}
       role="img"
-      aria-label="Listening"
+      aria-label={t("a11y.listening")}
     >
       {levels.map((level, i) => (
         <motion.div

@@ -8,6 +8,7 @@ import type { Session } from "next-auth";
 import { DashboardLayout } from "@/components/ui/dashboard-layout";
 import { GlobalSearch } from "@/components/ui/global-search";
 import { LocaleProvider } from "@/components/ui/locale-provider";
+import { SkipLink } from "@/components/ui/skip-link";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import { AiBackgroundTaskProvider } from "@/components/ui/ai-background-task";
 import { NotificationsProvider } from "@/components/ui/notifications";
@@ -41,6 +42,7 @@ function SynaroApp({ Component, pageProps }: AppPropsWithSession) {
       <ThemeProvider>
         <SessionProvider basePath="/api/auth" session={pageProps.session}>
           <LocaleProvider initialLocale={pageProps.initialLocale}>
+            <SkipLink />
             <NotificationsProvider>
               <AiBackgroundTaskProvider>
                 <OnboardingProvider>

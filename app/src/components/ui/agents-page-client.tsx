@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/router";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Bot,
@@ -18,6 +19,7 @@ import {
 import { MarkdownLite } from "@/components/ui/markdown-lite";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/components/ui/locale-provider";
+import { invalidateSearchIndex, prefetchSearchIndex } from "@/hooks/use-search-index";
 import {
   Dialog,
   DialogContent,
@@ -265,8 +267,10 @@ const defaultForm = {
 
 export function AgentsPageClient() {
   const { t } = useTranslation();
+  const router = useRouter();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [highlightedAgentId, setHighlightedAgentId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(defaultForm);
   const [creating, setCreating] = useState(false);
@@ -279,6 +283,7 @@ export function AgentsPageClient() {
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [runsLoading, setRunsLoading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const highlightHandledRef = useRef<string | null>(null);
 
   const fetchAgents = useCallback(async () => {
     try {
@@ -292,6 +297,29 @@ export function AgentsPageClient() {
   useEffect(() => {
     void fetchAgents();
   }, [fetchAgents]);
+
+  useEffect(() => {
+    const raw = router.query.highlight;
+    const highlightId = typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : undefined;
+    if (!highlightId || loading) return;
+    if (highlightHandledRef.current === highlightId) return;
+    if (!agents.some((agent) => agent.id === highlightId)) return;
+
+    highlightHandledRef.current = highlightId;
+    setHighlightedAgentId(highlightId);
+
+    requestAnimationFrame(() => {
+      document.getElementById(`agent-card-${highlightId}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+
+    void router.replace("/agents", undefined, { shallow: true });
+
+    const timer = window.setTimeout(() => setHighlightedAgentId(null), 2500);
+    return () => window.clearTimeout(timer);
+  }, [agents, loading, router, router.query.highlight]);
 
   const fetchRuns = useCallback(async (agentId: string) => {
     setRunsLoading(true);
@@ -354,6 +382,8 @@ export function AgentsPageClient() {
     await fetch(`/api/agents/${agentId}`, { method: "DELETE" });
     if (runsAgent?.id === agentId) setRunsOpen(false);
     await fetchAgents();
+    invalidateSearchIndex();
+    void prefetchSearchIndex();
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -377,6 +407,8 @@ export function AgentsPageClient() {
         setCreateOpen(false);
         setForm(defaultForm);
         await fetchAgents();
+        invalidateSearchIndex();
+        void prefetchSearchIndex();
       } else {
         const data = (await res.json()) as { error?: string };
         setCreateError(data.error ?? t("agents.createFailed"));
@@ -416,8 +448,12 @@ export function AgentsPageClient() {
               {agents.map((agent) => (
                 <motion.div
                   key={agent.id}
+                  id={`agent-card-${agent.id}`}
                   layout
-                  className="min-w-0"
+                  className={cn(
+                    "min-w-0 rounded-xl transition-shadow",
+                    highlightedAgentId === agent.id && "ring-2 ring-ring/60 ring-offset-2 ring-offset-background",
+                  )}
                   initial={{ opacity: 0, scale: 0.94 }}
                   animate={{
                     opacity: 1,
@@ -612,11 +648,16 @@ export function AgentsPageClient() {
                 onClick={() => runsAgent && void fetchRuns(runsAgent.id)}
                 className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                 title={t("agents.refresh")}
+                aria-label={t("agents.refresh")}
               >
                 <RefreshCw className={cn("size-4", runsLoading && "animate-spin")} />
               </button>
               <DialogClose asChild>
-                <button type="button" className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground">
+                <button
+                  type="button"
+                  className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  aria-label={t("a11y.closeDialog")}
+                >
                   <X className="size-4" />
                 </button>
               </DialogClose>

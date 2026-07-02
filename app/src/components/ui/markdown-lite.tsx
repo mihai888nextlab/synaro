@@ -17,6 +17,14 @@ type Node =
   | { type: "code"; text: string }
   | { type: "link"; href: string; children: Node[] };
 
+const UNSAFE_LINK_PROTOCOL = /^(javascript|data|vbscript):/i;
+
+function isSafeLinkHref(href: string): boolean {
+  const trimmed = href.trim();
+  if (!trimmed) return false;
+  return !UNSAFE_LINK_PROTOCOL.test(trimmed);
+}
+
 function parseInline(md: string): Node[] {
   const out: Node[] = [];
   let i = 0;
@@ -180,6 +188,13 @@ function renderNodes(
         );
       case "link": {
         const href = n.href.trim();
+        if (!isSafeLinkHref(href)) {
+          return (
+            <React.Fragment key={key}>
+              {renderNodes(n.children, key, onOpenFile)}
+            </React.Fragment>
+          );
+        }
         const openAsFile =
           onOpenFile &&
           !/^https?:\/\//i.test(href) &&

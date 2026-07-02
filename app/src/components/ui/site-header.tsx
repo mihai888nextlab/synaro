@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronDown, Cloud, Menu, ShieldCheck, Waypoints, X } from "lucide-react";
 import { useState } from "react";
 
+import { useTranslation } from "@/components/ui/locale-provider";
 import { SynaroLogo } from "@/components/ui/synaro-logo";
 
 type DropdownCard = {
@@ -96,6 +97,7 @@ const dropdowns: DropdownData[] = [
 ];
 
 export function SiteHeader() {
+  const { t } = useTranslation();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activeMobileMenu, setActiveMobileMenu] = useState<string | null>(null);
@@ -212,7 +214,7 @@ export function SiteHeader() {
           type="button"
           onClick={() => setMobileOpen((open) => !open)}
           className="inline-flex size-9 items-center justify-center rounded-md border border-white/15 text-zinc-200 lg:hidden"
-          aria-label="Toggle menu"
+          aria-label={t("a11y.toggleMenu")}
           aria-expanded={mobileOpen}
         >
           {mobileOpen ? <X className="size-4" /> : <Menu className="size-4" />}

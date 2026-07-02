@@ -1094,6 +1094,8 @@ export function ProjectWorkspace({
                     dispatchWorkspaceTab("chat");
                   }}
                   className={tabButtonClass(tab === "chat")}
+                  aria-label={t("a11y.switchToTab", { tab: t("workspace.aiChat") })}
+                  aria-current={tab === "chat" ? "page" : undefined}
                 >
                   <MessageSquareText className="size-4" />
                   {t("workspace.aiChat")}
@@ -1106,6 +1108,8 @@ export function ProjectWorkspace({
                     dispatchWorkspaceTab("tree");
                   }}
                   className={tabButtonClass(tab === "tree")}
+                  aria-label={t("a11y.switchToTab", { tab: t("workspace.fileTree") })}
+                  aria-current={tab === "tree" ? "page" : undefined}
                 >
                   <FolderTree className="size-4" />
                   {t("workspace.fileTree")}
@@ -1118,6 +1122,8 @@ export function ProjectWorkspace({
                     dispatchWorkspaceTab("terminal");
                   }}
                   className={tabButtonClass(tab === "terminal")}
+                  aria-label={t("a11y.switchToTab", { tab: t("workspace.terminal") })}
+                  aria-current={tab === "terminal" ? "page" : undefined}
                 >
                   <TerminalSquare className="size-4" />
                   {t("workspace.terminal")}
@@ -1130,6 +1136,8 @@ export function ProjectWorkspace({
                     dispatchWorkspaceTab("deployments");
                   }}
                   className={tabButtonClass(tab === "deployments")}
+                  aria-label={t("a11y.switchToTab", { tab: t("workspace.deployments") })}
+                  aria-current={tab === "deployments" ? "page" : undefined}
                 >
                   <Rocket className="size-4" />
                   {t("workspace.deployments")}
@@ -1167,6 +1175,8 @@ export function ProjectWorkspace({
                         type="button"
                         onClick={() => setShowLogs((v) => !v)}
                         className={tabButtonClass(showLogs)}
+                        aria-label={showLogs ? t("a11y.hideLogs") : t("a11y.showLogs")}
+                        aria-pressed={showLogs}
                       >
                         <ScrollText className="size-4" />
                         {t("workspace.logs")}
@@ -1204,6 +1214,8 @@ export function ProjectWorkspace({
                               type="button"
                               onClick={() => setShowLogs((v) => !v)}
                               className={tabButtonClass(showLogs)}
+                              aria-label={showLogs ? t("a11y.hideLogs") : t("a11y.showLogs")}
+                              aria-pressed={showLogs}
                             >
                               <ScrollText className="size-4" />
                               {t("workspace.logs")}

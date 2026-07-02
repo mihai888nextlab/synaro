@@ -30,6 +30,7 @@ import { defaultProjectNameFromGithubUrl, normalizeGithubRepoUrl } from "@/lib/g
 import { defaultFolderImportName } from "@/lib/import-folder-paths";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/components/ui/locale-provider";
+import { invalidateSearchIndex, prefetchSearchIndex } from "@/hooks/use-search-index";
 
 type GithubRepoRow = {
   id: number;
@@ -239,6 +240,8 @@ export function ProjectsPageClient({
       const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, { method: "DELETE" });
       deleteInFlightRef.current.delete(projectId);
       if (res.status === 204 || res.status === 404) {
+        invalidateSearchIndex();
+        void prefetchSearchIndex();
         return;
       }
       setProjects(snapshot);
@@ -341,6 +344,8 @@ export function ProjectsPageClient({
         const rest = prev.filter((p) => p.id !== data.project!.id);
         return [data.project!, ...rest];
       });
+      invalidateSearchIndex();
+      void prefetchSearchIndex();
 
       if (data.environmentWarning) {
         setPostCreateNotice(data.environmentWarning);
@@ -418,6 +423,8 @@ export function ProjectsPageClient({
         const rest = prev.filter((p) => p.id !== data.project!.id);
         return [data.project!, ...rest];
       });
+      invalidateSearchIndex();
+      void prefetchSearchIndex();
 
       if (data.environmentWarning) {
         setPostCreateNotice(data.environmentWarning);

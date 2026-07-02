@@ -4,7 +4,7 @@ import path from "node:path";
 const authFile = path.join(__dirname, "e2e/.auth/user.json");
 
 const guestSpecs = /(public|auth|documentation)\.spec\.ts/;
-const authenticatedSpecs = /(settings|dashboard|projects|project-workspace|agents)\.spec\.ts/;
+const authenticatedSpecs = /(settings|dashboard|projects|project-workspace|agents|global-search)\.spec\.ts/;
 
 const browsers = [
   { name: "chromium", use: devices["Desktop Chrome"] },
@@ -46,6 +46,12 @@ export default defineConfig({
         dependencies: ["setup"],
       },
     ]),
+    {
+      name: "a11y-chromium",
+      testMatch: /a11y\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"] },
+      dependencies: ["setup"],
+    },
   ],
   webServer: {
     command: process.env.CI ? "npm run start" : "npm run build && npm run start",

@@ -88,7 +88,7 @@ export function SignupPageClient() {
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-black text-white">
+    <main id="main-content" className="relative min-h-screen overflow-hidden bg-black text-white">
       <div className="relative z-10">
         <div className="px-4 pt-4 sm:px-6 sm:pt-6">
           <div className="flex items-center gap-3">

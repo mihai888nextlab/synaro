@@ -107,6 +107,11 @@ body {
   font-family: var(--font-sans);
 }
 
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 /* Prevent lab-style pages from horizontal overflow */
 .lab-bg::before {
   overflow: hidden;
@@ -130,6 +135,20 @@ html.theme-transition * {
 @media (prefers-reduced-motion: reduce) {
   html.theme-transition,
   html.theme-transition * {
+    transition: none !important;
+  }
+
+  .animate-element,
+  .animate-slide-right,
+  .animate-testimonial {
+    animation: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+    transform: none !important;
+  }
+
+  .dashboard-grid-root .react-grid-item,
+  .dashboard-grid-root .react-grid-layout {
     transition: none !important;
   }
 }

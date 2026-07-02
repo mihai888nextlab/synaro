@@ -2,6 +2,7 @@ import type { GetServerSideProps } from "next";
 import { useRouter } from "next/router";
 
 import { Component as CampaignAreaChartCard } from "@/components/ui/area-chart-analytics-card";
+import { useTranslation } from "@/components/ui/locale-provider";
 import { requireAuth } from "@/lib/auth-redirect";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +38,7 @@ function MetricCell({ metric }: { metric: Metric }) {
 
 export default function ProjectAnalyticsPage() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   if (!router.isReady) {
     return (
@@ -49,7 +51,7 @@ export default function ProjectAnalyticsPage() {
   return (
     <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-6 sm:gap-10">
         <section
-          aria-label="Project analytics"
+          aria-label={t("a11y.projectAnalytics")}
           className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-5 xl:gap-6"
         >
           <div className="min-w-0 flex-1 overflow-hidden">
@@ -59,7 +61,7 @@ export default function ProjectAnalyticsPage() {
           </div>
 
           <aside
-            aria-label="Key metrics"
+            aria-label={t("a11y.keyMetrics")}
             className={cn(
               "mx-auto flex min-h-0 w-full max-w-sm shrink-0 flex-col",
               "max-lg:max-w-none lg:mx-0 lg:max-w-none lg:w-[min(100%,22rem)] xl:w-96",

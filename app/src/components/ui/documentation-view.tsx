@@ -345,7 +345,7 @@ export function DocumentationView({ slug }: { slug: string }) {
   if (!page) return null;
 
   return (
-    <main className="relative flex h-dvh flex-col overflow-hidden bg-black text-white">
+    <main id="main-content" className="relative flex h-dvh flex-col overflow-hidden bg-black text-white">
       <PageBackgroundPattern className="opacity-40" />
       <div className="relative z-10 flex h-full min-h-0 flex-col">
         <div className="shrink-0">

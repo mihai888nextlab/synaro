@@ -18,6 +18,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useTranslation } from "@/components/ui/locale-provider";
 
 export type CampaignChartInterval = "daily" | "weekly" | "monthly";
 
@@ -103,6 +104,7 @@ const INTERVAL_LABEL: Record<CampaignChartInterval, string> = {
  * Campaign area chart card — placeholder series; intervals switch Daily / Weekly / Monthly.
  */
 export function Component() {
+  const { t } = useTranslation();
   const [interval, setInterval] = React.useState<CampaignChartInterval>("daily");
   const [campaignData, setCampaignData] = React.useState(() => placeholderData("daily"));
 
@@ -136,7 +138,7 @@ export function Component() {
                 <button
                   type="button"
                   className="inline-flex rounded-md text-muted-foreground/50 outline-none hover:text-muted-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70"
-                  aria-label="About campaign data"
+                  aria-label={t("a11y.aboutCampaignData")}
                 >
                   <svg
                     width={20}
@@ -164,7 +166,7 @@ export function Component() {
 
         <div
           role="tablist"
-          aria-label="Chart scale"
+          aria-label={t("a11y.chartScale")}
           className="inline-flex w-full shrink-0 rounded-xl border border-border/70 bg-muted/30 p-0.5 sm:w-auto dark:bg-muted/20"
         >
           {INTERVAL_ORDER.map((key) => {

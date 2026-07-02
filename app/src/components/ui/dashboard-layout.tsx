@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, ReactNode, useMemo, useState } from "react";
+import { Fragment, ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import { BookOpen, CircleHelp, HomeIcon, Menu, Sparkles, X } from "lucide-react";
@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import { useOnboarding } from "@/components/ui/onboarding";
 import { useTranslation } from "@/components/ui/locale-provider";
+import { prefetchSearchIndex } from "@/hooks/use-search-index";
 import { humanizeProjectSlug } from "@/lib/project-slug";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,10 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const { openOnboarding } = useOnboarding();
   const { collapsed, setCollapsed } = usePersistentSidebarCollapse();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    void prefetchSearchIndex();
+  }, []);
 
   const breadcrumbs = useMemo((): BreadcrumbSegment[] => {
     const path = router.pathname;
@@ -244,6 +249,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
         </header>
 
         <main
+          id="main-content"
           className={cn(
             "flex min-h-0 min-w-0 flex-1 flex-col px-3 sm:px-6",
             isProjectWorkspace ? "pt-1.5 pb-4 sm:pt-2 sm:pb-5" : "py-4 sm:py-6",

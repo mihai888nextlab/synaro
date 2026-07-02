@@ -120,6 +120,7 @@ export function ProjectShareInvite({ projectId }: ProjectShareInviteProps) {
                 className="shrink-0"
                 onClick={() => void copy()}
                 title={t("workspace.copyLink")}
+                aria-label={t("a11y.copyInviteLink")}
               >
                 <Link2 className="size-4" />
               </Button>

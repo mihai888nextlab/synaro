@@ -12,11 +12,14 @@
     "db:migrate:local": "bash -c 'set -a && [ -f .env.local ] && . ./.env.local; set +a && prisma migrate deploy'",
     "db:push:local": "bash -c 'set -a && [ -f .env.local ] && . ./.env.local; set +a && prisma db push'",
     "test": "jest",
+    "test:security": "jest --testPathPattern=__tests__/security",
     "test:watch": "jest --watch",
     "test:ci": "jest --ci --coverage --maxWorkers=2",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:ci": "npm run build && playwright test",
+    "test:a11y": "playwright test a11y.spec.ts --project=a11y-chromium",
+    "test:a11y:ci": "npm run build && playwright test a11y.spec.ts --project=a11y-chromium",
     "playwright:install": "playwright install chromium firefox webkit"
   },
   "dependencies": {
@@ -50,6 +53,7 @@
     "tar-stream": "^3.2.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.0",

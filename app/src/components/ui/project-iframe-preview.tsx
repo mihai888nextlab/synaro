@@ -5,6 +5,7 @@ import { Globe, RotateCcw } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { useTranslation } from "@/components/ui/locale-provider";
 
 const DEFAULT_PREVIEW_URL = "about:blank";
 
@@ -46,6 +47,7 @@ export function ProjectIframePreview({
   /** When set by parent (e.g. after Run), navigate the iframe here automatically. */
   previewUrl?: string | null;
 }) {
+  const { t } = useTranslation();
   const proxyPrefix = extractProxyPrefix(previewUrl);
 
   const [urlInput, setUrlInput] = React.useState("/");
@@ -152,7 +154,7 @@ export function ProjectIframePreview({
             type="button"
             onClick={refresh}
             className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground transition hover:bg-muted/80 hover:text-foreground"
-            aria-label="Refresh preview"
+            aria-label={t("a11y.refreshPreview")}
           >
             <RotateCcw className="size-3.5" />
           </button>

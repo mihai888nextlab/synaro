@@ -65,7 +65,7 @@ const plans: Plan[] = [
 
 export default function PricingPage() {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-black text-white">
+    <main id="main-content" className="relative min-h-screen overflow-hidden bg-black text-white">
       <div className="relative z-10">
         <SiteHeader />
 

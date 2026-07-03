@@ -4,11 +4,13 @@ import { getServerSession } from "next-auth/next";
 import { ProjectInviteJoinClient } from "@/components/ui/project-invite-join-client";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/next-auth-options";
+import { invitePageSeo, type PageSeoProps } from "@/lib/seo/page-seo";
 
 type InvitePageProps = {
   token: string;
   projectName: string;
   projectSlug: string;
+  seo: PageSeoProps;
 };
 
 export default function ProjectInvitePage(props: InvitePageProps) {
@@ -59,6 +61,7 @@ export const getServerSideProps: GetServerSideProps<InvitePageProps> = async (ct
       token,
       projectName: full.name,
       projectSlug: full.slug,
+      seo: invitePageSeo(token, full.name),
     },
   };
 };

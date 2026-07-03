@@ -11,11 +11,13 @@ import {
 import { whereProjectBySlugForUser } from "@/lib/project-access";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/next-auth-options";
+import { projectWorkspaceSeo, type PageSeoProps } from "@/lib/seo/page-seo";
 
 type ProjectWorkspacePageProps = {
   projectId: string;
   initialEnvironmentStatus: SynaroProjectEnvironmentStatus;
   viewerIsOwner: boolean;
+  seo: PageSeoProps;
 };
 
 export default function ProjectWorkspacePage({
@@ -60,7 +62,15 @@ export const getServerSideProps: GetServerSideProps<ProjectWorkspacePageProps> =
 
   const project = await prisma.project.findFirst({
     where: whereProjectBySlugForUser(slug, session.user.id),
-    select: { id: true, environmentStatus: true, userId: true, cloneRepositoryUrl: true },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      slug: true,
+      environmentStatus: true,
+      userId: true,
+      cloneRepositoryUrl: true,
+    },
   });
   if (!project) {
     return { notFound: true };
@@ -76,6 +86,7 @@ export const getServerSideProps: GetServerSideProps<ProjectWorkspacePageProps> =
       projectId: project.id,
       initialEnvironmentStatus: environmentStatus,
       viewerIsOwner: project.userId === session.user.id,
+      seo: projectWorkspaceSeo(project.slug, project.name, project.description),
     },
   };
 };

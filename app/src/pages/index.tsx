@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/synaro-landing-sections";
 import { LANDING_SCREENSHOTS } from "@/lib/landing-screenshots";
 import { redirectIfAuthed } from "@/lib/auth-redirect";
+import { homePageSeo, type PageSeoProps } from "@/lib/seo/page-seo";
 
 function ProductScreenshotSection() {
   return (
@@ -119,5 +120,5 @@ export default function Home() {
   );
 }
 
-export const getServerSideProps: GetServerSideProps = async (ctx) =>
-  redirectIfAuthed(ctx, "/dashboard");
+export const getServerSideProps: GetServerSideProps<{ seo: PageSeoProps }> = async (ctx) =>
+  redirectIfAuthed(ctx, "/dashboard", { seo: homePageSeo() });

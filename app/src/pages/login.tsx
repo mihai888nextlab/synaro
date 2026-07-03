@@ -10,6 +10,7 @@ import { useTranslation } from "@/components/ui/locale-provider";
 import { oauthErrorMessage } from "@/lib/auth-oauth-errors";
 import { setLastLoginMethod } from "@/lib/last-login-storage";
 import { redirectIfAuthed } from "@/lib/auth-redirect";
+import { loginPageSeo, type PageSeoProps } from "@/lib/seo/page-seo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -95,5 +96,5 @@ export default function LoginPage() {
   );
 }
 
-export const getServerSideProps: GetServerSideProps = async (ctx) =>
-  redirectIfAuthed(ctx, "/dashboard");
+export const getServerSideProps: GetServerSideProps<{ seo: PageSeoProps }> = async (ctx) =>
+  redirectIfAuthed(ctx, "/dashboard", { seo: loginPageSeo() });

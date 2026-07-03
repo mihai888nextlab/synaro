@@ -49,29 +49,6 @@ const dropdowns: DropdownData[] = [
     ],
   },
   {
-    key: "resources",
-    label: "Resources",
-    links: [
-      { title: "Documentation", icon: Cloud, href: "/documentation" },
-      { title: "Guides", icon: ShieldCheck },
-      { title: "Status", icon: Waypoints },
-      { title: "Changelog", icon: Cloud },
-      { title: "Community", icon: Waypoints },
-    ],
-    cards: [
-      {
-        title: "API overview",
-        image:
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=600&q=80",
-      },
-      {
-        title: "Playground",
-        image:
-          "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=600&q=80",
-      },
-    ],
-  },
-  {
     key: "company",
     label: "Company",
     links: [

@@ -5,6 +5,7 @@ import type { GetServerSideProps } from "next";
 import { MinimalFooter } from "@/components/ui/minimal-footer";
 import { SiteHeader } from "@/components/ui/site-header";
 import { redirectIfAuthed } from "@/lib/auth-redirect";
+import { pricingPageSeo, type PageSeoProps } from "@/lib/seo/page-seo";
 
 type Plan = {
   name: string;
@@ -161,5 +162,5 @@ export default function PricingPage() {
   );
 }
 
-export const getServerSideProps: GetServerSideProps = async (ctx) =>
-  redirectIfAuthed(ctx, "/dashboard");
+export const getServerSideProps: GetServerSideProps<{ seo: PageSeoProps }> = async (ctx) =>
+  redirectIfAuthed(ctx, "/dashboard", { seo: pricingPageSeo() });

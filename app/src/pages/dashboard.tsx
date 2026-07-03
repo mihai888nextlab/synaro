@@ -13,6 +13,7 @@ import { authOptions } from "@/lib/next-auth-options";
 import { prisma } from "@/lib/prisma";
 import { getUserAgentCards } from "@/lib/user-agents";
 import { getDashboardProjectPayload } from "@/lib/user-project-cards";
+import { dashboardPageSeo, type PageSeoProps } from "@/lib/seo/page-seo";
 
 type DashboardPageProps = {
   initialLayout: DashboardLayout;
@@ -22,6 +23,7 @@ type DashboardPageProps = {
   kpiItems: DashboardKpiItem[];
   activityLogs: DashboardLogRow[];
   apiKeysCount: number;
+  seo: PageSeoProps;
 };
 
 export default function DashboardPage(props: DashboardPageProps) {
@@ -53,6 +55,7 @@ export const getServerSideProps: GetServerSideProps<DashboardPageProps> = async 
       kpiItems,
       activityLogs,
       apiKeysCount,
+      seo: dashboardPageSeo(),
     },
   };
 };

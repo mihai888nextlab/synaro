@@ -3,9 +3,10 @@ import { getServerSession } from "next-auth/next";
 
 import { authOptions } from "@/lib/next-auth-options";
 
-export async function requireAuth(
+export async function requireAuth<P extends Record<string, unknown> = Record<string, never>>(
   ctx: GetServerSidePropsContext,
-): Promise<GetServerSidePropsResult<Record<string, never>>> {
+  props?: P,
+): Promise<GetServerSidePropsResult<P>> {
   const session = await getServerSession(ctx.req, ctx.res, authOptions);
   if (!session) {
     return {
@@ -16,13 +17,14 @@ export async function requireAuth(
     };
   }
 
-  return { props: {} };
+  return { props: (props ?? {}) as P };
 }
 
-export async function redirectIfAuthed(
+export async function redirectIfAuthed<P extends Record<string, unknown> = Record<string, never>>(
   ctx: GetServerSidePropsContext,
   destination = "/dashboard",
-): Promise<GetServerSidePropsResult<Record<string, never>>> {
+  props?: P,
+): Promise<GetServerSidePropsResult<P>> {
   const session = await getServerSession(ctx.req, ctx.res, authOptions);
   if (session) {
     return {
@@ -33,6 +35,6 @@ export async function redirectIfAuthed(
     };
   }
 
-  return { props: {} };
+  return { props: (props ?? {}) as P };
 }
 

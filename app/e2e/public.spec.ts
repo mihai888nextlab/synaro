@@ -17,4 +17,28 @@ test.describe("Public pages", () => {
     await page.goto("/pricing");
     await expect(page.getByRole("heading", { name: "Flexible pricing for every stage." })).toBeVisible();
   });
+
+  test("landing page exposes Open Graph meta tags", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator('meta[property="og:title"]')).toHaveAttribute(
+      "content",
+      /Build and run software/i,
+    );
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
+      "content",
+      /synaro\.tech\/api\/og\?type=site/,
+    );
+    await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute(
+      "content",
+      "summary_large_image",
+    );
+  });
+
+  test("documentation page exposes doc-specific OG image", async ({ page }) => {
+    await page.goto("/documentation");
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
+      "content",
+      /type=doc/,
+    );
+  });
 });

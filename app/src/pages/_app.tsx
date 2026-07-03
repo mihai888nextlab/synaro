@@ -8,6 +8,7 @@ import type { Session } from "next-auth";
 import { DashboardLayout } from "@/components/ui/dashboard-layout";
 import { GlobalSearch } from "@/components/ui/global-search";
 import { LocaleProvider } from "@/components/ui/locale-provider";
+import { SynaroPageHead } from "@/components/seo/synaro-page-head";
 import { SkipLink } from "@/components/ui/skip-link";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import { AiBackgroundTaskProvider } from "@/components/ui/ai-background-task";
@@ -15,8 +16,16 @@ import { NotificationsProvider } from "@/components/ui/notifications";
 import { OnboardingProvider } from "@/components/ui/onboarding";
 import { type Locale } from "@/i18n/config";
 import { resolveInitialLocale } from "@/i18n/locale-cookie";
+import { routeHeadProps } from "@/lib/seo/route-head";
+import { mergePageSeo, type PageSeoProps } from "@/lib/seo/page-seo";
 
-type AppPropsWithSession = AppProps<{ session?: Session; initialLocale?: Locale }>;
+type AppPageProps = {
+  session?: Session;
+  initialLocale?: Locale;
+  seo?: Partial<PageSeoProps>;
+};
+
+type AppPropsWithSession = AppProps<AppPageProps>;
 
 function SynaroApp({ Component, pageProps }: AppPropsWithSession) {
   const router = useRouter();
@@ -37,8 +46,14 @@ function SynaroApp({ Component, pageProps }: AppPropsWithSession) {
     <Component {...pageProps} />
   );
 
+  const headProps = mergePageSeo(
+    routeHeadProps(router.pathname, router.query, router.asPath),
+    pageProps.seo,
+  );
+
   return (
     <div className="min-h-dvh bg-background antialiased">
+      <SynaroPageHead {...headProps} />
       <ThemeProvider>
         <SessionProvider basePath="/api/auth" session={pageProps.session}>
           <LocaleProvider initialLocale={pageProps.initialLocale}>

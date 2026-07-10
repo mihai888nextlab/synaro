@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import bcrypt from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
+import { trialEndDate } from "@/lib/billing/entitlements";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).end();
@@ -32,6 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       email: cleanEmail,
       name: fullName.trim(),
       passwordHash: hashedPassword,
+      trialEndsAt: trialEndDate(),
     },
     select: { id: true, email: true, name: true },
   });

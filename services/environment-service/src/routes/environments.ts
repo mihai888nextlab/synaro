@@ -44,6 +44,9 @@ const createSchema = z.object({
     .preprocess((v) => (v === '' || v === null || v === undefined ? undefined : v), z.string().min(1).optional()),
   projectSlug: z
     .preprocess((v) => (v === '' || v === null || v === undefined ? undefined : v), z.string().min(1).max(80).optional()),
+  // Per-tier container compute (set by the trusted frontend from the user's plan).
+  memoryMb: z.number().int().positive().optional(),
+  nanoCpus: z.number().int().positive().optional(),
 })
 
 /** Attach the computed public URL to an environment row before sending to clients. */
@@ -276,6 +279,8 @@ export const environmentRoutes: FastifyPluginAsync = async (app) => {
         gitRemoteUrl: result.data.gitRemoteUrl,
         gitAccessToken: result.data.gitAccessToken,
         projectSlug: result.data.projectSlug,
+        memoryMb: result.data.memoryMb,
+        nanoCpus: result.data.nanoCpus,
       })
       return reply.status(201).send(withPublicUrl(environment))
     } catch (err) {

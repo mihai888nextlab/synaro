@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs";
 
 import { isLocale, type Locale } from "@/i18n/config";
 import { prisma } from "@/lib/prisma";
+import { trialEndDate } from "@/lib/billing/entitlements";
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim();
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
@@ -184,6 +185,23 @@ export const authOptions: NextAuthOptions = {
         session.user.name = token.name;
       }
       return session;
+    },
+  },
+  events: {
+    /**
+     * The PrismaAdapter creates OAuth users without hitting our signup route, so
+     * grant the free trial here on first sign-in. Credentials signups set it in
+     * `api/auth/signup`. Guarded so a re-created row never resets an existing trial.
+     */
+    async createUser({ user }) {
+      try {
+        await prisma.user.updateMany({
+          where: { id: user.id, trialEndsAt: null },
+          data: { trialEndsAt: trialEndDate() },
+        });
+      } catch (err) {
+        console.error("[next-auth] failed to set trialEndsAt on createUser:", err);
+      }
     },
   },
 };

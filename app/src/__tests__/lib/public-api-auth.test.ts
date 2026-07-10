@@ -15,6 +15,11 @@ jest.mock("@/lib/prisma", () => ({
   },
 }));
 
+// Pin the effective per-tier rate limit so the env-driven assertions below hold.
+jest.mock("@/lib/billing/get-user-entitlements", () => ({
+  getEffectiveApiRateLimit: jest.fn().mockResolvedValue(2),
+}));
+
 function mockReq(auth?: string): NextApiRequest {
   return {
     headers: auth ? { authorization: auth } : {},

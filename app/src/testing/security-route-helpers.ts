@@ -16,6 +16,13 @@ export function mockSession(userId: string) {
   getServerSessionMock.mockResolvedValue({
     user: { id: userId, name: "Test", email: `${userId}@test.local` },
   } as never);
+  // Default the session user to an active free trial so billing guards don't gate
+  // routes under test. Individual tests can override prisma.user.findUnique.
+  const farFuture = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+  jest.mocked(prisma.user.findUnique).mockResolvedValue({
+    trialEndsAt: farFuture,
+    subscription: null,
+  } as never);
 }
 
 export function mockUnauthenticated() {

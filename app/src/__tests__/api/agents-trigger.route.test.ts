@@ -4,6 +4,15 @@ import { describe, expect, it } from "@jest/globals";
 import { createMocks } from "node-mocks-http";
 import type { NextApiRequest, NextApiResponse } from "next";
 
+// Billing enforcement is exercised in the billing unit tests; here it is transparent.
+jest.mock("@/lib/billing/get-user-entitlements", () => ({
+  getUserEntitlements: jest.fn().mockResolvedValue({ gated: false }),
+}));
+jest.mock("@/lib/billing/usage", () => ({
+  reserveAgentRun: jest.fn().mockResolvedValue({ ok: true }),
+  releaseAgentRun: jest.fn().mockResolvedValue(undefined),
+}));
+
 import handler from "@/pages/api/agents/[agentId]/trigger";
 import {
   getServerSessionMock,

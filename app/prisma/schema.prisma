@@ -27,6 +27,69 @@ model User {
   dashboardLayout      Json?
   dashboardLayoutVersion Int @default(1)
   preferredLocale      String @default("en")
+
+  // Billing / subscription
+  stripeCustomerId String?        @unique // set lazily on first checkout
+  trialEndsAt      DateTime?              // createdAt + 14d; set at signup / first OAuth login
+  subscription     Subscription?
+  usageCounters    UsageCounter[]
+}
+
+enum PlanTier {
+  FREE
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  UNPAID
+  PAUSED
+}
+
+/// 1:1 mirror of the user's Stripe subscription. Source of truth = Stripe; synced via webhook.
+model Subscription {
+  id                   String             @id @default(uuid())
+  userId               String             @unique
+  tier                 PlanTier
+  status               SubscriptionStatus
+  stripeSubscriptionId String             @unique
+  stripePriceId        String
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([stripeSubscriptionId])
+}
+
+/// Monthly usage buckets. period = "YYYY-MM" (UTC) => a new month is a new row => implicit reset, no cron.
+model UsageCounter {
+  id        String   @id @default(uuid())
+  userId    String
+  period    String // "YYYY-MM" UTC
+  metric    String // "agent_runs" (extensible)
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, period, metric])
+  @@index([userId, period])
+}
+
+/// Webhook idempotency — Stripe delivers out-of-order and re-delivers. Short-circuit seen event ids.
+model ProcessedStripeEvent {
+  id        String   @id // Stripe event id (evt_...)
+  createdAt DateTime @default(now())
 }
 
 /// Per-user API keys for `/api/v1` (Bearer auth). Only `keyHash` is stored.

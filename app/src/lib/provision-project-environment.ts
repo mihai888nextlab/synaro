@@ -34,14 +34,23 @@ export type EnvServiceRow = {
 export async function provisionProjectEnvironment(
   projectId: string,
   image: string,
-  opts?: { gitRemoteUrl?: string | null; gitAccessToken?: string | null },
+  opts?: {
+    gitRemoteUrl?: string | null;
+    gitAccessToken?: string | null;
+    /** Per-tier container memory in MB (env-service falls back to its default if absent). */
+    memoryMb?: number;
+    /** Per-tier container CPU in nano-CPUs (1e9 = 1 CPU). */
+    nanoCpus?: number;
+  },
 ): Promise<EnvServiceRow> {
   const base = environmentServiceBaseUrl();
-  const body: Record<string, string> = { projectId, image };
+  const body: Record<string, string | number> = { projectId, image };
   if (opts?.gitRemoteUrl) {
     body.gitRemoteUrl = opts.gitRemoteUrl;
     if (opts.gitAccessToken) body.gitAccessToken = opts.gitAccessToken;
   }
+  if (typeof opts?.memoryMb === "number") body.memoryMb = opts.memoryMb;
+  if (typeof opts?.nanoCpus === "number") body.nanoCpus = opts.nanoCpus;
   let res: Response;
   try {
     res = await fetch(`${base}/api/environments`, {

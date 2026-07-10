@@ -17,6 +17,7 @@ import {
 import { resolveProjectDockerImage } from "@/lib/project-docker-images";
 import { authOptions } from "@/lib/next-auth-options";
 import { getUserProjectCardsWithRows } from "@/lib/user-project-cards";
+import { assertCanCreateProject, respondLimitExceeded } from "@/lib/billing/guards";
 
 /** Base URL the browser uses to reach published container ports (host machine). */
 function previewHostBase(): string {
@@ -82,6 +83,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return;
       }
 
+      // Plan gating: trial expiry, project count, and concurrent-environment caps.
+      const guard = await assertCanCreateProject(userId);
+      if (!guard.ok) {
+        respondLimitExceeded(res, { metric: guard.metric, limit: guard.limit });
+        return;
+      }
+      const { containerMemoryMb, containerNanoCpus } = guard.entitlements.entitlements;
+
       const slug = await allocateUniqueProjectSlug(prisma, name);
       const image = resolveProjectDockerImage(dockerRaw);
 
@@ -101,6 +110,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const env = await provisionProjectEnvironment(project.id, image, {
           gitRemoteUrl: cloneRepositoryUrl,
           gitAccessToken: gitAccessToken ?? undefined,
+          memoryMb: containerMemoryMb,
+          nanoCpus: containerNanoCpus,
         });
         const nextStatus = parseEnvStatus(env.status);
         const base = previewHostBase();

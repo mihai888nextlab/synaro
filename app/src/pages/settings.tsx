@@ -10,7 +10,6 @@ export default function SettingsPage() {
   const placeholders = [
     { key: "settings.workspace", name: "workspace" },
     { key: "settings.security", name: "security" },
-    { key: "settings.billing", name: "billing" },
     { key: "settings.integrations", name: "integrations" },
   ] as const;
 
@@ -38,6 +37,12 @@ export default function SettingsPage() {
             className="inline-flex items-center rounded-full border border-border/70 bg-card/70 px-4 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
           >
             {t("nav.apiKeys")}
+          </Link>
+          <Link
+            href="/settings/billing"
+            className="inline-flex items-center rounded-full border border-border/70 bg-card/70 px-4 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          >
+            {t("settings.billing")}
           </Link>
         </div>
 

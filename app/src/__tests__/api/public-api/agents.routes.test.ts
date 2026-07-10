@@ -12,6 +12,15 @@ jest.mock("@/lib/public-api/agent-proxy", () => ({
   proxyAgentService: jest.fn(),
 }));
 
+// Billing enforcement is exercised in the billing unit tests; here it is transparent.
+jest.mock("@/lib/billing/get-user-entitlements", () => ({
+  getUserEntitlements: jest.fn().mockResolvedValue({ gated: false }),
+}));
+jest.mock("@/lib/billing/usage", () => ({
+  reserveAgentRun: jest.fn().mockResolvedValue({ ok: true }),
+  releaseAgentRun: jest.fn().mockResolvedValue(undefined),
+}));
+
 import agentsIndexHandler from "@/pages/api/v1/agents/index";
 import agentByIdHandler from "@/pages/api/v1/agents/[agentId]/index";
 import agentTriggerHandler from "@/pages/api/v1/agents/[agentId]/trigger";

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { MarkdownLite } from "@/components/ui/markdown-lite";
 import { cn } from "@/lib/utils";
+import { parseLimitResponse } from "@/lib/billing/handle-limit-response";
 import { useTranslation } from "@/components/ui/locale-provider";
 import { invalidateSearchIndex, prefetchSearchIndex } from "@/hooks/use-search-index";
 import {
@@ -366,11 +367,16 @@ export function AgentsPageClient() {
     setTriggering(triggerTarget.id);
     setTriggerOpen(false);
     try {
-      await fetch(`/api/agents/${triggerTarget.id}/trigger`, {
+      const res = await fetch(`/api/agents/${triggerTarget.id}/trigger`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ input: form.input || undefined }),
       });
+      const limit = await parseLimitResponse(res);
+      if (limit) {
+        window.alert(`${limit.message} Upgrade in Settings → Billing to continue.`);
+        return;
+      }
       if (runsAgent?.id === triggerTarget.id) await fetchRuns(triggerTarget.id);
     } finally {
       setTriggering(null);

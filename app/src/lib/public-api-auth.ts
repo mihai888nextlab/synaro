@@ -5,7 +5,9 @@ import {
   applyRateLimitHeaders,
   applyRetryAfterHeader,
   checkPublicApiRateLimit,
+  explicitConfiguredLimit,
 } from "@/lib/public-api/rate-limit";
+import { getEffectiveApiRateLimit } from "@/lib/billing/get-user-entitlements";
 import { prisma } from "@/lib/prisma";
 
 export type PublicApiAuth = {
@@ -50,7 +52,10 @@ export async function requirePublicApiAuth(
     return null;
   }
 
-  const rate = checkPublicApiRateLimit(auth.apiKeyId);
+  const tierLimit = await getEffectiveApiRateLimit(auth.userId);
+  const envCap = explicitConfiguredLimit();
+  const effectiveLimit = envCap != null ? Math.min(envCap, tierLimit) : tierLimit;
+  const rate = checkPublicApiRateLimit(auth.apiKeyId, Date.now(), effectiveLimit);
   if (!rate.allowed) {
     applyRateLimitHeaders(res, rate);
     applyRetryAfterHeader(res, rate);

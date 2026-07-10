@@ -31,6 +31,7 @@ import { defaultFolderImportName } from "@/lib/import-folder-paths";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/components/ui/locale-provider";
 import { invalidateSearchIndex, prefetchSearchIndex } from "@/hooks/use-search-index";
+import { parseLimitResponse } from "@/lib/billing/handle-limit-response";
 
 type GithubRepoRow = {
   id: number;
@@ -328,6 +329,11 @@ export function ProjectsPageClient({
       }
 
       if (!res.ok) {
+        const limit = await parseLimitResponse(res);
+        if (limit) {
+          setSubmitError(`${limit.message} Upgrade in Settings → Billing to continue.`);
+          return;
+        }
         const parts = [data.error, data.detail, data.hint].filter(
           (s): s is string => typeof s === "string" && s.length > 0,
         );
@@ -407,6 +413,11 @@ export function ProjectsPageClient({
       }
 
       if (!res.ok) {
+        const limit = await parseLimitResponse(res);
+        if (limit) {
+          setSubmitError(`${limit.message} Upgrade in Settings → Billing to continue.`);
+          return;
+        }
         const parts = [data.error, data.detail, data.hint].filter(
           (s): s is string => typeof s === "string" && s.length > 0,
         );

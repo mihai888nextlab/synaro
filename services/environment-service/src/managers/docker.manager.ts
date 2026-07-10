@@ -177,6 +177,10 @@ export type CreateEnvironmentOptions = {
   gitAccessToken?: string | null
   /** Project slug used to build the Traefik subdomain (e.g. "my-express-app"). */
   projectSlug?: string | null
+  /** Per-tier container memory in MB (defaults to 512 when absent). */
+  memoryMb?: number
+  /** Per-tier container CPU in nano-CPUs, 1e9 = 1 CPU (defaults to 0.5 CPU when absent). */
+  nanoCpus?: number
 }
 
 export async function createEnvironment(
@@ -263,8 +267,8 @@ export async function createEnvironment(
     }
 
     const hostConfig: Record<string, unknown> = {
-      Memory: 512 * 1024 * 1024, // 512 MB
-      NanoCpus: 500_000_000, // 0.5 CPU
+      Memory: (options?.memoryMb ?? 512) * 1024 * 1024, // per-tier, default 512 MB
+      NanoCpus: options?.nanoCpus ?? 500_000_000, // per-tier, default 0.5 CPU
       // In Traefik mode put the container on the shared proxy network so Traefik can reach it.
       // In local-dev mode use the default bridge with an explicit port binding.
       NetworkMode: useTraefik ? TRAEFIK_NETWORK : 'bridge',

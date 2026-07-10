@@ -20,6 +20,18 @@ function readLimit(): number {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 120;
 }
 
+/**
+ * An explicitly-configured `SYNARO_API_RATE_LIMIT`, or null if unset/invalid.
+ * When set it acts as a global cap across all tiers (ops safety valve); when
+ * unset the per-tier limit applies unchanged.
+ */
+export function explicitConfiguredLimit(): number | null {
+  const raw = process.env.SYNARO_API_RATE_LIMIT?.trim();
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+}
+
 function readWindowMs(): number {
   const raw = process.env.SYNARO_API_RATE_WINDOW_SEC?.trim();
   const sec = raw ? Number(raw) : 60;
@@ -27,9 +39,19 @@ function readWindowMs(): number {
   return Math.min(Math.max(ms, 1_000), 3_600_000);
 }
 
-/** Fixed-window counter per API key id. */
-export function checkPublicApiRateLimit(apiKeyId: string, now = Date.now()): RateLimitResult {
-  const limit = readLimit();
+/**
+ * Fixed-window counter per API key id. `limitOverride` (e.g. the caller's per-tier
+ * requests/min) takes precedence over the env-configured default.
+ */
+export function checkPublicApiRateLimit(
+  apiKeyId: string,
+  now = Date.now(),
+  limitOverride?: number,
+): RateLimitResult {
+  const limit =
+    typeof limitOverride === "number" && Number.isFinite(limitOverride) && limitOverride > 0
+      ? Math.floor(limitOverride)
+      : readLimit();
   const windowMs = readWindowMs();
   const bucketKey = `key:${apiKeyId}`;
 

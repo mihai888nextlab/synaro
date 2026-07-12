@@ -4,10 +4,9 @@ import helmet from '@fastify/helmet'
 import { executionRoutes } from './routes/executions.js'
 import { healthRoutes } from './routes/health.js'
 import { prisma } from './lib/prisma.js'
+import { logger } from './lib/logger.js'
 
-const app = Fastify({
-  logger: { level: process.env.LOG_LEVEL ?? 'info' },
-})
+const app = Fastify({ logger })
 
 await app.register(helmet)
 await app.register(cors, {

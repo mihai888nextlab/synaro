@@ -2,28 +2,38 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
 import {
-  createExecution,
-  stopExecution,
-  destroyExecution,
-  getExecutionLogs,
-} from '../managers/execution.manager.js'
+  createProjectDeployment,
+  destroyProjectDeployment,
+  getProjectLogs,
+  startProjectDeployment,
+  stopProjectDeployment,
+} from '../managers/k8s.manager.js'
 
 const createSchema = z.object({
-  projectId: z.string(),
-  port: z.number().int().min(1024).max(65535),
+  projectId: z.string().min(1),
 })
 
 export const executionRoutes: FastifyPluginAsync = async (app) => {
-  // POST /api/executions
+  // POST /api/executions — create a K8s Deployment + Service + Ingress for a project
   app.post('/', async (req, reply) => {
     const result = createSchema.safeParse(req.body)
     if (!result.success) return reply.status(400).send({ error: result.error.flatten() })
 
+    const { projectId } = result.data
+    const execution = await prisma.execution.create({
+      data: { projectId, status: 'STARTING' },
+    })
+
     try {
-      const execution = await createExecution(result.data.projectId, result.data.port)
-      return reply.status(201).send(execution)
+      const { subdomain } = await createProjectDeployment(projectId)
+      const updated = await prisma.execution.update({
+        where: { id: execution.id },
+        data: { status: 'RUNNING', subdomain, containerId: null, startedAt: new Date() },
+      })
+      return reply.status(201).send(updated)
     } catch (err) {
       app.log.error(err)
+      await prisma.execution.update({ where: { id: execution.id }, data: { status: 'ERROR' } })
       return reply.status(500).send({ error: 'Failed to create execution', detail: String(err) })
     }
   })
@@ -46,23 +56,51 @@ export const executionRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(execution)
   })
 
-  // POST /api/executions/:id/stop
+  // POST /api/executions/:id/stop — scale the deployment to 0
   app.post('/:id/stop', async (req, reply) => {
     const { id } = req.params as { id: string }
+    const execution = await prisma.execution.findUnique({ where: { id } })
+    if (!execution) return reply.status(404).send({ error: 'Execution not found' })
+
     try {
-      const execution = await stopExecution(id)
-      return reply.send(execution)
+      await stopProjectDeployment(execution.projectId)
+      const updated = await prisma.execution.update({
+        where: { id },
+        data: { status: 'STOPPED', stoppedAt: new Date() },
+      })
+      return reply.send(updated)
     } catch (err) {
       return reply.status(500).send({ error: 'Failed to stop execution', detail: String(err) })
+    }
+  })
+
+  // POST /api/executions/:id/start — scale the deployment back to 1
+  app.post('/:id/start', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const execution = await prisma.execution.findUnique({ where: { id } })
+    if (!execution) return reply.status(404).send({ error: 'Execution not found' })
+
+    try {
+      await startProjectDeployment(execution.projectId)
+      const updated = await prisma.execution.update({
+        where: { id },
+        data: { status: 'RUNNING', startedAt: new Date() },
+      })
+      return reply.send(updated)
+    } catch (err) {
+      return reply.status(500).send({ error: 'Failed to start execution', detail: String(err) })
     }
   })
 
   // GET /api/executions/:id/logs
   app.get('/:id/logs', async (req, reply) => {
     const { id } = req.params as { id: string }
+    const execution = await prisma.execution.findUnique({ where: { id } })
+    if (!execution) return reply.status(404).send({ error: 'Execution not found' })
+
     try {
-      const result = await getExecutionLogs(id)
-      return reply.send(result)
+      const logs = await getProjectLogs(execution.projectId)
+      return reply.send({ logs })
     } catch (err) {
       return reply.status(500).send({ error: 'Failed to get logs', detail: String(err) })
     }
@@ -71,8 +109,12 @@ export const executionRoutes: FastifyPluginAsync = async (app) => {
   // DELETE /api/executions/:id
   app.delete('/:id', async (req, reply) => {
     const { id } = req.params as { id: string }
+    const execution = await prisma.execution.findUnique({ where: { id } })
+    if (!execution) return reply.status(404).send({ error: 'Execution not found' })
+
     try {
-      await destroyExecution(id)
+      await destroyProjectDeployment(execution.projectId)
+      await prisma.execution.delete({ where: { id } })
       return reply.status(204).send()
     } catch (err) {
       return reply.status(500).send({ error: 'Failed to delete execution', detail: String(err) })

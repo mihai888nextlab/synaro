@@ -144,19 +144,24 @@ services:
     container_name: synaro-execution-manager
     restart: unless-stopped
     ports:
-      - '3005:3004'
+      - '3004:3004'
     environment:
       DATABASE_URL: postgresql://synaro_user:synaro_local_password@postgresql:5432/synaro
       NODE_ENV: development
       PORT: 3004
       LOG_LEVEL: info
       PROJECTS_PATH: /projects
-      PROJECTS_VOLUME_PATH: /var/lib/docker/volumes/synaro_projects_data/_data
+      K8S_NAMESPACE: synaro-projects
+      SYNARO_DOMAIN: synaro.ro
+      # Local Docker dev can't reach a K3s API server, so default to mock mode.
+      # Set to 'false' (and provide a reachable kubeconfig) to talk to a real cluster.
+      USE_MOCK_K8S: 'true'
     volumes:
       - ./services/execution-manager/src:/app/src
       - ./services/execution-manager/prisma:/app/prisma
-      - /var/run/docker.sock:/var/run/docker.sock
       - projects_data:/projects
+      # Kubeconfig for non-mock local dev (loadFromDefault reads /root/.kube/config).
+      - ${HOME}/.kube/config:/root/.kube/config:ro
     depends_on:
       postgresql:
         condition: service_healthy

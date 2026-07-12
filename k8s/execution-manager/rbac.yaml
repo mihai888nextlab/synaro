@@ -1,0 +1,39 @@
+# Role in the synaro-projects namespace granting execution-manager the rights to
+# manage per-project Deployments/Services/Ingress and read pods + logs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: execution-manager
+  namespace: synaro-projects
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    verbs: ["create", "get", "list", "watch", "patch", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["create", "get", "list", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["create", "get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+
+---
+# Bind that Role to the execution-manager ServiceAccount (which lives in `synaro`).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: execution-manager
+  namespace: synaro-projects
+subjects:
+  - kind: ServiceAccount
+    name: execution-manager
+    namespace: synaro
+roleRef:
+  kind: Role
+  name: execution-manager
+  apiGroup: rbac.authorization.k8s.io

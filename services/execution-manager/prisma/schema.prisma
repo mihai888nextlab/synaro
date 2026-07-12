@@ -10,9 +10,9 @@ datasource db {
 model Execution {
   id          String          @id @default(uuid())
   projectId   String
-  containerId String?
+  containerId String?         // retained, always null under Kubernetes
   status      ExecutionStatus @default(STOPPED)
-  port        Int?
+  subdomain   String?         // {projectId}.{SYNARO_DOMAIN} once the Ingress is created
   startedAt   DateTime?
   stoppedAt   DateTime?
   createdAt   DateTime        @default(now())

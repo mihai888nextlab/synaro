@@ -10,6 +10,10 @@ import { DashboardSidebar, usePersistentSidebarCollapse } from "@/components/ui/
 import { DashboardNotifications } from "@/components/ui/dashboard-notifications";
 import { AiBackgroundTaskPill } from "@/components/ui/ai-background-task";
 import {
+  AgentActiveRunsPill,
+  AgentSpeechStopButton,
+} from "@/components/ui/agent-background-runs";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -66,6 +70,14 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
     if (path === "/agents") {
       return [{ label: t("workspace.home"), href: "/dashboard" }, { label: t("nav.agents") }];
+    }
+
+    if (path === "/agents/[agentId]/runs/[runId]") {
+      return [
+        { label: t("workspace.home"), href: "/dashboard" },
+        { label: t("nav.agents"), href: "/agents" },
+        { label: t("agents.runDetailTitle") },
+      ];
     }
 
     if (path === "/logs") {
@@ -210,6 +222,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
             <div className="flex items-center gap-2" data-onboarding="header-actions">
               <AiBackgroundTaskPill className="hidden md:inline-flex" />
+              <AgentSpeechStopButton className="hidden md:inline-flex" />
+              <AgentActiveRunsPill className="hidden md:inline-flex" />
               <DashboardNotifications />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

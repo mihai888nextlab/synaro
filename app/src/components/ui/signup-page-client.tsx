@@ -2,21 +2,20 @@
 
 import type { FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/router";
 import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
-import { signIn } from "next-auth/react";
 
+import { AuthEmailStatusPage } from "@/components/ui/auth/auth-email-status-page";
 import { SignInPage } from "@/components/ui/sign-in";
 import { useTranslation } from "@/components/ui/locale-provider";
-import { setLastLoginMethod } from "@/lib/last-login-storage";
-import { setOnboardingPending } from "@/lib/onboarding-storage";
 
 export function SignupPageClient() {
-  const router = useRouter();
   const { t } = useTranslation();
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [signedUpEmail, setSignedUpEmail] = useState<string | null>(null);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendError, setResendError] = useState<string | null>(null);
 
   const handleSignUp = async (event: FormEvent<HTMLFormElement>) => {
     setFormError(null);
@@ -36,11 +35,11 @@ export function SignupPageClient() {
         body: JSON.stringify(payload),
       });
 
-      let body: { error?: string } = {};
+      let body: { error?: string; email?: string } = {};
       const raw = await res.text();
       if (raw) {
         try {
-          body = JSON.parse(raw) as { error?: string };
+          body = JSON.parse(raw) as { error?: string; email?: string };
         } catch {
           body = {};
         }
@@ -51,41 +50,46 @@ export function SignupPageClient() {
         return;
       }
 
-      setOnboardingPending();
-
-      const callbackUrl =
-        typeof window !== "undefined" ? `${window.location.origin}/dashboard` : "/dashboard";
-
-      const auth = await signIn("credentials", {
-        email: payload.email,
-        password: payload.password,
-        callbackUrl,
-        redirect: false,
-      });
-
-      if (auth?.error) {
-        setFormError(
-          auth.error === "CredentialsSignin"
-            ? t("auth.accountCreatedSignInFailed")
-            : t("auth.signInFailed", { error: auth.error }),
-        );
-        return;
-      }
-
-      setLastLoginMethod("email");
-
-      if (auth?.url) {
-        await router.push(auth.url);
-        return;
-      }
-
-      await router.push("/dashboard");
+      setSignedUpEmail(body.email ?? payload.email);
     } catch {
       setFormError(t("auth.networkError"));
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const handleResend = async () => {
+    if (!signedUpEmail) return;
+    setResendError(null);
+    setResendLoading(true);
+    try {
+      const res = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: signedUpEmail }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setResendError(data.error ?? t("auth.unexpectedError"));
+      }
+    } catch {
+      setResendError(t("auth.networkError"));
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  if (signedUpEmail) {
+    return (
+      <AuthEmailStatusPage
+        variant="checkEmail"
+        email={signedUpEmail}
+        onResend={() => void handleResend()}
+        resendLoading={resendLoading}
+        resendError={resendError}
+      />
+    );
+  }
 
   return (
     <main id="main-content" className="relative min-h-screen overflow-hidden bg-black text-white">
@@ -112,7 +116,6 @@ export function SignupPageClient() {
           footerActionLabel={t("auth.signIn")}
           footerActionHref="/login"
           onSignIn={handleSignUp}
-          onResetPassword={() => {}}
           onCreateAccount={() => {}}
           formError={formError}
           isSubmitting={isSubmitting}

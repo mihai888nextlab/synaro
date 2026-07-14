@@ -1,6 +1,6 @@
 import type { GetServerSideProps } from "next";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/next-auth-options";
+
+import { requireSession } from "@/lib/auth/require-session";
 import { AgentsPageClient } from "@/components/ui/agents-page-client";
 import { agentsPageSeo, type PageSeoProps } from "@/lib/seo/page-seo";
 
@@ -11,10 +11,8 @@ export default function AgentsPage() {
 }
 
 export const getServerSideProps: GetServerSideProps<AgentsPageProps> = async (ctx) => {
-  const session = await getServerSession(ctx.req, ctx.res, authOptions);
-  if (!session?.user?.id) {
-    return { redirect: { destination: "/login", permanent: false } };
-  }
+  const auth = await requireSession(ctx);
+  if ("redirect" in auth) return auth;
 
   const highlight =
     typeof ctx.query.highlight === "string"

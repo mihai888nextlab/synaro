@@ -9,6 +9,7 @@ export function oauthErrorMessage(code: string, t: (key: string) => string): str
     SessionRequired: t("profile.sessionRequired"),
     AccessDenied: t("profile.accessDenied"),
     CredentialsSignin: t("auth.invalidCredentials"),
+    EMAIL_NOT_VERIFIED: t("auth.emailNotVerified"),
     Default: t("profile.oauthSignInFailed"),
   };
   return map[code] ?? map.Default;

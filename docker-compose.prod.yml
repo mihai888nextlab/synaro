@@ -20,6 +20,8 @@
 #   GOOGLE_CLIENT_SECRET
 #   GITHUB_CLIENT_ID
 #   GITHUB_CLIENT_SECRET
+#   RESEND_API_KEY
+#   RESEND_FROM              e.g. Synaro <noreply@synaro.tech>
 #   KIMI_API_KEY
 ##############################################################################
 
@@ -205,6 +207,8 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-Synaro <noreply@synaro.tech>}
       ENVIRONMENT_SERVICE_URL: http://environment-service:3002
       SYNARO_DOMAIN: ${SYNARO_DOMAIN}
       NODE_ENV: production

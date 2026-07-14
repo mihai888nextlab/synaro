@@ -1,10 +1,9 @@
 import type { GetServerSideProps } from "next";
-import { getServerSession } from "next-auth/next";
 
 import { DashboardLogsTable, type DashboardLogRow } from "@/components/ui/dashboard-logs-table";
 import { useTranslation } from "@/components/ui/locale-provider";
 import { getUserActivityLogs } from "@/lib/activity-log";
-import { authOptions } from "@/lib/next-auth-options";
+import { requireSession } from "@/lib/auth/require-session";
 
 type LogsPageProps = {
   logs: DashboardLogRow[];
@@ -27,12 +26,10 @@ export default function LogsPage({ logs }: LogsPageProps) {
 }
 
 export const getServerSideProps: GetServerSideProps<LogsPageProps> = async (ctx) => {
-  const session = await getServerSession(ctx.req, ctx.res, authOptions);
-  if (!session?.user?.id) {
-    return { redirect: { destination: "/login", permanent: false } };
-  }
+  const auth = await requireSession(ctx);
+  if ("redirect" in auth) return auth;
 
-  const logs = await getUserActivityLogs(session.user.id, {
+  const logs = await getUserActivityLogs(auth.userId, {
     limit: 200,
     timeFormat: "datetime",
   });

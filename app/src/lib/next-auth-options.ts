@@ -6,6 +6,7 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 
 import { isLocale, type Locale } from "@/i18n/config";
+import { sendVerificationEmail } from "@/lib/auth/send-verification-email";
 import { prisma } from "@/lib/prisma";
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim();
@@ -130,10 +131,29 @@ export const authOptions: NextAuthOptions = {
         const ok = await bcrypt.compare(password, user.passwordHash);
         if (!ok) return null;
 
+        if (!user.emailVerified) {
+          await sendVerificationEmail(user.email, user.name);
+          throw new Error("EMAIL_NOT_VERIFIED");
+        }
+
         return { id: user.id, email: user.email, name: user.name };
       },
     }),
   ],
+  events: {
+    async signIn({ user, account }) {
+      if (account?.provider && account.provider !== "credentials" && user.id) {
+        await prisma.user
+          .update({
+            where: { id: user.id },
+            data: { emailVerified: new Date() },
+          })
+          .catch((err) => {
+            console.error("[next-auth] OAuth emailVerified update failed:", err);
+          });
+      }
+    },
+  },
   callbacks: {
     async redirect({ url, baseUrl }) {
       if (url.startsWith("/")) return `${baseUrl}${url}`;
@@ -143,15 +163,23 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, trigger, session }) {
       if (user?.id) {
         token.id = user.id;
+      }
+
+      if (token.id) {
         try {
           const dbUser = await prisma.user.findUnique({
-            where: { id: user.id },
-            select: { preferredLocale: true, name: true },
+            where: { id: String(token.id) },
+            select: { preferredLocale: true, name: true, emailVerified: true, passwordHash: true },
           });
           if (dbUser?.preferredLocale && isLocale(dbUser.preferredLocale)) {
             token.preferredLocale = dbUser.preferredLocale;
           }
           if (dbUser?.name) token.name = dbUser.name;
+          if (dbUser?.passwordHash && !dbUser.emailVerified) {
+            token.blocked = true;
+          } else {
+            delete token.blocked;
+          }
         } catch (err) {
           console.error("[next-auth] jwt user lookup failed:", err);
         }
@@ -174,6 +202,9 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
+      if (token.blocked) {
+        return { expires: new Date(0).toISOString() };
+      }
       if (session.user && token?.id) {
         session.user.id = String(token.id);
       }

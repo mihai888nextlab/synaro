@@ -32,6 +32,23 @@ describe("routeHeadProps", () => {
     expect(props.noIndex).toBe(true);
   });
 
+  it("marks agent run detail subpaths as noindex", () => {
+    const props = routeHeadProps(
+      "/agents/[agentId]/runs/[runId]",
+      { agentId: "agent-1", runId: "run-1" },
+      "/agents/agent-1/runs/run-1",
+    );
+    expect(props.noIndex).toBe(true);
+    expect(props.path).toBe("/agents/agent-1/runs/run-1");
+  });
+
+  it("maps forgot-password route to reset seo", () => {
+    const props = routeHeadProps("/forgot-password", {}, "/forgot-password");
+    expect(props.path).toBe("/forgot-password");
+    expect(props.title).toBe("Reset password");
+    expect(props.noIndex).toBe(true);
+  });
+
   it("maps project slug for OG image while keeping noindex", () => {
     const props = routeHeadProps(
       "/projects/[projectSlug]",

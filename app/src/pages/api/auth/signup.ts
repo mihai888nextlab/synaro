@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import bcrypt from "bcryptjs";
 
+import { sendVerificationEmail } from "@/lib/auth/send-verification-email";
 import { prisma } from "@/lib/prisma";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -32,10 +33,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       email: cleanEmail,
       name: fullName.trim(),
       passwordHash: hashedPassword,
+      emailVerified: null,
     },
     select: { id: true, email: true, name: true },
   });
 
-  return res.status(201).json({ message: "User created successfully" });
-}
+  const sent = await sendVerificationEmail(cleanEmail, fullName.trim());
+  if (!sent.ok && sent.reason === "rate_limited") {
+    return res.status(429).json({ error: "Too many requests. Try again later." });
+  }
 
+  return res.status(201).json({
+    message: "Check your email to verify your account before signing in.",
+    email: cleanEmail,
+    devLink: process.env.NODE_ENV === "development" ? sent.devLink : undefined,
+  });
+}

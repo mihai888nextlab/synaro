@@ -34,6 +34,31 @@ export const roAppExt: Messages = {
     githubSignInFailed: "Autentificarea GitHub a eșuat.",
     couldNotCreateAccount: "Nu s-a putut crea contul ({status}). Încearcă din nou.",
     signInFailed: "Autentificarea a eșuat: {error}",
+    emailNotVerified:
+      "Verifică emailul înainte de autentificare. Verifică inbox-ul pentru linkul de verificare.",
+    checkEmailTitle: "Verifică emailul",
+    checkEmailBody:
+      "Am trimis un link de verificare la {email}. Deschide-l pentru a-ți activa contul, apoi autentifică-te.",
+    resendVerification: "Retrimite emailul de verificare",
+    emailVerifiedTitle: "Email verificat",
+    emailVerifiedBody: "Emailul tău este verificat. Te poți autentifica în workspace-ul Synaro.",
+    verifyInvalidTitle: "Link invalid sau expirat",
+    verifyInvalidBody:
+      "Acest link de verificare sau resetare este invalid sau a expirat. Solicită unul nou din pagina de autentificare.",
+    resetPasswordTitle: "Resetează parola",
+    resetPasswordDescription:
+      "Introdu emailul și îți vom trimite un link pentru a alege o parolă nouă.",
+    sendResetLink: "Trimite linkul de resetare",
+    resetEmailSentTitle: "Verifică emailul",
+    resetEmailSentBody:
+      "Dacă există un cont pentru acel email, am trimis un link de resetare a parolei. Expiră într-o oră.",
+    chooseNewPasswordTitle: "Alege o parolă nouă",
+    chooseNewPasswordDescription: "Introdu o parolă nouă pentru contul tău Synaro.",
+    updatePassword: "Actualizează parola",
+    backToSignIn: "Înapoi la autentificare",
+    rememberPassword: "Îți amintești parola?",
+    resetSuccessTitle: "Parolă actualizată",
+    resetSuccessBody: "Parola ta a fost schimbată. Autentifică-te cu noua parolă.",
   },
   profile: {
     name: "Nume",
@@ -193,6 +218,33 @@ export const roAppExt: Messages = {
     open: "deschide",
     createdRelative: "{count} instrumente · creat {relative}",
     openAgent: "Deschide agentul: {name}",
+    headerPillSingle: "{name} rulează",
+    headerPillMany: "{count} agenți activi",
+    headerPillTitleSingle: "{name} rulează. Deschide agenții.",
+    headerPillTitleMany: "{count} agenți rulează. Deschide agenții.",
+    stopSpeaking: "Oprește citirea",
+    speakingAria: "Răspunsul agentului este citit cu voce tare",
+    voiceRunFailedFallback: "{name} a eșuat.",
+    editAgent: "Editează agent",
+    saveChanges: "Salvează modificările",
+    enableAgent: "Activează agentul",
+    disableAgent: "Dezactivează agentul",
+    agentDisabledRunTooltip: "Activează agentul pentru a-l rula",
+    editAgentDialogTitle: "Editează agent",
+    moreOptionsFor: "Mai multe opțiuni pentru {name}",
+    runDetailTitle: "Rulare agent",
+    backToAgents: "Înapoi la agenți",
+    runInput: "Intrare",
+    runOutput: "Rezultat",
+    runSteps: "Pași",
+    runStepsEmpty: "Încă nu există pași înregistrați.",
+    runStepsLive: "Trasare live",
+    stepTool: "Instrument",
+    startedAt: "Început",
+    finishedAt: "Finalizat",
+    viewRun: "Vezi rularea →",
+    runNotFound: "Rularea nu a fost găsită.",
+    runLoadFailed: "Nu s-a putut încărca rularea.",
   },
   logs: {
     title: "Jurnal",
@@ -638,6 +690,11 @@ export const roAppExt: Messages = {
     commands: "Comenzi",
     listeningHint:
       "Ascult… se oprește după 3s de liniște (atinge microfonul pentru a anula)",
+    voiceRequiresSecureContext:
+      "Intrarea vocală necesită HTTPS sau localhost. Deschide aplicația la http://localhost:3000, nu la adresa de rețea.",
+    voiceUnsupportedBrowser:
+      "Intrarea vocală nu este suportată în acest browser. Încearcă Chrome, Edge sau Safari.",
+    voiceTranscribing: "Se transcrie…",
     buildIdeaTitle: "Hai să construim ideea ta!",
     buildIdeaSubtitle:
       "Descrie ce vrei să construiești — voi pune câteva întrebări, apoi voi genera.",
@@ -649,6 +706,9 @@ export const roAppExt: Messages = {
     noNotifications: "Încă nu există notificări.",
     aiTaskComplete: "Sarcină AI finalizată",
     aiTaskFailed: "Sarcină AI eșuată",
+    agentRunComplete: "{name} a terminat",
+    agentRunFailed: "{name} a eșuat",
+    agentRunCompleteBody: "Rularea agentului s-a finalizat cu succes.",
     clear: "Șterge",
     openAria: "Deschide notificările",
     enableBrowser: "Activează notificările din browser",
@@ -682,5 +742,212 @@ export const roAppExt: Messages = {
     pendingInvites: "Invitații în așteptare",
     noPendingInvites: "Nicio invitație în așteptare.",
     revokeInvite: "Revocă invitația",
+  },
+  features: {
+    hero: {
+      badge: "Funcționalități",
+      title: "Tot ce ai nevoie ca să construiești cu AI.",
+      subtitle:
+        "Workspace-uri Docker, chat AI, intrare vocală, agenți autonomi și API public — într-o singură platformă.",
+      pill1: "Workspace-uri Docker",
+      pill2: "Voce + agenți",
+      pill3: "API public",
+      pill4: "EN / RO",
+    },
+    sections: {
+      build: "Construiește și lansează",
+      buildTagline: "Codul tău trăiește într-un mediu real — nu într-o bulă de chat.",
+      automate: "Automatizează și monitorizează",
+      automateTagline: "Agenții lucrează cât dormi. Tu rămâi la curent.",
+      connect: "Conectează și scalează",
+      connectTagline: "API-uri, invitații și documentație — pentru echipe și automatizări.",
+    },
+    mock: {
+      workspaceTabFiles: "Fișiere",
+      workspaceTabTerminal: "Terminal",
+      workspaceTabPreview: "Previzualizare",
+      terminalLine1: "$ npm run dev",
+      terminalLine2: "▸ gata pe localhost:3000",
+      aiQuestion: "Adaug mod întunecat în setări?",
+      voiceListening: "Ascult…",
+      agentRun: "Cercetare competitori",
+      agentStatus: "Rulează · pasul 3 din 4",
+      agentStepQueued: "În coadă",
+      agentStepSearch: "Căutare web",
+      agentStepRunning: "Rezumat descoperiri",
+      agentStepDone: "Notificare la final",
+      dashboardHint: "Trage widget-uri în modul editare",
+      searchPlaceholder: "Caută proiecte, agenți, documentație…",
+      searchResult1: "↳ my-app · proiect",
+      searchResult2: "↳ weekly-research · agent",
+      apiComment: "Creează un proiect prin API",
+      shareProjectLabel: "Link proiect",
+      shareProject: "synaro.tech/p/my-app",
+      shareAgentLabel: "Link agent",
+      shareAgent: "synaro.tech/a/clx…",
+      docPage1: "Primii pași în workspace-uri",
+      docPage2: "Agenți și programe cron",
+      docPage3: "Referință API v1",
+      browseDocs: "Vezi documentația",
+    },
+    workspaces: {
+      title: "Workspace-uri Docker",
+      body: "Fiecare proiect rulează într-un container izolat cu arbore de fișiere, terminal integrat, previzualizare live și controale de deployment.",
+    },
+    aiChat: {
+      title: "Chat AI",
+      body: "Descrie modificările în limbaj natural. Synaro pune întrebări de clarificare, rulează sarcini în fundal și afișează carduri cu modificări de fișiere pe care le poți revizui.",
+    },
+    voice: {
+      title: "Intrare vocală și redare",
+      body: "Dictează prompturi cu Web Speech din browser sau ElevenLabs STT. Răspunsurile agenților pot fi citite cu ElevenLabs TTS, cu fallback în browser.",
+    },
+    import: {
+      title: "Import GitHub și folder",
+      body: "Începe de la zero, importă un repository GitHub sau încarcă un folder. Codul tău ajunge într-un workspace gata de rulat.",
+    },
+    agents: {
+      title: "Agenți autonomi",
+      body: "Creează agenți cu căutare web și instrumente HTTP, programe cron, rulări în fundal și notificări în aplicație când se termină.",
+    },
+    dashboard: {
+      title: "Dashboard personalizabil",
+      body: "Aranjează tile-uri KPI, carduri de proiect, sumare de agenți, fluxuri de activitate și scurtături pe un dashboard pe care îl poți personaliza.",
+    },
+    search: {
+      title: "Căutare globală",
+      body: "Sari la proiecte, agenți, setări și documentație de oriunde cu ⌘K (Ctrl+K pe Windows).",
+    },
+    collaboration: {
+      title: "Partajare și invitații",
+      body: "Invită colaboratori prin email sau partajează un URL public de proiect la /p/slug-ul-tău pentru acces rapid.",
+    },
+    api: {
+      title: "API public v1",
+      body: "Gestionează proiecte, medii și agenți programatic. Creează chei API în setări și autentifică-te cu token-uri Bearer.",
+    },
+    preferences: {
+      title: "Limbă și temă",
+      body: "Comută între engleză și română. Temele light și dark urmează preferința ta și persistă între sesiuni.",
+    },
+    documentation: {
+      title: "Documentație",
+      body: "Ghiduri pentru proiecte, workspace-uri, agenți, endpoint-uri API și deployment — sincronizate cu produsul.",
+    },
+    mcp: {
+      title: "Endpoint-uri MCP",
+      body: "Clienții automatizați pot folosi rute în stil MCP pentru deploy, jurnale, stare de sistem și sarcini de agenți, când sunt configurate.",
+    },
+    cta: {
+      title: "Începe să construiești pe Synaro",
+      subtitle: "Creează un cont gratuit și lansează primul workspace în câteva minute.",
+      getStarted: "Începe",
+      signIn: "Autentificare",
+    },
+  },
+  agentShare: {
+    badge: "Agent Synaro",
+    enabled: "Activ",
+    disabled: "Dezactivat",
+    toolsLabel: "Instrumente",
+    noTools: "Niciun instrument configurat",
+    noDescription: "Deschide acest agent pe Synaro pentru a vedea rulările și configurația.",
+    openAgent: "Deschide agentul",
+    createAccount: "Creează cont",
+    share: "Partajează",
+    shareTitle: "Partajează agentul",
+    publicLink: "Link public",
+    publicLinkAria: "Link public agent",
+    copyLink: "Copiază linkul",
+    copied: "Copiat",
+    couldNotCopy: "Nu s-a putut copia linkul",
+  },
+  contact: {
+    hero: {
+      badge: "Contact",
+      title: "Ia legătura cu noi",
+      subtitle: "Întrebări despre Synaro, parteneriate sau suport — citim fiecare mesaj.",
+    },
+    email: {
+      title: "Email",
+      hint: "Pentru întrebări despre produs, solicitări legale și informații generale.",
+      cta: "Trimite email",
+    },
+    location: {
+      title: "Sediul",
+      body: "Timișoara, România · synaro.tech",
+    },
+    aboutLink: "Despre Synaro",
+  },
+  termsConsent: {
+    bannerTitle: "Termeni și servicii terțe",
+    bannerSummary:
+      "Synaro folosește AI și furnizori externi (inclusiv Kimi, Brave Search și ElevenLabs). Continuând, accepți Termenii noștri.",
+    accept: "Accept",
+    readTerms: "Citește termenii",
+    dialogTitle: "Termeni și condiții",
+    lastUpdated: "Ultima actualizare: iulie 2026",
+    sections: {
+      intro: {
+        title: "1. Acceptare",
+        body:
+          "Folosind Synaro (synaro.tech și serviciile asociate), accepți acești Termeni. Dacă nu ești de acord, nu utiliza platforma. Termenii se aplică vizitatorilor și utilizatorilor înregistrați.",
+      },
+      service: {
+        title: "2. Serviciul Synaro",
+        body:
+          "Synaro oferă un workspace de dezvoltare în cloud cu proiecte Docker, cod asistat de AI, agenți autonomi, funcții vocale și API public. Funcționalitățile pot fi modificate sau indisponibile în beta. Ești responsabil pentru codul și datele stocate în workspace-urile tale.",
+      },
+      thirdPartyOverview: {
+        title: "3. Servicii terțe",
+        body:
+          "Synaro se bazează pe furnizori externi pentru funcționalități esențiale. Când folosești chat AI, agenți, voce, autentificare sau importuri, datele pot fi transmise acestor furnizori conform termenilor și politicilor lor de confidențialitate.",
+      },
+      kimi: {
+        title: "4. Kimi AI (Moonshot)",
+        body:
+          "Chat-ul AI, generarea de cod, întrebările de clarificare, sarcinile în fundal, mesajele de commit și raționamentul agenților autonomi sunt alimentate de modele Kimi (Moonshot AI, ex. kimi-k2.6) prin serviciile noastre de orchestrare. Prompturile, contextul fișierelor, ieșirea din terminal și instrucțiunile agenților pot fi trimise către Moonshot. Nu trimite secrete, credențiale sau date personale pe care nu ai dreptul să le împărtășești cu un furnizor AI terț.",
+      },
+      brave: {
+        title: "5. Brave Search",
+        body:
+          "Agenții cu instrumentul web_search trimit interogări către API-ul Brave Search. Textul căutării și fragmentele de rezultate sunt procesate de Brave Software. Activează căutarea web doar dacă accepți că termenii de căutare părăsesc infrastructura Synaro.",
+      },
+      elevenlabs: {
+        title: "6. ElevenLabs și vorbire în browser",
+        body:
+          "Intrarea vocală poate folosi Web Speech API din browser sau, când este configurat, speech-to-text ElevenLabs. Redarea vocală a agenților poate folosi ElevenLabs sau sinteza vocală din browser ca fallback. Audio-ul înregistrat pentru transcriere poate fi trimis către ElevenLabs.",
+      },
+      oauth: {
+        title: "7. Autentificare Google și GitHub",
+        body:
+          "Autentificarea opțională cu Google sau GitHub este gestionată de acești furnizori. Conectarea GitHub poate permite import de repository conform termenilor GitHub. Primim identificatori de profil și token-uri necesare pentru autentificare și import — nu parola furnizorului.",
+      },
+      dataProcessing: {
+        title: "8. Date și confidențialitate",
+        body:
+          "Procesăm date de cont, fișiere de proiect, jurnale și utilizare necesare pentru serviciu. Funcțiile AI și de căutare necesită trimiterea unor subseturi de conținut către terții enumerați mai sus. Trebuie să ai drepturi asupra codului și datelor încărcate. Pentru utilizatorii din UE, prelucrarea respectă legislația aplicabilă privind protecția datelor.",
+      },
+      responsibilities: {
+        title: "9. Responsabilitățile tale",
+        body:
+          "Nu vei folosi Synaro pentru activități ilegale, malware, hărțuire sau conținut care încalcă drepturi. Ești responsabil să revizuiești codul generat de AI înainte de deployment. Rezultatele AI pot fi incorecte, incomplete sau nesigure — nu constituie consultanță profesională.",
+      },
+      liability: {
+        title: "10. Declinare și răspundere",
+        body:
+          "Synaro este furnizat „ca atare”, fără garanții. În măsura permisă de lege, Synaro și operatorii săi nu răspund pentru daune indirecte, pierderi de date sau prejudicii din output AI, întreruperi ale terților sau utilizarea serviciului. Răspunderea totală este limitată la taxele plătite în ultimele douăsprezece luni sau zero pentru nivelul gratuit.",
+      },
+      changes: {
+        title: "11. Modificări",
+        body:
+          "Putem actualiza acești Termeni sau integrările terțe. Modificările importante pot necesita acceptare din nou în produs. Utilizarea continuă după notificare constituie acceptare acolo unde legea permite.",
+      },
+      contact: {
+        title: "12. Contact",
+        body:
+          "Întrebări despre acești Termeni: cristi@synaro.tech sau synaro.tech/contact. Operator: Synaro (Timișoara, România).",
+      },
+    },
   },
 };

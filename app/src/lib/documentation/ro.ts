@@ -342,9 +342,19 @@ export const DOC_PAGES: Record<string, DocPage> = {
         headers: ["Acțiune", "Scop"],
         rows: [
           ["Run", "Pornește o execuție manuală cu text de intrare opțional"],
-          ["runs →", "Deschide istoricul execuțiilor cu stare live și output markdown"],
+          ["runs →", "Deschide istoricul execuțiilor; apasă o rulare pentru trasarea live a pașilor"],
+          ["Edit", "Actualizează nume, prompt, instrumente, pași maximi și programare"],
+          ["Comutator activare", "Dezactivează agenții pentru a bloca rulările manuale și cron"],
           ["Delete", "Elimină agentul și toate execuțiile asociate"],
         ],
+      },
+      {
+        type: "h2",
+        text: "Pagina de detaliu rulare",
+      },
+      {
+        type: "p",
+        text: "Fiecare rulare se deschide la /agents/{agentId}/runs/{runId} cu o cronologie live a pașilor ReAct cât timp starea este PENDING sau RUNNING (interogare la fiecare 2 secunde), plus intrare și output markdown când sunt disponibile.",
       },
       {
         type: "h2",
@@ -1184,6 +1194,7 @@ cd app && npm run dev`,
           "Provisionare mediu Docker și descărcare spațiu de lucru",
           "Panou de control, jurnale, UI spațiu de lucru și pagina Agenți",
           "Agenți AI independenți cu căutare web, instrumente HTTP și programare cron",
+          "UI de editare agent, comutatoare activare/dezactivare și vizualizator trasare pași per rulare",
           "API public v1 (/api/v1) cu chei API per utilizator pentru proiecte, sarcini și agenți",
         ],
       },
@@ -1206,8 +1217,6 @@ cd app && npm run dev`,
       {
         type: "ul",
         items: [
-          "UI de editare agent și comutatoare activare/dezactivare în panoul de control",
-          "Trasare instrument per pas în vizualizatorul de execuții",
           "Pipeline-uri de test în stil CI per proiect",
           "Recomandări de auto-optimizare",
           "Editare colaborativă în timp real",

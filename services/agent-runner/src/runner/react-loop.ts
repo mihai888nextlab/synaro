@@ -38,6 +38,13 @@ async function callKimiWithRetry(
   }
 }
 
+async function persistSteps(runId: string, steps: ReActStep[]): Promise<void> {
+  await prisma.agentRun.update({
+    where: { id: runId },
+    data: { steps: steps as object[], status: 'RUNNING' },
+  })
+}
+
 async function notifyComplete(
   runId: string,
   status: 'DONE' | 'FAILED',
@@ -82,12 +89,14 @@ export async function runReActLoop(run: AgentRun, agent: Agent): Promise<void> {
     try {
       response = await callKimiWithRetry(messages, enabledTools)
     } catch (err) {
+      if (steps.length > 0) await persistSteps(run.id, steps)
       await notifyComplete(run.id, 'FAILED', `LLM error: ${String(err)}`, steps)
       return
     }
 
     const assistantMsg = response.choices[0]?.message
     if (!assistantMsg) {
+      if (steps.length > 0) await persistSteps(run.id, steps)
       await notifyComplete(run.id, 'FAILED', 'Empty response from LLM', steps)
       return
     }
@@ -115,6 +124,7 @@ export async function runReActLoop(run: AgentRun, agent: Agent): Promise<void> {
       const observation = await executeTool(call.function.name, args)
 
       steps.push({ step, tool: call.function.name, args, observation })
+      await persistSteps(run.id, steps)
 
       messages.push({
         role: 'tool',
@@ -130,5 +140,6 @@ export async function runReActLoop(run: AgentRun, agent: Agent): Promise<void> {
     }
   }
 
+  if (steps.length > 0) await persistSteps(run.id, steps)
   await notifyComplete(run.id, 'FAILED', 'Max steps reached without finishing', steps)
 }

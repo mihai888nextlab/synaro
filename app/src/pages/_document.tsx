@@ -6,6 +6,7 @@ export default function Document() {
   return (
     <Html lang="en" suppressHydrationWarning className={`${appFont.variable} ${appFont.className}`}>
       <Head>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <script
           dangerouslySetInnerHTML={{
             __html: `

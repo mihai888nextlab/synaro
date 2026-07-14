@@ -20,11 +20,13 @@ export async function seedE2eDatabase(): Promise<void> {
       update: {
         name: E2E_USER_NAME,
         passwordHash,
+        emailVerified: new Date(),
       },
       create: {
         email: E2E_USER_EMAIL,
         name: E2E_USER_NAME,
         passwordHash,
+        emailVerified: new Date(),
       },
     });
 

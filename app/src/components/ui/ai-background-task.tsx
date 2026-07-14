@@ -8,7 +8,7 @@ import { ChevronRight } from "lucide-react";
 import { taskPollFingerprint } from "@/lib/ai-task-message";
 import type { AiRemoteTask, AiTaskStatus } from "@/lib/ai-task-types";
 import { cn } from "@/lib/utils";
-import { showBrowserNotification, useNotifications } from "@/components/ui/notifications";
+import { showBrowserNotification, useNotifications, playNotificationSound } from "@/components/ui/notifications";
 
 export type { AiRemoteTask, AiTaskStatus } from "@/lib/ai-task-types";
 
@@ -202,6 +202,7 @@ export function AiBackgroundTaskProvider({ children }: { children: React.ReactNo
               body: description,
               tag: `synaro-ai-${task.id}`,
             });
+            playNotificationSound();
           }
           setActiveTask(null);
         } else if (

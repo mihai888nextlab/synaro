@@ -12,8 +12,11 @@ import { SynaroPageHead } from "@/components/seo/synaro-page-head";
 import { SkipLink } from "@/components/ui/skip-link";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import { AiBackgroundTaskProvider } from "@/components/ui/ai-background-task";
+import { AgentBackgroundRunsProvider } from "@/components/ui/agent-background-runs";
 import { NotificationsProvider } from "@/components/ui/notifications";
+import { SpeechOutputProvider } from "@/lib/speech/speech-output-provider";
 import { OnboardingProvider } from "@/components/ui/onboarding";
+import { TermsConsentBanner } from "@/components/ui/terms-consent-banner";
 import { type Locale } from "@/i18n/config";
 import { resolveInitialLocale } from "@/i18n/locale-cookie";
 import { routeHeadProps } from "@/lib/seo/route-head";
@@ -34,6 +37,7 @@ function SynaroApp({ Component, pageProps }: AppPropsWithSession) {
     router.pathname === "/projects" ||
     router.pathname.startsWith("/projects/") ||
     router.pathname === "/agents" ||
+    router.pathname.startsWith("/agents/") ||
     router.pathname === "/logs" ||
     router.pathname === "/settings" ||
     router.pathname.startsWith("/settings/");
@@ -57,15 +61,20 @@ function SynaroApp({ Component, pageProps }: AppPropsWithSession) {
       <ThemeProvider>
         <SessionProvider basePath="/api/auth" session={pageProps.session}>
           <LocaleProvider initialLocale={pageProps.initialLocale}>
-            <SkipLink />
-            <NotificationsProvider>
-              <AiBackgroundTaskProvider>
-                <OnboardingProvider>
-                  {content}
-                  <GlobalSearch />
-                </OnboardingProvider>
-              </AiBackgroundTaskProvider>
-            </NotificationsProvider>
+            <SpeechOutputProvider>
+              <SkipLink />
+              <NotificationsProvider>
+                <AiBackgroundTaskProvider>
+                  <AgentBackgroundRunsProvider>
+                    <OnboardingProvider>
+                      {content}
+                      <GlobalSearch />
+                      <TermsConsentBanner />
+                    </OnboardingProvider>
+                  </AgentBackgroundRunsProvider>
+                </AiBackgroundTaskProvider>
+              </NotificationsProvider>
+            </SpeechOutputProvider>
           </LocaleProvider>
         </SessionProvider>
       </ThemeProvider>

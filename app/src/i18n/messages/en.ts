@@ -101,6 +101,59 @@ const enBase: Messages = {
     getStarted: "Get started",
     signIn: "Sign in",
   },
+  about: {
+    meta: {
+      title: "About",
+      description:
+        "Synaro is an AI development workspace from Timișoara, Romania — built by co-founders Cristian Stiegelbauer and Mihai Gorunescu.",
+    },
+    hero: {
+      badge: "About Synaro",
+      title: "AI dev workspace from Romania.",
+      subtitle:
+        "Co-founded by two high school students in Timișoara, building a workspace for modern software development.",
+      cityLabel: "Timișoara",
+    },
+    mission: {
+      title: "Our mission",
+      body: "Synaro brings Docker workspaces, AI-assisted editing, live preview, and agents into one place. We started the project to reduce the friction of juggling separate tools, and we are building it from Timișoara for developers who want a clear, capable workflow.",
+    },
+    europe: {
+      title: "Built in Europe",
+      pillar1Title: "European roots",
+      pillar1Body:
+        "We build from Romania for developers who want their tools and infrastructure closer to home.",
+      pillar2Title: "Transparent by design",
+      pillar2Body:
+        "Isolated environments, open documentation, and a stack you can inspect and understand.",
+      pillar3Title: "Built by users",
+      pillar3Body:
+        "We use Synaro every day to build Synaro, so product decisions stay grounded in real workflows.",
+    },
+    vest: {
+      label: "Program",
+      title: "Part of Vest Ventures",
+      body: "Synaro is part of the Vest Ventures pre-accelerator in Timișoara, where we work with mentors and other founders to refine the product and grow the company.",
+      link: "vestventures.vc",
+    },
+    team: {
+      title: "The team",
+      schoolLine:
+        "Students at Grigore Moisil Theoretical High School, Timișoara — ages 16 and 17.",
+      cristianName: "Cristian Stiegelbauer",
+      cristianRole: "Co-founder · CPO",
+      cristianBio: "Leads product direction, user experience, and roadmap.",
+      mihaiName: "Mihai Gorunescu",
+      mihaiRole: "Co-founder · CTO",
+      mihaiBio: "Leads architecture, infrastructure, and platform reliability.",
+    },
+    cta: {
+      title: "Try Synaro",
+      subtitle: "Create an account and start your first project in minutes.",
+      getStarted: "Get started",
+      readDocs: "Read the docs",
+    },
+  },
 };
 
 export const enMessages = mergeMessages(enBase, enAppExt);

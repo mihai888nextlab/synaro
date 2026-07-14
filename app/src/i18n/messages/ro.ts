@@ -101,6 +101,59 @@ const roBase: Messages = {
     getStarted: "Începe",
     signIn: "Autentificare",
   },
+  about: {
+    meta: {
+      title: "Despre noi",
+      description:
+        "Synaro este un workspace de dezvoltare cu AI din Timișoara, România — construit de co-fondatorii Cristian Stiegelbauer și Mihai Gorunescu.",
+    },
+    hero: {
+      badge: "Despre Synaro",
+      title: "Workspace de dev cu AI, din România.",
+      subtitle:
+        "Co-fondat de doi elevi de liceu din Timișoara, pentru un workspace modern de dezvoltare software.",
+      cityLabel: "Timișoara",
+    },
+    mission: {
+      title: "Misiunea noastră",
+      body: "Synaro aduce la un loc workspace-uri Docker, editare asistată de AI, preview live și agenți. Am pornit proiectul ca să reducem fricțiunea uneltelor separate, și îl construim din Timișoara pentru developeri care vor un flux de lucru clar și capabil.",
+    },
+    europe: {
+      title: "Construit în Europa",
+      pillar1Title: "Rădăcini europene",
+      pillar1Body:
+        "Construim din România pentru developeri care vor unelte și infrastructură mai aproape de casă.",
+      pillar2Title: "Transparent prin design",
+      pillar2Body:
+        "Medii izolate, documentație deschisă și un stack pe care îl poți inspecta și înțelege.",
+      pillar3Title: "Construit de utilizatori",
+      pillar3Body:
+        "Folosim Synaro zilnic ca să construim Synaro, astfel că deciziile de produs rămân ancorate în fluxuri reale.",
+    },
+    vest: {
+      label: "Program",
+      title: "Parte din Vest Ventures",
+      body: "Synaro face parte din pre-acceleratorul Vest Ventures din Timișoara, unde lucrăm cu mentori și alți fondatori pentru a rafina produsul și a dezvolta compania.",
+      link: "vestventures.vc",
+    },
+    team: {
+      title: "Echipa",
+      schoolLine:
+        "Elevi la Liceul Teoretic Grigore Moisil, Timișoara — 16 și 17 ani.",
+      cristianName: "Cristian Stiegelbauer",
+      cristianRole: "Co-fondator · CPO",
+      cristianBio: "Conduce direcția de produs, experiența utilizatorului și roadmap-ul.",
+      mihaiName: "Mihai Gorunescu",
+      mihaiRole: "Co-fondator · CTO",
+      mihaiBio: "Conduce arhitectura, infrastructura și fiabilitatea platformei.",
+    },
+    cta: {
+      title: "Încearcă Synaro",
+      subtitle: "Creează un cont și pornește primul proiect în câteva minute.",
+      getStarted: "Începe",
+      readDocs: "Citește documentația",
+    },
+  },
 };
 
 export const roMessages = mergeMessages(roBase, roAppExt);

@@ -153,6 +153,20 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(runs)
   })
 
+  // Active runs for a user (PENDING / RUNNING)
+  app.get('/runs/active', async (req, reply) => {
+    if (!requireServiceKey(req, reply)) return
+    const { userId } = req.query as { userId?: string }
+    if (!userId) return reply.status(400).send({ error: 'userId query param required' })
+
+    const runs = await prisma.agentRun.findMany({
+      where: { userId, status: { in: ['PENDING', 'RUNNING'] } },
+      include: { agent: { select: { id: true, name: true } } },
+      orderBy: { createdAt: 'desc' },
+    })
+    return reply.send(runs)
+  })
+
   // Get single run
   app.get('/runs/:runId', async (req, reply) => {
     if (!requireServiceKey(req, reply)) return

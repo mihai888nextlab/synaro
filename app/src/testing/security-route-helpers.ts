@@ -6,6 +6,8 @@ import { getServerSession } from "next-auth/next";
 
 import { prisma } from "@/lib/prisma";
 
+import type { RequestMethod, Body } from 'node-mocks-http'
+
 export const SECURITY_USER_A = "security-user-a";
 export const SECURITY_USER_B = "security-user-b";
 export const SECURITY_PROJECT_A = "security-project-a";
@@ -34,9 +36,9 @@ export async function invokeRoute(
   },
 ) {
   const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
-    method: options.method,
+    method: options.method as RequestMethod,
     query: options.query,
-    body: options.body,
+    body: options.body as Body,
     headers: options.headers,
   });
   await handler(req, res);

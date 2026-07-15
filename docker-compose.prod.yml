@@ -2,20 +2,21 @@
 # Synaro — Production / VPS docker-compose
 #
 # Usage:
-#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 #
 # Prerequisites on the VPS:
 #   1. docker network create traefik-net
-#   2. Create a .env.prod file with the variables listed below.
-#   3. Point your domain's A records to the VPS IP:
-#        synaro.io      → <VPS IP>
-#        *.synaro.io    → <VPS IP>
+#   2. Create .env.prod with variables listed below
+#   3. DNS records:
+#        synaro.ro    → <VPS IP>
+#        *.synaro.ro  → <VPS IP>
 #
-# Environment variables (in .env.prod or exported in shell):
-#   SYNARO_DOMAIN          e.g. synaro.io
-#   ACME_EMAIL             e.g. admin@synaro.io  (Let's Encrypt contact)
-#   NEXTAUTH_URL           e.g. https://synaro.io
-#   NEXTAUTH_SECRET        long random string
+# Required .env.prod variables:
+#   POSTGRES_PASSWORD
+#   SYNARO_DOMAIN        e.g. synaro.ro
+#   ACME_EMAIL           e.g. admin@synaro.ro
+#   NEXTAUTH_SECRET
+#   NEXTAUTH_URL         e.g. https://synaro.ro
 #   GOOGLE_CLIENT_ID
 #   GOOGLE_CLIENT_SECRET
 #   GITHUB_CLIENT_ID
@@ -24,52 +25,55 @@
 ##############################################################################
 
 networks:
-  # Internal network — only Synaro services communicate here.
   synaro-internal:
     driver: bridge
-  # Traefik proxy network — containers that need public routing must join this.
   traefik-net:
     external: true
 
 volumes:
   postgres_data:
-  postgres_env_data:
+  projects_data:
 
 services:
 
   # ---------------------------------------------------------------------------
-  # Traefik reverse proxy
+  # Traefik — reverse proxy + SSL
   # ---------------------------------------------------------------------------
   traefik:
-    image: traefik:v3.1
+    image: traefik:v2.11
     container_name: synaro-traefik
     restart: unless-stopped
     command:
-      - "--api.dashboard=false"
+      - "--api.insecure=true"
       - "--providers.docker=true"
       - "--providers.docker.network=traefik-net"
-      # Only route containers that explicitly set traefik.enable=true
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-      # Redirect all HTTP → HTTPS
-      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
-      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
-      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
-      - "--log.level=INFO"
+      #- "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      #- "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      #- "--certificatesresolvers.letsencrypt.acme.dnschallenge=true"
+      #- "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare"
+      #- "--certificatesresolvers.letsencrypt.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53"
+      - "--log.level=DEBUG"
+      - "--providers.file.directory=/etc/traefik/conf.d/tls.yml"
+      - "--providers.file.watch=true"
+      - "--accesslog=true"
+    environment:
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
     ports:
       - "80:80"
       - "443:443"
+      - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./letsencrypt:/letsencrypt
+      #- ./letsencrypt:/letsencrypt
+      - ./traefik:/etc/traefik/conf.d
     networks:
       - traefik-net
 
   # ---------------------------------------------------------------------------
-  # PostgreSQL — main app + AI service
+  # PostgreSQL
   # ---------------------------------------------------------------------------
   postgresql:
     image: postgres:16-alpine
@@ -78,35 +82,14 @@ services:
     environment:
       POSTGRES_DB: synaro
       POSTGRES_USER: synaro_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-synaro_prod_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/postgres-init-project-service-db.sh:/docker-entrypoint-initdb.d/01-synaro-project-service-db.sh
+      - ./scripts/init-databases.sh:/docker-entrypoint-initdb.d/init.sh
     networks:
       - synaro-internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U synaro_user -d synaro"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # ---------------------------------------------------------------------------
-  # PostgreSQL — environment service (isolated schema)
-  # ---------------------------------------------------------------------------
-  postgresql-env:
-    image: postgres:16-alpine
-    container_name: synaro-postgres-env
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: synaro_env
-      POSTGRES_USER: synaro_env_user
-      POSTGRES_PASSWORD: ${POSTGRES_ENV_PASSWORD:-synaro_env_prod_password}
-    volumes:
-      - postgres_env_data:/var/lib/postgresql/data
-    networks:
-      - synaro-internal
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U synaro_env_user -d synaro_env"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -121,7 +104,7 @@ services:
     container_name: synaro-project-service
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://synaro_user:${POSTGRES_PASSWORD:-synaro_prod_password}@postgresql:5432/synaro_project_service
+      DATABASE_URL: postgresql://synaro_user:${POSTGRES_PASSWORD}@postgresql:5432/synaro
       NODE_ENV: production
       PORT: 3001
       LOG_LEVEL: info
@@ -141,28 +124,18 @@ services:
       dockerfile: Dockerfile.dev
     container_name: synaro-environment-service
     restart: unless-stopped
-    command:
-      ["sh", "-c", "npx prisma migrate deploy && npx prisma generate && exec npx tsx watch src/index.ts"]
     environment:
-      DATABASE_URL: postgresql://synaro_env_user:${POSTGRES_ENV_PASSWORD:-synaro_env_prod_password}@postgresql-env:5432/synaro_env
+      DATABASE_URL: postgresql://synaro_user:${POSTGRES_PASSWORD}@postgresql:5432/synaro
       NODE_ENV: production
       PORT: 3002
       LOG_LEVEL: info
       ALLOWED_ORIGINS: https://${SYNARO_DOMAIN}
-      # VPS-specific: enables Traefik label injection and subdomain routing
-      SYNARO_DOMAIN: ${SYNARO_DOMAIN}
-      TRAEFIK_NETWORK: traefik-net
-      ACME_RESOLVER: letsencrypt
     volumes:
-      - ./services/environment-service/src:/app/src
-      - ./services/environment-service/prisma:/app/prisma
-      - ./services/environment-service/package.json:/app/package.json
-      - ./services/environment-service/package-lock.json:/app/package-lock.json
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - synaro-internal
     depends_on:
-      postgresql-env:
+      postgresql:
         condition: service_healthy
 
   # ---------------------------------------------------------------------------
@@ -175,13 +148,15 @@ services:
     container_name: synaro-ai-orchestration-service
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://synaro_user:${POSTGRES_PASSWORD:-synaro_prod_password}@postgresql:5432/synaro
+      DATABASE_URL: postgresql://synaro_user:${POSTGRES_PASSWORD}@postgresql:5432/synaro
       NODE_ENV: production
       PORT: 3003
       LOG_LEVEL: info
       ALLOWED_ORIGINS: https://${SYNARO_DOMAIN}
       KIMI_API_KEY: ${KIMI_API_KEY}
-      ENVIRONMENT_SERVICE_URL: http://environment-service:3002
+      PROJECTS_PATH: /projects
+    volumes:
+      - projects_data:/projects
     networks:
       - synaro-internal
     depends_on:
@@ -189,7 +164,78 @@ services:
         condition: service_healthy
 
   # ---------------------------------------------------------------------------
-  # Next.js app — routed via Traefik at synaro.io
+  # Execution manager
+  # ---------------------------------------------------------------------------
+  execution-manager:
+    build:
+      context: ./services/execution-manager
+      dockerfile: Dockerfile.dev
+    container_name: synaro-execution-manager
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://synaro_user:${POSTGRES_PASSWORD}@postgresql:5432/synaro
+      NODE_ENV: production
+      PORT: 3004
+      LOG_LEVEL: info
+      PROJECTS_PATH: /projects
+      K8S_NAMESPACE: synaro-projects
+      BASE_DOMAIN: ${SYNARO_DOMAIN}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - projects_data:/projects
+      - /etc/rancher/k3s/k3s.yaml:/root/.kube/config:ro
+    networks:
+      - synaro-internal
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Agent service
+  # ---------------------------------------------------------------------------
+  agent-service:
+    build:
+      context: ./services/agent-service
+      dockerfile: Dockerfile.dev
+    container_name: synaro-agent-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://synaro_user:${POSTGRES_PASSWORD}@postgresql:5432/synaro
+      NODE_ENV: production
+      PORT: 3005
+      LOG_LEVEL: info
+      ALLOWED_ORIGINS: https://${SYNARO_DOMAIN}
+      AGENT_RUNNER_URL: http://agent-runner:3006
+    networks:
+      - synaro-internal
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Agent runner
+  # ---------------------------------------------------------------------------
+  agent-runner:
+    build:
+      context: ./services/agent-runner
+      dockerfile: Dockerfile.dev
+    container_name: synaro-agent-runner
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://synaro_user:${POSTGRES_PASSWORD}@postgresql:5432/synaro
+      NODE_ENV: production
+      PORT: 3006
+      LOG_LEVEL: info
+      KIMI_API_KEY: ${KIMI_API_KEY}
+      AGENT_SERVICE_URL: http://agent-service:3005
+    networks:
+      - synaro-internal
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Next.js frontend — https://synaro.ro
   # ---------------------------------------------------------------------------
   app:
     build:
@@ -198,29 +244,48 @@ services:
     container_name: synaro-app
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://synaro_user:${POSTGRES_PASSWORD:-synaro_prod_password}@postgresql:5432/synaro
-      NEXTAUTH_URL: https://${SYNARO_DOMAIN}
+      DATABASE_URL: postgresql://synaro_user:${POSTGRES_PASSWORD}@postgresql:5432/synaro_frontend
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
-      ENVIRONMENT_SERVICE_URL: http://environment-service:3002
-      SYNARO_DOMAIN: ${SYNARO_DOMAIN}
+      NEXT_PUBLIC_PROJECT_SERVICE_URL: http://project-service:3001
+      NEXT_PUBLIC_AI_SERVICE_URL: http://ai-orchestration-service:3003
+      NEXT_PUBLIC_AGENT_SERVICE_URL: http://agent-service:3005
       NODE_ENV: production
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.synaro-app.rule=Host(`${SYNARO_DOMAIN}`)"
+      # Router HTTPS
+      - "traefik.http.routers.synaro-app.rule=Host(`synaro.tech`)"
+      - "traefik.http.routers.synaro-app.entrypoints=websecure"
       - "traefik.http.routers.synaro-app.tls=true"
-      - "traefik.http.routers.synaro-app.tls.certresolver=letsencrypt"
+      #- "traefik.http.routers.synaro-app.tls.certresolver=letsencrypt"
       - "traefik.http.services.synaro-app.loadbalancer.server.port=3000"
+      # Router HTTP - pentru Cloudflare proxy
+      - "traefik.http.routers.synaro-app-http.rule=Host(`synaro.tech`)"
+      - "traefik.http.routers.synaro-app-http.entrypoints=web"
+      - "traefik.http.routers.synaro-app-http.service=synaro-app"
+      # Router HTTP — doar redirect, dar NU pentru acme challenge
+      #- "traefik.http.routers.synaro-app-http.rule=Host(`synaro.tech`) && !PathPrefix(`/.well-known/acme-challenge`)"
+      - "traefik.http.routers.synaro-app-http.entrypoints=web"
+      #- "traefik.http.routers.synaro-app-http.middlewares=redirect-to-https@docker"
+      # Middleware redirect
+      #- "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      #- "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
+      #test
+      - "traefik.http.routers.synaro-app.tls.options=default"
+      - "traefik.http.routers.synaro-app.tls.domains[0].main=synaro.tech"
     networks:
       - synaro-internal
       - traefik-net
     depends_on:
       postgresql:
         condition: service_healthy
-      environment-service:
+      project-service:
         condition: service_started
       ai-orchestration-service:
+        condition: service_started
+      agent-service:
         condition: service_started

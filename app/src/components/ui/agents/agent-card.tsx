@@ -11,13 +11,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";import { useTranslation } from "@/components/ui/locale-provider";
+import { AgentNextRunLabel, AgentScheduleSummary } from "@/components/ui/agents/agent-schedule-picker";
+import { cn } from "@/lib/utils";
+import { useTranslation } from "@/components/ui/locale-provider";
 import type { Agent } from "@/lib/agents/agent-types";
 
 function agentToolsLabel(
   agent: Agent,
   t: (key: string, params?: Record<string, string | number>) => string,
 ): string {
+  if (agent.toolMode !== "manual") return t("agents.autoToolsLabel");
   const count = agent.tools.length;
   return count === 1 ? t("agents.toolsCountOne", { count }) : t("agents.toolsCountMany", { count });
 }
@@ -175,6 +178,13 @@ export function AgentCard({
         </span>
 
         <hr className="my-4 border-0 border-t border-border/60 dark:border-border/45" />
+
+        {agent.schedule?.trim() && agent.enabled ? (
+          <div className="mb-4 space-y-1">
+            <AgentScheduleSummary schedule={agent.schedule} />
+            <AgentNextRunLabel schedule={agent.schedule} enabled={agent.enabled} />
+          </div>
+        ) : null}
 
         <div className="flex items-end justify-between gap-3 text-xs">
           <span className="min-w-0 truncate text-muted-foreground">{agentToolsLabel(agent, t)}</span>

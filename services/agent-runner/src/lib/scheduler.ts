@@ -1,6 +1,15 @@
 import cron, { type ScheduledTask } from 'node-cron'
 import type { FastifyBaseLogger } from 'fastify'
 import { prisma } from './prisma.js'
+
+const SCHEDULE_CRON_SEPARATOR = '|'
+
+function splitScheduleCrons(schedule: string): string[] {
+  return schedule
+    .split(SCHEDULE_CRON_SEPARATOR)
+    .map((part) => part.trim())
+    .filter(Boolean)
+}
 import { runReActLoop } from '../runner/react-loop.js'
 
 /**
@@ -17,7 +26,7 @@ const RUN_TIMEOUT_MS = 15 * 60_000
 const DISPATCH_INTERVAL_MS = 30_000
 const PENDING_GRACE_MS = 30_000
 
-const tasks = new Map<string, ScheduledTask>()
+const tasks = new Map<string, ScheduledTask[]>()
 
 function agentServiceUrl(): string {
   return process.env.AGENT_SERVICE_URL?.trim() || 'http://agent-service:3005'
@@ -40,7 +49,9 @@ async function triggerCronAgent(agentId: string, log: FastifyBaseLogger): Promis
 
 /** Tear down existing schedules and re-register from the current DB state. */
 export async function reloadCronJobs(log: FastifyBaseLogger): Promise<number> {
-  for (const task of tasks.values()) task.stop()
+  for (const taskList of tasks.values()) {
+    for (const task of taskList) task.stop()
+  }
   tasks.clear()
 
   const agents = await prisma.agent.findMany({
@@ -48,20 +59,39 @@ export async function reloadCronJobs(log: FastifyBaseLogger): Promise<number> {
     select: { id: true, name: true, schedule: true },
   })
 
+  let registered = 0
   for (const agent of agents) {
-    if (!agent.schedule || !cron.validate(agent.schedule)) {
+    if (!agent.schedule) continue
+    const expressions = splitScheduleCrons(agent.schedule)
+    if (expressions.length === 0) {
       log.warn({ agentId: agent.id }, 'Invalid or missing cron schedule — skipping')
       continue
     }
-    const task = cron.schedule(agent.schedule, () => {
-      void triggerCronAgent(agent.id, log)
-    })
-    tasks.set(agent.id, task)
-    log.info({ agentId: agent.id, name: agent.name, schedule: agent.schedule }, 'Cron job registered')
+
+    const agentTasks: ScheduledTask[] = []
+    for (const expression of expressions) {
+      if (!cron.validate(expression)) {
+        log.warn({ agentId: agent.id, schedule: expression }, 'Invalid cron expression — skipping')
+        continue
+      }
+      const task = cron.schedule(expression, () => {
+        void triggerCronAgent(agent.id, log)
+      })
+      agentTasks.push(task)
+      registered += 1
+    }
+
+    if (agentTasks.length > 0) {
+      tasks.set(agent.id, agentTasks)
+      log.info(
+        { agentId: agent.id, name: agent.name, schedules: expressions.length },
+        'Cron job(s) registered',
+      )
+    }
   }
 
-  log.info(`Registered ${tasks.size} cron agent(s)`)
-  return tasks.size
+  log.info(`Registered ${registered} cron expression(s) for ${tasks.size} agent(s)`)
+  return registered
 }
 
 export function startReaper(log: FastifyBaseLogger): void {

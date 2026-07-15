@@ -69,6 +69,7 @@ test.describe("Global search", () => {
       description: "Seeded for search tests",
       systemPrompt: "test",
       tools: [],
+      toolMode: "auto",
       maxSteps: 5,
       enabled: true,
       createdAt: new Date().toISOString(),

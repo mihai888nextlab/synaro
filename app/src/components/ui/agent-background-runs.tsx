@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { ChevronRight, VolumeX } from "lucide-react";
+import { ChevronRight, StopCircle, VolumeX } from "lucide-react";
 
 import { useTranslation } from "@/components/ui/locale-provider";
 import {
@@ -41,11 +41,11 @@ const POLL_MS = 3_000;
 const AgentBackgroundRunsContext = React.createContext<Ctx | null>(null);
 
 function isActiveStatus(status: AgentRunStatus) {
-  return status === "PENDING" || status === "RUNNING";
+  return status === "PENDING" || status === "RUNNING" || status === "NEEDS_INPUT";
 }
 
 function isTerminalStatus(status: AgentRunStatus) {
-  return status === "DONE" || status === "FAILED";
+  return status === "DONE" || status === "FAILED" || status === "CANCELLED";
 }
 
 function agentNameFromRun(run: ActiveAgentRun) {
@@ -236,8 +236,9 @@ export function AgentSpeechStopButton({ className }: { className?: string }) {
 }
 
 export function AgentActiveRunsPill({ className }: { className?: string }) {
-  const { activeRuns } = useAgentBackgroundRuns();
+  const { activeRuns, refreshSoon } = useAgentBackgroundRuns();
   const { t } = useTranslation();
+  const [cancellingId, setCancellingId] = React.useState<string | null>(null);
 
   if (activeRuns.length === 0) return null;
 
@@ -256,28 +257,66 @@ export function AgentActiveRunsPill({ className }: { className?: string }) {
       ? t("agents.headerPillTitleSingle", { name: agentNameFromRun(activeRuns[0]!) })
       : t("agents.headerPillTitleMany", { count: activeRuns.length });
 
+  async function cancelRun(runId: string) {
+    if (!window.confirm(t("agents.cancelRunConfirm"))) return;
+    setCancellingId(runId);
+    try {
+      const res = await fetch(`/api/agents/runs/${encodeURIComponent(runId)}/cancel`, {
+        method: "POST",
+      });
+      if (res.ok) refreshSoon();
+    } finally {
+      setCancellingId(null);
+    }
+  }
+
+  const singleRun = activeRuns.length === 1 ? activeRuns[0]! : null;
+
   return (
-    <Link
-      href={href}
+    <div
       className={cn(
-        "group inline-flex max-w-[10.5rem] items-center gap-1.5 rounded-full",
-        "border border-border/35 bg-muted/15 px-2 py-0.5",
+        "inline-flex max-w-[12rem] items-center gap-0.5 rounded-full",
+        "border border-border/35 bg-muted/15",
         "text-[11px] leading-none text-muted-foreground",
-        "transition-colors hover:border-border/55 hover:bg-muted/35 hover:text-foreground",
         className,
       )}
-      title={title}
-      aria-label={title}
     >
-      <span className="relative flex size-1.5 shrink-0" aria-hidden>
-        <span className="absolute inline-flex size-full animate-ping rounded-full bg-sky-400/40 opacity-60" />
-        <span className="relative inline-flex size-1.5 rounded-full bg-sky-400/90" />
-      </span>
-      <span className="min-w-0 truncate">{label}</span>
-      <ChevronRight
-        className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-50"
-        aria-hidden
-      />
-    </Link>
+      <Link
+        href={href}
+        className={cn(
+          "group inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-full py-0.5 pl-2",
+          singleRun ? "pr-0.5" : "pr-2",
+          "transition-colors hover:text-foreground",
+        )}
+        title={title}
+        aria-label={title}
+      >
+        <span className="relative flex size-1.5 shrink-0" aria-hidden>
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-sky-400/40 opacity-60" />
+          <span className="relative inline-flex size-1.5 rounded-full bg-sky-400/90" />
+        </span>
+        <span className="min-w-0 truncate">{label}</span>
+        <ChevronRight
+          className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-50"
+          aria-hidden
+        />
+      </Link>
+      {singleRun ? (
+        <button
+          type="button"
+          onClick={() => void cancelRun(singleRun.id)}
+          disabled={cancellingId === singleRun.id}
+          className="mr-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
+          aria-label={t("agents.cancelRun")}
+          title={t("agents.cancelRun")}
+        >
+          {cancellingId === singleRun.id ? (
+            <span className="size-2.5 animate-spin rounded-full border border-current border-t-transparent" />
+          ) : (
+            <StopCircle className="size-3" aria-hidden />
+          )}
+        </button>
+      ) : null}
+    </div>
   );
 }

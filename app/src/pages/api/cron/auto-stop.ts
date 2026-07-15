@@ -9,6 +9,7 @@ import {
   remoteStopEnvironment,
 } from "@/lib/environment-service-api";
 import { recordProjectActivityLog } from "@/lib/activity-log";
+import { resolveIdleStopMinutes } from "@/lib/user-workspace-settings";
 
 type AutoStopResult = { stopped: number; checked: number };
 
@@ -28,14 +29,21 @@ export default async function handler(
     return;
   }
 
-  const idleMinutes = Math.max(1, Number(process.env.IDLE_STOP_MINUTES ?? "30") || 30);
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { idleStopMinutes: true },
+  });
+  const idleMinutes = resolveIdleStopMinutes(user?.idleStopMinutes);
+  if (idleMinutes <= 0) {
+    res.status(200).json({ stopped: 0, checked: 0 });
+    return;
+  }
+
   const threshold = new Date(Date.now() - idleMinutes * 60_000);
 
-  // Find all RUNNING projects that haven't had activity since the threshold.
-  // Null lastActivityAt means we've never tracked activity — treat as idle if the project
-  // was last updated before the threshold too (safe fallback using updatedAt).
   const idleProjects = await prisma.project.findMany({
     where: {
+      userId: session.user.id,
       environmentStatus: "RUNNING",
       OR: [
         { lastActivityAt: { lt: threshold } },

@@ -28,6 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   return res.status(200).json({
     message: "If an account exists, a verification email was sent.",
-    devLink: process.env.NODE_ENV === "development" ? sent.devLink : undefined,
+    devLink:
+      process.env.NODE_ENV === "development" && sent.ok ? sent.devLink : undefined,
   });
 }

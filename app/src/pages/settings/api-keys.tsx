@@ -5,6 +5,7 @@ import type { GetServerSideProps } from "next";
 import { requireAuth } from "@/lib/auth-redirect";
 import { readJsonResponse } from "@/lib/read-json-response";
 import { useTranslation } from "@/components/ui/locale-provider";
+import { SettingsLayout } from "@/components/ui/settings/settings-layout";
 
 type ApiKeyRow = {
   key_id: string;
@@ -102,17 +103,10 @@ export default function ApiKeysPage() {
   }
 
   return (
-    <div>
+    <SettingsLayout title={t("apiKeys.title")} description={t("apiKeys.description")}>
       <div className="rounded-2xl border border-border/70 bg-card/80 p-6">
-        <div>
-          <p className="text-sm text-muted-foreground">{t("apiKeys.title")}</p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {t("apiKeys.description")}
-          </p>
-        </div>
-
         {createdKey ? (
-          <div className="mt-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
             <p className="font-medium text-foreground">{t("apiKeys.copyNewKeyTitle")}</p>
             <p className="mt-1 text-sm text-muted-foreground">
               {t("apiKeys.copyNewKeyBody")}
@@ -203,7 +197,7 @@ export default function ApiKeysPage() {
           )}
         </div>
       </div>
-    </div>
+    </SettingsLayout>
   );
 }
 

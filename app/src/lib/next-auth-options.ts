@@ -163,18 +163,42 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, trigger, session }) {
       if (user?.id) {
         token.id = user.id;
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { sessionVersion: true },
+          });
+          token.sessionVersion = dbUser?.sessionVersion ?? 0;
+        } catch {
+          token.sessionVersion = 0;
+        }
       }
 
       if (token.id) {
         try {
           const dbUser = await prisma.user.findUnique({
             where: { id: String(token.id) },
-            select: { preferredLocale: true, name: true, emailVerified: true, passwordHash: true },
+            select: {
+              preferredLocale: true,
+              name: true,
+              emailVerified: true,
+              passwordHash: true,
+              sessionVersion: true,
+            },
           });
           if (dbUser?.preferredLocale && isLocale(dbUser.preferredLocale)) {
             token.preferredLocale = dbUser.preferredLocale;
           }
           if (dbUser?.name) token.name = dbUser.name;
+          if (
+            typeof dbUser?.sessionVersion === "number" &&
+            typeof token.sessionVersion === "number" &&
+            token.sessionVersion !== dbUser.sessionVersion
+          ) {
+            token.blocked = true;
+          } else if (typeof dbUser?.sessionVersion === "number") {
+            token.sessionVersion = dbUser.sessionVersion;
+          }
           if (dbUser?.passwordHash && !dbUser.emailVerified) {
             token.blocked = true;
           } else {

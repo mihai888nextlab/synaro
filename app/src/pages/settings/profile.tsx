@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth/require-session";
 import { oauthErrorMessage } from "@/lib/auth-oauth-errors";
 import { useTranslation } from "@/components/ui/locale-provider";
+import { SettingsLayout } from "@/components/ui/settings/settings-layout";
 
 type ProfilePageProps = {
   linkedGoogle: boolean;
@@ -143,7 +144,8 @@ export default function ProfilePage({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <SettingsLayout title={t("nav.profile")} description={t("settings.profileCardDescription")}>
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-xl border border-border/70 bg-card/80 p-4">
             {isEditing ? (
@@ -255,6 +257,7 @@ export default function ProfilePage({
           ) : null}
         </div>
       </form>
+    </SettingsLayout>
   );
 }
 

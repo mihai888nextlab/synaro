@@ -1,6 +1,9 @@
 import { execSync } from "node:child_process";
 
+import { loadEnvFiles } from "./helpers/env";
 import { seedE2eDatabase } from "./helpers/seed";
+
+loadEnvFiles();
 
 export default async function globalSetup(): Promise<void> {
   if (!process.env.DATABASE_URL) {

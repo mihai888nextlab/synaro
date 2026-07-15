@@ -16,7 +16,39 @@ const RunSchema = z.object({
   runId: z.string().min(1),
 })
 
+const ResumeSchema = z.object({
+  runId: z.string().min(1),
+  mcpAuth: z.record(z.record(z.string())),
+})
+
 export const runRoutes: FastifyPluginAsync = async (app) => {
+  app.post('/resume', async (req, reply) => {
+    if (!requireServiceKey(req, reply)) return
+
+    const parsed = ResumeSchema.safeParse(req.body)
+    if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() })
+
+    const { runId, mcpAuth } = parsed.data
+
+    const run = await prisma.agentRun.findUnique({ where: { id: runId } })
+    if (!run) return reply.status(404).send({ error: 'Run not found' })
+    if (run.status === 'CANCELLED') {
+      return reply.status(409).send({ error: 'Run was cancelled' })
+    }
+    if (run.status !== 'NEEDS_INPUT') {
+      return reply.status(409).send({ error: `Run is ${run.status}, expected NEEDS_INPUT` })
+    }
+
+    const agent = await prisma.agent.findUnique({ where: { id: run.agentId } })
+    if (!agent) return reply.status(404).send({ error: 'Agent not found' })
+
+    void runReActLoop(run, agent, app.log, { mcpRuntimeAuth: mcpAuth }).catch((err) => {
+      app.log.error({ err, runId }, 'Unhandled error in resumed ReAct loop')
+    })
+
+    return reply.status(202).send({ ok: true, runId })
+  })
+
   app.post('/', async (req, reply) => {
     if (!requireServiceKey(req, reply)) return
 
@@ -27,6 +59,9 @@ export const runRoutes: FastifyPluginAsync = async (app) => {
 
     const run = await prisma.agentRun.findUnique({ where: { id: runId } })
     if (!run) return reply.status(404).send({ error: 'Run not found' })
+    if (run.status === 'CANCELLED') {
+      return reply.status(409).send({ error: 'Run was cancelled' })
+    }
     if (run.status !== 'PENDING') return reply.status(409).send({ error: `Run is already ${run.status}` })
 
     const agent = await prisma.agent.findUnique({ where: { id: run.agentId } })

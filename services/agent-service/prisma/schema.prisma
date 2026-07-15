@@ -15,6 +15,7 @@ model Agent {
   description  String?
   systemPrompt String
   tools        String[]   @default([])
+  toolMode     String     @default("auto")
   maxSteps     Int        @default(20)
   schedule     String?
   enabled      Boolean    @default(true)
@@ -50,6 +51,7 @@ model AgentRun {
   input      String?
   output     String?
   steps      Json?
+  credentialRequest Json?
   startedAt  DateTime?
   finishedAt DateTime?
   createdAt  DateTime  @default(now())

@@ -3,7 +3,16 @@ import type { FastifyBaseLogger } from 'fastify'
 import { kimi, resolveModel } from '../lib/kimi.js'
 import { prisma } from '../lib/prisma.js'
 import { assembleToolset, runTool, type ToolContext } from '../tools/index.js'
+import {
+  buildCredentialRequest,
+  McpCredentialRequiredError,
+  type McpRuntimeAuth,
+} from '../tools/mcp-credentials.js'
 import { Prisma, type Agent, type AgentRun } from '@prisma/client'
+
+export interface ReActLoopOptions {
+  mcpRuntimeAuth?: McpRuntimeAuth
+}
 
 export interface ReActStep {
   step: number
@@ -52,8 +61,8 @@ async function buildHistoryContext(agentId: string, currentRunId: string): Promi
 
 async function persistSteps(runId: string, steps: ReActStep[]): Promise<void> {
   try {
-    await prisma.agentRun.update({
-      where: { id: runId },
+    await prisma.agentRun.updateMany({
+      where: { id: runId, status: { not: 'CANCELLED' } },
       data: { steps: steps as unknown as Prisma.InputJsonValue },
     })
   } catch {
@@ -61,19 +70,21 @@ async function persistSteps(runId: string, steps: ReActStep[]): Promise<void> {
   }
 }
 
-async function persistSteps(runId: string, steps: ReActStep[]): Promise<void> {
-  await prisma.agentRun.update({
+async function isRunCancelled(runId: string): Promise<boolean> {
+  const row = await prisma.agentRun.findUnique({
     where: { id: runId },
-    data: { steps: steps as object[], status: 'RUNNING' },
+    select: { status: true },
   })
+  return row?.status === 'CANCELLED'
 }
 
 async function notifyComplete(
   runId: string,
-  status: 'DONE' | 'FAILED',
+  status: 'DONE' | 'FAILED' | 'CANCELLED',
   output: string,
   steps: ReActStep[],
 ): Promise<void> {
+  if (await isRunCancelled(runId)) return
   try {
     await fetch(`${agentServiceUrl()}/api/webhook/run-complete`, {
       method: 'POST',
@@ -88,16 +99,61 @@ async function notifyComplete(
   }
 }
 
-export async function runReActLoop(run: AgentRun, agent: Agent, log: FastifyBaseLogger): Promise<void> {
-  await prisma.agentRun.update({
-    where: { id: run.id },
-    data: { status: 'RUNNING', startedAt: new Date() },
-  })
+export async function runReActLoop(
+  run: AgentRun,
+  agent: Agent,
+  log: FastifyBaseLogger,
+  options?: ReActLoopOptions,
+): Promise<void> {
+  let toolset: Awaited<ReturnType<typeof assembleToolset>> | undefined
 
-  const toolset = await assembleToolset(agent, log)
   try {
+    if (await isRunCancelled(run.id)) return
+
+    await prisma.agentRun.updateMany({
+      where: { id: run.id, status: { not: 'CANCELLED' } },
+      data: { status: 'RUNNING', startedAt: new Date(), credentialRequest: Prisma.DbNull },
+    })
+
+    if (await isRunCancelled(run.id)) return
+
+    try {
+      toolset = await assembleToolset(agent, log, options?.mcpRuntimeAuth)
+    } catch (err) {
+      if (err instanceof McpCredentialRequiredError) {
+        await prisma.agentRun.update({
+          where: { id: run.id },
+          data: {
+            status: 'NEEDS_INPUT',
+            credentialRequest: buildCredentialRequest(err.serverName, err.serverUrl) as unknown as Prisma.InputJsonValue,
+          },
+        })
+        return
+      }
+      throw err
+    }
+
     if (toolset.tools.length === 0) {
       await notifyComplete(run.id, 'FAILED', 'Agent has no tools enabled', [])
+      return
+    }
+
+    const hasNonMcpTools = toolset.tools.some((t) => {
+      const name = t.definition.function.name
+      return name !== 'finish' && !name.startsWith('mcp__')
+    })
+
+    if (toolset.wantsMcp && toolset.mcpToolCount === 0 && !hasNonMcpTools) {
+      const detail =
+        toolset.mcpErrors.length > 0
+          ? toolset.mcpErrors.join(' ')
+          : 'Check server URLs and auth headers in the agent MCP config.'
+      await notifyComplete(
+        run.id,
+        'FAILED',
+        `Could not connect to any MCP server. ${detail}`,
+        [],
+      )
       return
     }
 
@@ -115,6 +171,8 @@ export async function runReActLoop(run: AgentRun, agent: Agent, log: FastifyBase
     const steps: ReActStep[] = []
 
     for (let step = 0; step < agent.maxSteps; step++) {
+      if (await isRunCancelled(run.id)) return
+
       let response: OpenAI.ChatCompletion
       try {
         response = await callKimiWithRetry(model, messages, definitions)
@@ -138,6 +196,8 @@ export async function runReActLoop(run: AgentRun, agent: Agent, log: FastifyBase
       messages.push(assistantMsg)
 
       for (const call of toolCalls) {
+        if (await isRunCancelled(run.id)) return
+
         let args: Record<string, unknown> = {}
         try {
           args = JSON.parse(call.function.arguments) as Record<string, unknown>
@@ -159,7 +219,11 @@ export async function runReActLoop(run: AgentRun, agent: Agent, log: FastifyBase
     }
 
     await notifyComplete(run.id, 'FAILED', 'Max steps reached without finishing', steps)
+  } catch (err) {
+    log.error({ err, runId: run.id }, 'ReAct loop failed')
+    const message = err instanceof Error ? err.message : String(err)
+    await notifyComplete(run.id, 'FAILED', `Runner error: ${message}`, [])
   } finally {
-    await toolset.close()
+    if (toolset) await toolset.close()
   }
 }

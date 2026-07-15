@@ -2,20 +2,21 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, StopCircle } from "lucide-react";
 
 import { AgentRunSteps } from "@/components/ui/agents/agent-run-steps";
 import { AgentStatusBadge } from "@/components/ui/agents/agent-status-badge";
+import { useAgentBackgroundRuns } from "@/components/ui/agent-background-runs";
 import { MarkdownLite } from "@/components/ui/markdown-lite";
 import { useTranslation } from "@/components/ui/locale-provider";
-import type { AgentRun } from "@/lib/agents/agent-types";
-import type { ReActStep } from "@/lib/agents/react-step";
+import type { AgentRun, McpCredentialRequest } from "@/lib/agents/agent-types";
+import { normalizeSteps } from "@/lib/agents/run-preview";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 2_000;
 
 function isActiveStatus(status: string) {
-  return status === "PENDING" || status === "RUNNING";
+  return status === "PENDING" || status === "RUNNING" || status === "NEEDS_INPUT";
 }
 
 function formatTimestamp(value?: string | null): string | null {
@@ -23,17 +24,6 @@ function formatTimestamp(value?: string | null): string | null {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return date.toLocaleString();
-}
-
-function normalizeSteps(steps: AgentRun["steps"]): ReActStep[] {
-  if (!Array.isArray(steps)) return [];
-  return steps.filter(
-    (step): step is ReActStep =>
-      typeof step === "object" &&
-      step !== null &&
-      typeof (step as ReActStep).step === "number" &&
-      typeof (step as ReActStep).tool === "string",
-  );
 }
 
 type AgentRunDetailPageClientProps = {
@@ -48,10 +38,17 @@ export function AgentRunDetailPageClient({
   agentName: initialAgentName,
 }: AgentRunDetailPageClientProps) {
   const { t } = useTranslation();
+  const { refreshSoon } = useAgentBackgroundRuns();
   const [run, setRun] = useState<AgentRun | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [credentialValues, setCredentialValues] = useState<Record<string, string>>({});
+  const [submittingCredentials, setSubmittingCredentials] = useState(false);
+  const [credentialError, setCredentialError] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const credentialsSectionRef = useRef<HTMLElement | null>(null);
 
   const fetchRun = useCallback(async () => {
     try {
@@ -85,6 +82,89 @@ export function AgentRunDetailPageClient({
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [run?.status, fetchRun]);
+
+  useEffect(() => {
+    const req = run?.credentialRequest;
+    if (!req?.fields?.length) {
+      setCredentialValues({});
+      return;
+    }
+    setCredentialValues((prev) => {
+      const next: Record<string, string> = {};
+      for (const field of req.fields) {
+        next[field.key] = prev[field.key] ?? "";
+      }
+      return next;
+    });
+  }, [run?.credentialRequest]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.location.hash !== "#run-credentials") return;
+    if (run?.status !== "NEEDS_INPUT" || !run.credentialRequest) return;
+
+    const section = credentialsSectionRef.current;
+    if (!section) return;
+
+    section.scrollIntoView({ behavior: "smooth", block: "start" });
+    const firstInput = section.querySelector<HTMLInputElement>("input");
+    firstInput?.focus({ preventScroll: true });
+  }, [run?.status, run?.credentialRequest]);
+
+  const submitCredentials = async (req: McpCredentialRequest) => {
+    setSubmittingCredentials(true);
+    setCredentialError("");
+    try {
+      const headers: Record<string, string> = {};
+      for (const field of req.fields) {
+        const value = credentialValues[field.key]?.trim();
+        if (!value) {
+          setCredentialError(t("agents.credentialsRequired"));
+          return;
+        }
+        headers[field.key] = value.startsWith("Bearer ") ? value : `Bearer ${value}`;
+      }
+
+      const res = await fetch(`/api/agents/runs/${encodeURIComponent(runId)}/credentials`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mcpAuth: { [req.server]: headers } }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setCredentialError(data.error ?? t("agents.credentialsSubmitFailed"));
+        return;
+      }
+      setCredentialValues({});
+      await fetchRun();
+    } catch {
+      setCredentialError(t("agents.credentialsSubmitFailed"));
+    } finally {
+      setSubmittingCredentials(false);
+    }
+  };
+
+  const cancelRun = async () => {
+    if (!window.confirm(t("agents.cancelRunConfirm"))) return;
+    setCancelling(true);
+    setCancelError("");
+    try {
+      const res = await fetch(`/api/agents/runs/${encodeURIComponent(runId)}/cancel`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setCancelError(data.error ?? t("agents.cancelRunFailed"));
+        return;
+      }
+      refreshSoon();
+      await fetchRun();
+    } catch {
+      setCancelError(t("agents.cancelRunFailed"));
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   const displayName = initialAgentName?.trim() || t("agents.runDetailTitle");
   const steps = normalizeSteps(run?.steps);
@@ -123,8 +203,28 @@ export function AgentRunDetailPageClient({
                     {run.trigger}
                   </p>
                 </div>
-                <AgentStatusBadge status={run.status} />
+                <div className="flex flex-wrap items-center gap-2">
+                  {isLive ? (
+                    <button
+                      type="button"
+                      onClick={() => void cancelRun()}
+                      disabled={cancelling}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-1.5 text-xs font-medium text-red-400 transition hover:bg-red-500/10 disabled:opacity-50"
+                    >
+                      {cancelling ? (
+                        <Loader2 className="size-3 animate-spin" aria-hidden />
+                      ) : (
+                        <StopCircle className="size-3" aria-hidden />
+                      )}
+                      {t("agents.cancelRun")}
+                    </button>
+                  ) : null}
+                  <AgentStatusBadge status={run.status} />
+                </div>
               </div>
+              {cancelError ? (
+                <p className="mt-3 text-xs text-red-400">{cancelError}</p>
+              ) : null}
               <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
                 {startedAt ? (
                   <div>
@@ -150,6 +250,51 @@ export function AgentRunDetailPageClient({
               </section>
             ) : null}
 
+            {run.status === "NEEDS_INPUT" && run.credentialRequest ? (
+              <section
+                id="run-credentials"
+                ref={credentialsSectionRef}
+                className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 sm:p-6"
+              >
+                <h2 className="text-sm font-medium text-foreground">{t("agents.credentialsTitle")}</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {t("agents.credentialsPrompt", { server: run.credentialRequest.server })}
+                </p>
+                <form
+                  className="mt-4 flex flex-col gap-3"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void submitCredentials(run.credentialRequest!);
+                  }}
+                >
+                  {run.credentialRequest.fields.map((field) => (
+                    <div key={field.key} className="flex flex-col gap-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">{field.label}</label>
+                      <input
+                        type={field.type === "password" ? "password" : "text"}
+                        autoComplete="off"
+                        value={credentialValues[field.key] ?? ""}
+                        onChange={(e) =>
+                          setCredentialValues((prev) => ({ ...prev, [field.key]: e.target.value }))
+                        }
+                        placeholder={field.placeholder}
+                        className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+                  ))}
+                  {credentialError ? <p className="text-xs text-red-400">{credentialError}</p> : null}
+                  <button
+                    type="submit"
+                    disabled={submittingCredentials}
+                    className="inline-flex w-fit items-center gap-2 rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background transition hover:opacity-90 disabled:opacity-50"
+                  >
+                    {submittingCredentials ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                    {t("agents.credentialsSubmit")}
+                  </button>
+                </form>
+              </section>
+            ) : null}
+
             <section className="rounded-xl border border-border/70 bg-card p-5 sm:p-6">
               <div className="mb-4 flex items-center justify-between gap-2">
                 <h2 className="text-sm font-medium text-foreground">{t("agents.runSteps")}</h2>
@@ -167,15 +312,35 @@ export function AgentRunDetailPageClient({
             </section>
 
             {run.output?.trim() ? (
-              <section className="rounded-xl border border-border/70 bg-card p-5 sm:p-6">
-                <h2 className="text-sm font-medium text-foreground">{t("agents.runOutput")}</h2>
-                <div
-                  className={cn(
-                    "mt-3 max-h-[32rem] overflow-auto rounded-lg border border-border/50 bg-muted/30 p-4",
-                  )}
-                >
-                  <MarkdownLite text={run.output} />
-                </div>
+              <section
+                className={cn(
+                  "rounded-xl border p-5 sm:p-6",
+                  run.status === "FAILED"
+                    ? "border-red-500/30 bg-red-500/5"
+                    : run.status === "CANCELLED"
+                      ? "border-border/70 bg-muted/30"
+                      : "border-border/70 bg-card",
+                )}
+              >
+                <h2 className="text-sm font-medium text-foreground">
+                  {run.status === "FAILED"
+                    ? t("agents.runError")
+                    : run.status === "CANCELLED"
+                      ? t("agents.statusCancelled")
+                      : t("agents.runOutput")}
+                </h2>
+                {run.status === "FAILED" ? (
+                  <p className="mt-3 max-h-[32rem] overflow-auto whitespace-pre-wrap text-sm leading-relaxed text-red-400">
+                    {run.output}
+                  </p>
+                ) : run.status === "CANCELLED" ? (
+                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{run.output}</p>
+                ) : (
+                  <MarkdownLite
+                    text={run.output}
+                    className="mt-3 max-h-[32rem] overflow-auto"
+                  />
+                )}
               </section>
             ) : null}
           </div>

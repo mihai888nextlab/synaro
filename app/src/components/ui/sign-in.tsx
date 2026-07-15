@@ -237,6 +237,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute inset-y-0 right-3 flex items-center"
+                      aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
                     >
                       {showPassword ? (
                         <EyeOff className="size-5 text-zinc-500 transition-colors hover:text-white" />
@@ -310,7 +311,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
 
             <div className="relative flex items-center justify-center">
               <span className="w-full border-t border-white/10" />
-              <span className="absolute bg-black px-4 text-sm text-zinc-500">
+              <span className="absolute bg-black px-4 text-sm text-zinc-400">
                 {t("auth.orContinueWith")}
               </span>
             </div>
@@ -352,7 +353,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
               </p>
             ) : null}
 
-            <p className="text-center text-sm text-zinc-500">
+            <p className="text-center text-sm text-zinc-400">
               {footerPrompt}{" "}
               {footerActionHref ? (
                 <Link href={footerActionHref} className="text-violet-400 transition-colors hover:underline">

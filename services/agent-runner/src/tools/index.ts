@@ -6,14 +6,14 @@ import { workspaceTools } from './workspace.js'
 import { subAgentTools } from './sub-agent.js'
 import { memoryTools } from './memory.js'
 import { buildMcpTools } from './mcp.js'
+import type { McpRuntimeAuth } from './mcp-credentials.js'
 import type { AgentTool, ToolContext } from './types.js'
 
 export type { ToolContext } from './types.js'
 
-/** Marker in an agent's `tools` list that enables its configured MCP servers. */
+/** Marker in manual mode that enables configured MCP servers. */
 export const MCP_TOOL_NAME = 'mcp'
 
-/** Built-in tools (web + HTTP + the terminal `finish` signal). */
 const builtinTools: AgentTool[] = [
   {
     definition: {
@@ -89,7 +89,6 @@ const builtinTools: AgentTool[] = [
   },
 ]
 
-/** Every statically-defined tool. MCP tools are added dynamically per run. */
 export const STATIC_TOOLS: AgentTool[] = [
   ...builtinTools,
   ...synaroPlatformTools,
@@ -98,42 +97,72 @@ export const STATIC_TOOLS: AgentTool[] = [
   ...memoryTools,
 ]
 
-/** All valid tool names an agent may enable (static tools + the `mcp` marker). */
 export const VALID_TOOL_NAMES: string[] = [
   ...STATIC_TOOLS.map((t) => t.definition.function.name),
   MCP_TOOL_NAME,
 ]
 
 export interface Toolset {
-  /** Enabled tools for this run (static allow-listed + MCP), as OpenAI definitions. */
   tools: AgentTool[]
   byName: Map<string, AgentTool>
   close: () => Promise<void>
+  wantsMcp: boolean
+  mcpToolCount: number
+  mcpErrors: string[]
 }
 
 interface AgentToolConfig {
   tools: string[]
+  toolMode?: string | null
   mcpServers: unknown
+}
+
+function hasMcpServers(raw: unknown): boolean {
+  return Array.isArray(raw) && raw.length > 0
+}
+
+function isAutoMode(agent: AgentToolConfig): boolean {
+  return agent.toolMode !== 'manual'
 }
 
 /** Build the concrete toolset for a run from the agent's config. */
 export async function assembleToolset(
   agent: AgentToolConfig,
   log: FastifyBaseLogger,
+  mcpRuntimeAuth?: McpRuntimeAuth,
 ): Promise<Toolset> {
-  const enabled = STATIC_TOOLS.filter((t) => agent.tools.includes(t.definition.function.name))
+  const auto = isAutoMode(agent)
+  const finishTool = STATIC_TOOLS.find((t) => t.definition.function.name === 'finish')!
+  const enabled = auto
+    ? STATIC_TOOLS
+    : STATIC_TOOLS.filter((t) => agent.tools.includes(t.definition.function.name))
 
   let mcpTools: AgentTool[] = []
+  let mcpErrors: string[] = []
   let close: () => Promise<void> = async () => {}
-  if (agent.tools.includes(MCP_TOOL_NAME) && agent.mcpServers) {
-    const session = await buildMcpTools(agent.mcpServers, log)
+
+  const wantsMcp = auto
+    ? hasMcpServers(agent.mcpServers)
+    : agent.tools.includes(MCP_TOOL_NAME)
+
+  if (wantsMcp && agent.mcpServers) {
+    const session = await buildMcpTools(agent.mcpServers, log, mcpRuntimeAuth, {
+      promptForCredentials: true,
+    })
     mcpTools = session.tools
+    mcpErrors = session.errors
     close = session.close
+  } else if (wantsMcp && !auto) {
+    mcpErrors = ['No MCP servers configured — add a JSON array with name and url.']
   }
 
   const tools = [...enabled, ...mcpTools]
+  if (!tools.some((t) => t.definition.function.name === 'finish')) {
+    tools.push(finishTool)
+  }
+
   const byName = new Map(tools.map((t) => [t.definition.function.name, t]))
-  return { tools, byName, close }
+  return { tools, byName, close, wantsMcp, mcpToolCount: mcpTools.length, mcpErrors }
 }
 
 export async function runTool(

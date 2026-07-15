@@ -27,6 +27,13 @@ model User {
   dashboardLayout      Json?
   dashboardLayoutVersion Int @default(1)
   preferredLocale      String @default("en")
+  /// Minutes of inactivity before idle environments auto-stop; 0 disables.
+  idleStopMinutes        Int    @default(30)
+  defaultAgentModel      String?
+  defaultAgentMaxSteps   Int?
+  defaultAgentToolMode   String?
+  /// Bumped to invalidate all JWT sessions ("sign out everywhere").
+  sessionVersion         Int    @default(0)
 }
 
 /// Per-user API keys for `/api/v1` (Bearer auth). Only `keyHash` is stored.

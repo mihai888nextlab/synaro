@@ -1,7 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 import path from "node:path";
 
+import { e2eBaseUrl, e2ePort, loadEnvFiles } from "./e2e/helpers/env";
+
+loadEnvFiles();
+
 const authFile = path.join(__dirname, "e2e/.auth/user.json");
+const port = e2ePort();
+const baseURL = e2eBaseUrl();
 
 const guestSpecs = /(public|auth|documentation)\.spec\.ts/;
 const authenticatedSpecs = /(settings|dashboard|projects|project-workspace|agents|global-search)\.spec\.ts/;
@@ -12,6 +18,10 @@ const browsers = [
   { name: "webkit", use: devices["Desktop Safari"] },
 ] as const;
 
+const webServerCommand = process.env.CI
+  ? `PORT=${port} npm run start`
+  : `PORT=${port} npm run build && PORT=${port} npm run start`;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -20,7 +30,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [["github"], ["list"]] : "list",
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
+    baseURL,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
@@ -54,9 +64,14 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: process.env.CI ? "npm run start" : "npm run build && npm run start",
-    url: "http://localhost:3000",
-    reuseExistingServer: !process.env.CI,
+    command: webServerCommand,
+    url: baseURL,
+    reuseExistingServer: false,
     timeout: 180_000,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      NEXTAUTH_URL: process.env.NEXTAUTH_URL ?? baseURL,
+    },
   },
 });

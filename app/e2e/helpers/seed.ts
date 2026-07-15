@@ -83,3 +83,15 @@ export async function seedE2eDatabase(): Promise<void> {
     await prisma.$disconnect();
   }
 }
+
+export async function resetE2eUserSettingsState(): Promise<void> {
+  const prisma = new PrismaClient();
+  try {
+    const user = await prisma.user.findUnique({ where: { email: E2E_USER_EMAIL } });
+    if (!user) return;
+    await prisma.user.update({ where: { id: user.id }, data: { name: E2E_USER_NAME } });
+    await prisma.apiKey.deleteMany({ where: { userId: user.id } });
+  } finally {
+    await prisma.$disconnect();
+  }
+}

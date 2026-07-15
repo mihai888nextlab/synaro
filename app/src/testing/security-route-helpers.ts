@@ -1,12 +1,10 @@
 /** @jest-environment node */
 
-import { createMocks } from "node-mocks-http";
+import { createMocks, type Body, type RequestMethod } from "node-mocks-http";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
 
 import { prisma } from "@/lib/prisma";
-
-import type { RequestMethod, Body } from 'node-mocks-http'
 
 export const SECURITY_USER_A = "security-user-a";
 export const SECURITY_USER_B = "security-user-b";
@@ -29,7 +27,7 @@ type Handler = (req: NextApiRequest, res: NextApiResponse) => Promise<void | unk
 export async function invokeRoute(
   handler: Handler,
   options: {
-    method: string;
+    method: NextApiRequest["method"];
     query?: Record<string, string>;
     body?: unknown;
     headers?: Record<string, string>;
@@ -48,7 +46,7 @@ export async function invokeRoute(
 export async function expectUnauthorized(
   handler: Handler,
   options: {
-    method: string;
+    method: NextApiRequest["method"];
     query?: Record<string, string>;
     body?: unknown;
   },
@@ -66,7 +64,7 @@ export async function expectUnauthorized(
 export async function expectProjectNotFound(
   handler: Handler,
   options: {
-    method: string;
+    method: NextApiRequest["method"];
     query?: Record<string, string>;
     body?: unknown;
   },

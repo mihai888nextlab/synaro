@@ -5,6 +5,7 @@ import type { GetServerSideProps } from "next";
 import { useLocale } from "@/components/ui/locale-provider";
 import { useTheme, type ThemeMode } from "@/components/ui/theme-provider";
 import { LOCALE_LABELS, type Locale } from "@/i18n/config";
+import { SettingsLayout } from "@/components/ui/settings/settings-layout";
 import { requireAuth } from "@/lib/auth-redirect";
 
 const themeOptions: Array<{
@@ -51,6 +52,10 @@ export default function PreferencesPage() {
       });
 
   return (
+    <SettingsLayout
+      title={t("settings.preferencesTitle")}
+      description={t("settings.preferencesCardDescription")}
+    >
     <div className="flex flex-col gap-6">
       <div className="rounded-2xl border border-border/70 bg-card/80 p-6">
         <div className="flex items-center gap-2">
@@ -141,6 +146,7 @@ export default function PreferencesPage() {
         </div>
       </div>
     </div>
+    </SettingsLayout>
   );
 }
 

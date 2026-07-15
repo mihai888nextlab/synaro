@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
 import { proxyAgentService } from "@/lib/public-api/agent-proxy";
+import { sanitizePublicAgentBody } from "@/lib/public-api/sanitize-agent-body";
 import { requirePublicApiAuth } from "@/lib/public-api-auth";
 import { requireMethod } from "@/lib/public-api/method";
 import { toSnakeCaseJson } from "@/lib/public-api/serialize";
@@ -21,9 +22,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === "PATCH") {
+      const sanitized = sanitizePublicAgentBody((req.body ?? {}) as Record<string, unknown>);
+      if (!sanitized.ok) return res.status(400).json({ error: sanitized.error });
+
       const { status, body } = await proxyAgentService(`/api/agents/${agentId}`, {
         method: "PATCH",
-        body: JSON.stringify(req.body ?? {}),
+        body: JSON.stringify(sanitized.body),
       });
       return res.status(status).json(toSnakeCaseJson(body));
     }

@@ -1,64 +1,57 @@
-import Link from "next/link";
 import type { GetServerSideProps } from "next";
+import { KeyRound, Shield, Sparkles, UserRound, Wrench } from "lucide-react";
 
+import {
+  SettingsLayout,
+  SettingsOverviewCard,
+} from "@/components/ui/settings/settings-layout";
 import { useTranslation } from "@/components/ui/locale-provider";
 import { requireAuth } from "@/lib/auth-redirect";
 
 export default function SettingsPage() {
   const { t } = useTranslation();
 
-  const placeholders = [
-    { key: "settings.workspace", name: "workspace" },
-    { key: "settings.security", name: "security" },
-    { key: "settings.billing", name: "billing" },
-    { key: "settings.integrations", name: "integrations" },
+  const cards = [
+    {
+      href: "/settings/profile",
+      title: t("nav.profile"),
+      description: t("settings.profileCardDescription"),
+      icon: UserRound,
+    },
+    {
+      href: "/settings/preferences",
+      title: t("nav.preferences"),
+      description: t("settings.preferencesCardDescription"),
+      icon: Sparkles,
+    },
+    {
+      href: "/settings/workspace",
+      title: t("settings.workspace"),
+      description: t("settings.workspaceCardDescription"),
+      icon: Wrench,
+    },
+    {
+      href: "/settings/security",
+      title: t("settings.security"),
+      description: t("settings.securityCardDescription"),
+      icon: Shield,
+    },
+    {
+      href: "/settings/api-keys",
+      title: t("nav.apiKeys"),
+      description: t("settings.apiKeysCardDescription"),
+      icon: KeyRound,
+    },
   ] as const;
 
   return (
-    <div>
-      <div className="rounded-2xl border border-border/70 bg-card/80 p-6">
-        <p className="text-sm text-muted-foreground">{t("settings.title")}</p>
-        <p className="mt-2 text-muted-foreground">{t("settings.placeholder")}</p>
-
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Link
-            href="/settings/profile"
-            className="inline-flex items-center rounded-full border border-border/70 bg-card/70 px-4 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-          >
-            {t("nav.profile")}
-          </Link>
-          <Link
-            href="/settings/preferences"
-            className="inline-flex items-center rounded-full border border-border/70 bg-card/70 px-4 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-          >
-            {t("nav.preferences")}
-          </Link>
-          <Link
-            href="/settings/api-keys"
-            className="inline-flex items-center rounded-full border border-border/70 bg-card/70 px-4 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-          >
-            {t("nav.apiKeys")}
-          </Link>
-        </div>
-
-        <div className="mt-6 grid gap-3 md:grid-cols-2">
-          {placeholders.map((entry) => (
-            <div key={entry.name} className="rounded-xl border border-border/70 bg-muted p-4">
-              <p className="font-medium">{t(entry.key)}</p>
-              <p className="mt-1 text-sm text-muted-foreground/70">
-                {entry.name === "security" ? (
-                  <Link href="/settings/api-keys" className="underline-offset-4 hover:underline">
-                    {t("settings.manageApiKeys")}
-                  </Link>
-                ) : (
-                  t("common.comingSoon")
-                )}
-              </p>
-            </div>
-          ))}
-        </div>
+    <SettingsLayout title={t("settings.title")} description={t("settings.hubDescription")}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {cards.map((card) => (
+          <SettingsOverviewCard key={card.href} {...card} />
+        ))}
       </div>
-    </div>
+    </SettingsLayout>
   );
 }
 

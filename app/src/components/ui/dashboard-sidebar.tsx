@@ -231,17 +231,17 @@ export function DashboardSidebar({
                 {status === "loading" ? (
                   <>
                     <p className="truncate text-sm font-medium text-foreground">{t("common.loading")}</p>
-                    <p className="text-xs text-muted-foreground/70">{t("nav.account")}</p>
+                    <p className="text-xs text-muted-foreground">{t("nav.account")}</p>
                   </>
                 ) : status === "authenticated" ? (
                   <>
                     <p className="truncate text-sm font-medium text-foreground">{email}</p>
-                    <p className="text-xs text-muted-foreground/70">{t("nav.account")}</p>
+                    <p className="text-xs text-muted-foreground">{t("nav.account")}</p>
                   </>
                 ) : (
                   <>
                     <p className="truncate text-sm font-medium text-foreground">{t("nav.notSignedIn")}</p>
-                    <p className="text-xs text-muted-foreground/70">{t("nav.account")}</p>
+                    <p className="text-xs text-muted-foreground">{t("nav.account")}</p>
                   </>
                 )}
               </div>

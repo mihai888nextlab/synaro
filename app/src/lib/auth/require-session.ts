@@ -1,4 +1,4 @@
-import type { GetServerSidePropsContext, GetServerSidePropsResult } from "next";
+import type { GetServerSidePropsContext } from "next";
 import { getServerSession } from "next-auth/next";
 
 import { authOptions } from "@/lib/next-auth-options";
@@ -6,7 +6,10 @@ import { isUserEmailVerified } from "@/lib/auth/verification";
 
 export async function requireSession(
   ctx: GetServerSidePropsContext,
-): Promise<{ userId: string } | GetServerSidePropsResult<never>> {
+): Promise<
+  | { userId: string }
+  | { redirect: { destination: string; permanent: boolean } }
+> {
   const session = await getServerSession(ctx.req, ctx.res, authOptions);
   if (!session?.user?.id) {
     return { redirect: { destination: "/login", permanent: false } };

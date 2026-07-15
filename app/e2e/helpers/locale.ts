@@ -8,7 +8,7 @@ export async function useEnglishLocale(page: Page) {
     {
       name: LOCALE_COOKIE,
       value: "en",
-      url: "http://localhost:3000",
+      url: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3100",
     },
   ]);
   await page.addInitScript(() => {

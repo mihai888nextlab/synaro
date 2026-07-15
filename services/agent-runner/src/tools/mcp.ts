@@ -3,16 +3,12 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import type { FastifyBaseLogger } from 'fastify'
 import type { AgentTool } from './types.js'
-
-/**
- * MCP client integration. An agent may declare external MCP servers in its
- * `mcpServers` config; at run time we connect to each, discover its tools, and
- * expose them to the model as `mcp__{server}__{tool}`. A failed server is logged
- * and skipped so it never aborts the whole run. Sessions are closed after the run.
- *
- * This is an external trust surface — the agent's owner is responsible for the
- * servers they configure.
- */
+import {
+  isAuthError,
+  McpCredentialRequiredError,
+  mergeServerHeaders,
+  type McpRuntimeAuth,
+} from './mcp-credentials.js'
 
 export interface McpServerConfig {
   name: string
@@ -24,6 +20,7 @@ export interface McpServerConfig {
 export interface McpSession {
   tools: AgentTool[]
   close: () => Promise<void>
+  errors: string[]
 }
 
 function parseServers(raw: unknown): McpServerConfig[] {
@@ -70,12 +67,39 @@ async function connect(cfg: McpServerConfig): Promise<Client> {
   return client
 }
 
-export async function buildMcpTools(raw: unknown, log: FastifyBaseLogger): Promise<McpSession> {
+export async function buildMcpTools(
+  raw: unknown,
+  log: FastifyBaseLogger,
+  runtimeAuth?: McpRuntimeAuth,
+  options?: { promptForCredentials?: boolean },
+): Promise<McpSession> {
   const servers = parseServers(raw)
   const clients: Client[] = []
   const tools: AgentTool[] = []
+  const errors: string[] = []
 
-  for (const cfg of servers) {
+  if (servers.length === 0) {
+    errors.push('No MCP servers configured — add a JSON array with name and url.')
+    return {
+      tools,
+      errors,
+      close: async () => {
+        for (const c of clients) {
+          try {
+            await c.close()
+          } catch {
+            /* best-effort */
+          }
+        }
+      },
+    }
+  }
+
+  for (const baseCfg of servers) {
+    const mergedHeaders = mergeServerHeaders(baseCfg, runtimeAuth)
+    const cfg: McpServerConfig = mergedHeaders ? { ...baseCfg, headers: mergedHeaders } : baseCfg
+    const hasRuntimeAuth = Boolean(runtimeAuth?.[baseCfg.name]?.Authorization)
+
     try {
       const client = await connect(cfg)
       clients.push(client)
@@ -106,12 +130,18 @@ export async function buildMcpTools(raw: unknown, log: FastifyBaseLogger): Promi
       }
       log.info({ server: cfg.name, tools: listed.tools.length }, 'MCP server connected')
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (options?.promptForCredentials && isAuthError(err) && !hasRuntimeAuth && !cfg.headers?.Authorization) {
+        throw new McpCredentialRequiredError(baseCfg.name, baseCfg.url, err)
+      }
+      errors.push(`${baseCfg.name}: ${msg}`)
       log.error({ err, server: cfg.name }, 'Failed to connect to MCP server — skipping')
     }
   }
 
   return {
     tools,
+    errors,
     close: async () => {
       for (const c of clients) {
         try {
@@ -123,3 +153,6 @@ export async function buildMcpTools(raw: unknown, log: FastifyBaseLogger): Promi
     },
   }
 }
+
+export { McpCredentialRequiredError } from './mcp-credentials.js'
+export type { McpRuntimeAuth } from './mcp-credentials.js'

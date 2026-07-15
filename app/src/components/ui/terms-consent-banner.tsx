@@ -49,7 +49,7 @@ export function TermsConsentBanner() {
 
   return (
     <>
-      <aside
+      <div
         role="dialog"
         aria-labelledby="terms-consent-title"
         aria-describedby="terms-consent-summary"
@@ -87,7 +87,7 @@ export function TermsConsentBanner() {
             {t("termsConsent.readTerms")}
           </Button>
         </div>
-      </aside>
+      </div>
 
       <Dialog open={termsOpen} onOpenChange={setTermsOpen}>
         <DialogContent

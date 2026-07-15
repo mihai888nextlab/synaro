@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-import { E2E_USER_EMAIL, E2E_USER_NAME } from "./helpers/seed";
+import { E2E_USER_EMAIL, E2E_USER_NAME, resetE2eUserSettingsState } from "./helpers/seed";
 import { useEnglishLocale } from "./helpers/locale";
 
 test.describe("Settings", () => {
   test.beforeEach(async ({ page }) => {
+    await resetE2eUserSettingsState();
     await useEnglishLocale(page);
   });
 
@@ -31,7 +32,22 @@ test.describe("Settings", () => {
     await expect(secretBanner).toHaveText(/sk_live_/);
 
     await page.getByRole("button", { name: "Dismiss" }).click();
-    await expect(page.getByText("Playwright E2E Key")).toBeVisible();
+    await expect(page.getByRole("main").getByText("Playwright E2E Key")).toBeVisible();
     await expect(page.locator("ul code").filter({ hasText: /^sk_live_/ })).toBeVisible();
+  });
+
+  test("workspace settings page loads and toggles idle auto-stop", async ({ page }) => {
+    await page.goto("/settings/workspace");
+    await expect(page.getByRole("heading", { name: "Workspace" })).toBeVisible();
+    await expect(page.getByText("Idle environment auto-stop")).toBeVisible();
+    await page.getByRole("button", { name: "60 minutes" }).click();
+    await expect(page.getByRole("button", { name: "60 minutes" })).toHaveClass(/bg-muted/);
+  });
+
+  test("security settings page shows password and API keys link", async ({ page }) => {
+    await page.goto("/settings/security");
+    await expect(page.getByRole("heading", { name: "Security" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Manage API keys" })).toBeVisible();
+    await expect(page.getByLabel("New password")).toBeVisible();
   });
 });

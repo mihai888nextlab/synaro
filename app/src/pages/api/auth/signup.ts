@@ -46,6 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   return res.status(201).json({
     message: "Check your email to verify your account before signing in.",
     email: cleanEmail,
-    devLink: process.env.NODE_ENV === "development" ? sent.devLink : undefined,
+    devLink:
+      process.env.NODE_ENV === "development" && sent.ok ? sent.devLink : undefined,
   });
 }

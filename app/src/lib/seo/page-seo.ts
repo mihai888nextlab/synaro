@@ -40,6 +40,49 @@ export function pricingPageSeo(): PageSeoProps {
   };
 }
 
+export function aboutPageSeo(): PageSeoProps {
+  return {
+    title: "About",
+    description:
+      "Synaro is an AI dev workspace from Timișoara, Romania — built by Cristian Stiegelbauer and Mihai Gorunescu.",
+    path: "/about",
+    ogType: "site",
+  };
+}
+
+export function contactPageSeo(): PageSeoProps {
+  return {
+    title: "Contact",
+    description: "Get in touch with the Synaro team at cristi@synaro.tech.",
+    path: "/contact",
+    ogType: "site",
+  };
+}
+
+export function featuresPageSeo(): PageSeoProps {
+  return {
+    title: "Features",
+    description:
+      "Docker workspaces, AI chat, voice input, autonomous agents, customizable dashboard, public API, and more — all in Synaro.",
+    path: "/features",
+    ogType: "site",
+  };
+}
+
+export function agentShareSeo(
+  agentId: string,
+  name: string,
+  description?: string | null,
+): PageSeoProps {
+  return {
+    title: name,
+    description: description?.trim() || `Open the ${name} agent on Synaro.`,
+    path: `/a/${agentId}`,
+    ogType: "agent",
+    ogParams: { id: agentId },
+  };
+}
+
 export function loginPageSeo(): PageSeoProps {
   return {
     title: "Sign in",
@@ -55,6 +98,36 @@ export function signupPageSeo(): PageSeoProps {
     description: "Create a free Synaro account and start your first project in minutes.",
     path: "/signup",
     ogType: "site",
+  };
+}
+
+export function forgotPasswordPageSeo(): PageSeoProps {
+  return {
+    title: "Reset password",
+    description: "Request a password reset link for your Synaro account.",
+    path: "/forgot-password",
+    ogType: "site",
+    noIndex: true,
+  };
+}
+
+export function resetPasswordPageSeo(): PageSeoProps {
+  return {
+    title: "Choose new password",
+    description: "Set a new password for your Synaro account.",
+    path: "/reset-password",
+    ogType: "site",
+    noIndex: true,
+  };
+}
+
+export function verifyEmailPageSeo(): PageSeoProps {
+  return {
+    title: "Verify email",
+    description: "Confirm your email address to activate your Synaro account.",
+    path: "/verify-email",
+    ogType: "site",
+    noIndex: true,
   };
 }
 
@@ -125,6 +198,21 @@ export function agentsPageSeo(highlightAgentId?: string): PageSeoProps {
     description: "Create and run autonomous agents with tools and schedules.",
     path: "/agents",
     ogType: "site",
+    noIndex: true,
+  };
+}
+
+export function agentsRunDetailSeo(
+  agentId: string,
+  runId: string,
+  agentName?: string,
+): PageSeoProps {
+  return {
+    title: agentName?.trim() ? `${agentName} — Run` : "Agent run",
+    description: "Live agent run trace and output on Synaro.",
+    path: `/agents/${agentId}/runs/${runId}`,
+    ogType: "agent",
+    ogParams: { id: agentId },
     noIndex: true,
   };
 }

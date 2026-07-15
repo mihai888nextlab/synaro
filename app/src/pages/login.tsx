@@ -17,6 +17,7 @@ export default function LoginPage() {
   const { t } = useTranslation();
   const { data: session } = useSession();
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -26,16 +27,30 @@ export default function LoginPage() {
   }, [session, router]);
 
   useEffect(() => {
-    const raw = router.query.error;
-    const code = typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : null;
-    if (!code) return;
-    setError(oauthErrorMessage(code, t));
-    void router.replace("/login", undefined, { shallow: true });
+    const rawError = router.query.error;
+    const code =
+      typeof rawError === "string" ? rawError : Array.isArray(rawError) ? rawError[0] : null;
+    if (code) {
+      setError(oauthErrorMessage(code, t));
+      setSuccess(null);
+      void router.replace("/login", undefined, { shallow: true });
+      return;
+    }
+
+    const rawVerified = router.query.verified;
+    const verified =
+      typeof rawVerified === "string" ? rawVerified : Array.isArray(rawVerified) ? rawVerified[0] : null;
+    if (verified === "1") {
+      setSuccess(t("auth.emailVerifiedBody"));
+      setError(null);
+      void router.replace("/login", undefined, { shallow: true });
+    }
   }, [router, t]);
 
   const handleSignIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    setSuccess(null);
     setLoading(true);
 
     const formData = new FormData(event.currentTarget);
@@ -85,11 +100,12 @@ export default function LoginPage() {
           footerPrompt={t("auth.newToSynaro")}
           footerActionLabel={t("auth.createAccount")}
           footerActionHref="/signup"
+          resetPasswordHref="/forgot-password"
           error={error}
+          success={success}
           isSubmitting={loading}
           onSignIn={handleSignIn}
-          onResetPassword={() => { }}
-          onCreateAccount={() => { }}
+          onCreateAccount={() => {}}
         />
       </div>
     </main>

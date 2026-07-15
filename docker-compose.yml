@@ -201,14 +201,31 @@ services:
       BRAVE_SEARCH_API_KEY: ${BRAVE_SEARCH_API_KEY:-}
       AGENT_SERVICE_URL: http://agent-service:3005
       AGENT_SERVICE_KEY: ${AGENT_SERVICE_KEY:-synaro-agent-key-dev}
+      ENVIRONMENT_SERVICE_URL: http://environment-service:3002
+      WORKSPACES_PATH: /workspaces
     volumes:
       - ./services/agent-runner/src:/app/src
       - ./services/agent-runner/prisma:/app/prisma
+      - agent_workspaces:/workspaces
     depends_on:
       postgresql:
         condition: service_healthy
       agent-service:
         condition: service_started
+
+  # Minimal MCP server for testing agents' MCP client (tools: echo, add, current_time).
+  # Reuses the agent-runner image (already has @modelcontextprotocol/sdk + zod).
+  # Reachable from agent-runner at http://mcp-test:9100/mcp
+  mcp-test:
+    image: synaro-agent-runner:latest
+    container_name: synaro-mcp-test
+    restart: unless-stopped
+    working_dir: /app
+    command: ["node", "scripts/mcp-test-server.mjs"]
+    ports:
+      - '9100:9100'
+    volumes:
+      - ./scripts/mcp-test-server.mjs:/app/scripts/mcp-test-server.mjs:ro
 
   adminer:
     image: adminer:latest
@@ -224,3 +241,4 @@ volumes:
   postgres_data:
   postgres_env_data:
   projects_data:
+  agent_workspaces:

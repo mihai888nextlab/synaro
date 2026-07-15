@@ -34,6 +34,31 @@ export const enAppExt: Messages = {
     githubSignInFailed: "GitHub sign-in failed.",
     couldNotCreateAccount: "Could not create account ({status}). Try again.",
     signInFailed: "Sign-in failed: {error}",
+    emailNotVerified:
+      "Verify your email before signing in. Check your inbox for the verification link.",
+    checkEmailTitle: "Check your email",
+    checkEmailBody:
+      "We sent a verification link to {email}. Open it to activate your account, then sign in.",
+    resendVerification: "Resend verification email",
+    emailVerifiedTitle: "Email verified",
+    emailVerifiedBody: "Your email is verified. You can sign in to your Synaro workspace.",
+    verifyInvalidTitle: "Invalid or expired link",
+    verifyInvalidBody:
+      "This verification or reset link is invalid or has expired. Request a new one from the sign-in page.",
+    resetPasswordTitle: "Reset password",
+    resetPasswordDescription:
+      "Enter your email and we'll send you a link to choose a new password.",
+    sendResetLink: "Send reset link",
+    resetEmailSentTitle: "Check your email",
+    resetEmailSentBody:
+      "If an account exists for that email, we sent a password reset link. It expires in one hour.",
+    chooseNewPasswordTitle: "Choose a new password",
+    chooseNewPasswordDescription: "Enter a new password for your Synaro account.",
+    updatePassword: "Update password",
+    backToSignIn: "Back to sign in",
+    rememberPassword: "Remember your password?",
+    resetSuccessTitle: "Password updated",
+    resetSuccessBody: "Your password has been changed. Sign in with your new password.",
   },
   profile: {
     name: "Name",
@@ -169,11 +194,35 @@ export const enAppExt: Messages = {
     toolWebSearch: "Web Search",
     toolHttpGet: "HTTP GET",
     toolHttpPost: "HTTP POST",
+    toolListProjects: "List Projects",
+    toolGetProject: "Get Project",
+    toolListProjectRuns: "Project Runs",
+    toolStartProject: "Start Project",
+    toolStopProject: "Stop Project",
+    toolListFiles: "List Files",
+    toolReadFile: "Read File",
+    toolWriteFile: "Write File",
+    toolDeleteFile: "Delete File",
+    toolRunAgent: "Sub-agent",
+    toolRemember: "Remember",
+    toolRecall: "Recall",
+    toolMcp: "MCP Servers",
+    model: "Model",
+    mcpServers: "MCP Servers (JSON)",
+    mcpServersHint: "(array of { name, url })",
+    mcpServersInvalid: "MCP servers must be a valid JSON array.",
     maxSteps: "Max Steps",
     cronSchedule: "Cron Schedule",
     cronPlaceholder: "*/30 * * * *",
     createAgent: "Create Agent",
     createFailed: "Failed to create agent",
+    editAgent: "Edit agent",
+    editAgentTitle: "Edit {name}",
+    saveChanges: "Save Changes",
+    saveFailed: "Failed to save agent",
+    enableAgent: "Enable agent",
+    disableAgent: "Disable agent",
+    stepsCount: "{count} steps",
     inputOptional: "(optional)",
     maybeLater: "Maybe later",
     runAgentTitle: "Run {name}",
@@ -192,6 +241,33 @@ export const enAppExt: Messages = {
     open: "open",
     createdRelative: "{count} tools · created {relative}",
     openAgent: "Open agent: {name}",
+    headerPillSingle: "{name} running",
+    headerPillMany: "{count} agents running",
+    headerPillTitleSingle: "{name} is running. Open agents.",
+    headerPillTitleMany: "{count} agents are running. Open agents.",
+    stopSpeaking: "Stop speaking",
+    speakingAria: "Agent response is being read aloud",
+    voiceRunFailedFallback: "{name} failed.",
+    editAgent: "Edit agent",
+    saveChanges: "Save changes",
+    enableAgent: "Enable agent",
+    disableAgent: "Disable agent",
+    agentDisabledRunTooltip: "Enable this agent to run it",
+    editAgentDialogTitle: "Edit agent",
+    moreOptionsFor: "More options for {name}",
+    runDetailTitle: "Agent run",
+    backToAgents: "Back to agents",
+    runInput: "Input",
+    runOutput: "Output",
+    runSteps: "Steps",
+    runStepsEmpty: "No steps recorded yet.",
+    runStepsLive: "Live trace",
+    stepTool: "Tool",
+    startedAt: "Started",
+    finishedAt: "Finished",
+    viewRun: "View run →",
+    runNotFound: "Run not found.",
+    runLoadFailed: "Could not load run.",
   },
   logs: {
     title: "Logs",
@@ -631,6 +707,11 @@ export const enAppExt: Messages = {
     attachFile: "Attach file",
     commands: "Commands",
     listeningHint: "Listening… stops after 3s of silence (tap mic to cancel)",
+    voiceRequiresSecureContext:
+      "Voice input needs HTTPS or localhost. Open the app at http://localhost:3000 instead of a network IP.",
+    voiceUnsupportedBrowser:
+      "Voice input is not supported in this browser. Try Chrome, Edge, or Safari.",
+    voiceTranscribing: "Transcribing…",
     buildIdeaTitle: "Let's build your idea!",
     buildIdeaSubtitle:
       "Describe what you want to build — I'll ask a few questions, then generate it.",
@@ -642,6 +723,9 @@ export const enAppExt: Messages = {
     noNotifications: "No notifications yet.",
     aiTaskComplete: "AI task complete",
     aiTaskFailed: "AI task failed",
+    agentRunComplete: "{name} finished",
+    agentRunFailed: "{name} failed",
+    agentRunCompleteBody: "The agent run completed successfully.",
     clear: "Clear",
     openAria: "Open notifications",
     enableBrowser: "Enable browser notifications",
@@ -675,5 +759,212 @@ export const enAppExt: Messages = {
     pendingInvites: "Pending invites",
     noPendingInvites: "No pending invites.",
     revokeInvite: "Revoke invite",
+  },
+  features: {
+    hero: {
+      badge: "Features",
+      title: "Everything you need to build with AI.",
+      subtitle:
+        "Docker workspaces, AI chat, voice input, autonomous agents, and a public API — in one platform.",
+      pill1: "Docker workspaces",
+      pill2: "Voice + agents",
+      pill3: "Public API",
+      pill4: "EN / RO",
+    },
+    sections: {
+      build: "Build & ship",
+      buildTagline: "Your code lives in a real environment — not a chat bubble.",
+      automate: "Automate & monitor",
+      automateTagline: "Agents work while you sleep. You stay in the loop.",
+      connect: "Connect & scale",
+      connectTagline: "APIs, invites, and docs — built for teams and machines.",
+    },
+    mock: {
+      workspaceTabFiles: "Files",
+      workspaceTabTerminal: "Terminal",
+      workspaceTabPreview: "Preview",
+      terminalLine1: "$ npm run dev",
+      terminalLine2: "▸ ready on localhost:3000",
+      aiQuestion: "Should I add dark mode to settings?",
+      voiceListening: "Listening…",
+      agentRun: "Research competitors",
+      agentStatus: "Running · step 3 of 4",
+      agentStepQueued: "Queued",
+      agentStepSearch: "Web search",
+      agentStepRunning: "Summarizing findings",
+      agentStepDone: "Notify when done",
+      dashboardHint: "Drag widgets in edit mode",
+      searchPlaceholder: "Search projects, agents, docs…",
+      searchResult1: "↳ my-app · project",
+      searchResult2: "↳ weekly-research · agent",
+      apiComment: "Create a project via API",
+      shareProjectLabel: "Project link",
+      shareProject: "synaro.tech/p/my-app",
+      shareAgentLabel: "Agent link",
+      shareAgent: "synaro.tech/a/clx…",
+      docPage1: "Getting started with workspaces",
+      docPage2: "Agents & cron schedules",
+      docPage3: "API v1 reference",
+      browseDocs: "Browse documentation",
+    },
+    workspaces: {
+      title: "Docker workspaces",
+      body: "Each project runs in an isolated container with a file tree, integrated terminal, live preview, and deployment controls.",
+    },
+    aiChat: {
+      title: "AI chat",
+      body: "Describe changes in plain language. Synaro asks clarifying questions, runs tasks in the background, and surfaces file change cards you can review.",
+    },
+    voice: {
+      title: "Voice input & speech",
+      body: "Dictate prompts with browser Web Speech or ElevenLabs STT. Agent responses can be read aloud via ElevenLabs TTS with a browser fallback.",
+    },
+    import: {
+      title: "GitHub & folder import",
+      body: "Start blank, import a GitHub repository, or upload a folder. Your code lands in a ready-to-run workspace.",
+    },
+    agents: {
+      title: "Autonomous agents",
+      body: "Create agents with web search and HTTP tools, cron schedules, background runs, and in-app notifications when they finish.",
+    },
+    dashboard: {
+      title: "Customizable dashboard",
+      body: "Arrange KPI tiles, project cards, agent summaries, activity feeds, and shortcuts on a dashboard you can personalize.",
+    },
+    search: {
+      title: "Global search",
+      body: "Jump to projects, agents, settings, and docs from anywhere with ⌘K (Ctrl+K on Windows).",
+    },
+    collaboration: {
+      title: "Sharing & invites",
+      body: "Invite collaborators with email links or share a public project URL at /p/your-slug for quick access.",
+    },
+    api: {
+      title: "Public API v1",
+      body: "Manage projects, environments, and agents programmatically. Create API keys in settings and authenticate with Bearer tokens.",
+    },
+    preferences: {
+      title: "Language & theme",
+      body: "Switch between English and Romanian. Light and dark themes follow your preference and persist across sessions.",
+    },
+    documentation: {
+      title: "Documentation",
+      body: "Guides for projects, workspaces, agents, API endpoints, and deployment — kept in sync with the product.",
+    },
+    mcp: {
+      title: "MCP endpoints",
+      body: "Machine clients can use MCP-style routes for project deploy, logs, system status, and agent tasks when configured.",
+    },
+    cta: {
+      title: "Start building on Synaro",
+      subtitle: "Create a free account and launch your first workspace in minutes.",
+      getStarted: "Get started",
+      signIn: "Sign in",
+    },
+  },
+  agentShare: {
+    badge: "Synaro agent",
+    enabled: "Active",
+    disabled: "Disabled",
+    toolsLabel: "Tools",
+    noTools: "No tools configured",
+    noDescription: "Open this agent on Synaro to view runs and configuration.",
+    openAgent: "Open agent",
+    createAccount: "Create account",
+    share: "Share",
+    shareTitle: "Share agent",
+    publicLink: "Public link",
+    publicLinkAria: "Public agent link",
+    copyLink: "Copy link",
+    copied: "Copied",
+    couldNotCopy: "Could not copy link",
+  },
+  contact: {
+    hero: {
+      badge: "Contact",
+      title: "Get in touch",
+      subtitle: "Questions about Synaro, partnerships, or support — we read every message.",
+    },
+    email: {
+      title: "Email",
+      hint: "For product questions, legal requests, and general inquiries.",
+      cta: "Send email",
+    },
+    location: {
+      title: "Based in",
+      body: "Timișoara, Romania · synaro.tech",
+    },
+    aboutLink: "About Synaro",
+  },
+  termsConsent: {
+    bannerTitle: "Terms & third-party services",
+    bannerSummary:
+      "Synaro uses AI and external providers (including Kimi, Brave Search, and ElevenLabs). By continuing, you agree to our Terms.",
+    accept: "I agree",
+    readTerms: "Read terms",
+    dialogTitle: "Terms & Conditions",
+    lastUpdated: "Last updated: July 2026",
+    sections: {
+      intro: {
+        title: "1. Acceptance",
+        body:
+          "By using Synaro (synaro.tech and related services), you agree to these Terms. If you do not agree, do not use the platform. These Terms apply to visitors and registered users.",
+      },
+      service: {
+        title: "2. The Synaro service",
+        body:
+          "Synaro provides a cloud development workspace with Docker-based projects, AI-assisted coding, autonomous agents, voice features, and a public API. Features may change or be unavailable during beta. You are responsible for the code and data you store in your workspaces.",
+      },
+      thirdPartyOverview: {
+        title: "3. Third-party services",
+        body:
+          "Synaro relies on external providers to deliver core functionality. When you use AI chat, agents, voice, sign-in, or imports, data may be transmitted to these providers under their own terms and privacy policies. We select providers to support the product but do not control their policies.",
+      },
+      kimi: {
+        title: "4. Kimi AI (Moonshot)",
+        body:
+          "AI chat, code generation, clarifying questions, background tasks, commit messages, and autonomous agent reasoning are powered by Kimi models (Moonshot AI, e.g. kimi-k2.6) via our orchestration services. Prompts, file context, terminal output, and agent instructions you submit may be sent to Moonshot for processing. Do not submit secrets, credentials, or personal data you are not permitted to share with a third-party AI provider.",
+      },
+      brave: {
+        title: "5. Brave Search",
+        body:
+          "Agents with the web_search tool send search queries to the Brave Search API. Query text and returned result snippets are processed by Brave Software. Enable web search only when you accept that search terms leave Synaro infrastructure.",
+      },
+      elevenlabs: {
+        title: "6. ElevenLabs & browser speech",
+        body:
+          "Voice input may use your browser’s Web Speech API or, when configured, ElevenLabs speech-to-text. Agent text-to-speech may use ElevenLabs or your browser’s speech synthesis as a fallback. Audio you record for transcription may be sent to ElevenLabs. Review ElevenLabs’ terms if you use voice features.",
+      },
+      oauth: {
+        title: "7. Google & GitHub sign-in",
+        body:
+          "Optional sign-in with Google or GitHub is handled by those providers. Connecting GitHub may also allow repository import subject to GitHub’s terms. We receive profile identifiers and tokens needed for authentication and import — not your provider password.",
+      },
+      dataProcessing: {
+        title: "8. Data & privacy",
+        body:
+          "We process account data, project files, logs, and usage needed to run the service. AI and search features require sending subsets of your content to third parties listed above. You must have rights to any code and data you upload. For EU users, processing is subject to applicable data-protection law; contact us for privacy requests.",
+      },
+      responsibilities: {
+        title: "9. Your responsibilities",
+        body:
+          "You must not use Synaro for unlawful activity, malware, harassment, or infringing content. You are responsible for reviewing AI-generated code before deployment. AI output may be incorrect, incomplete, or insecure — it is not professional advice.",
+      },
+      liability: {
+        title: "10. Disclaimer & liability",
+        body:
+          "Synaro is provided “as is” without warranties. To the fullest extent permitted by law, Synaro and its operators are not liable for indirect damages, data loss, or harm arising from AI output, third-party outages, or your use of the service. Our total liability is limited to fees you paid us in the twelve months before the claim, or zero if you use a free tier.",
+      },
+      changes: {
+        title: "11. Changes",
+        body:
+          "We may update these Terms or third-party integrations. Material changes may require renewed acceptance in the product. Continued use after notice constitutes acceptance where permitted by law.",
+      },
+      contact: {
+        title: "12. Contact",
+        body:
+          "Questions about these Terms: cristi@synaro.tech or synaro.tech/contact. Operator: Synaro (Timișoara, Romania).",
+      },
+    },
   },
 };

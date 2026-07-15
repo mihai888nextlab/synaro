@@ -1,5 +1,4 @@
 import type { GetServerSideProps } from "next";
-import { getServerSession } from "next-auth/next";
 
 import { DashboardPageClient } from "@/components/ui/dashboard/dashboard-page-client";
 import type { SynaroAgentCardModel } from "@/components/ui/agent-cards-grid";
@@ -9,7 +8,7 @@ import type { DashboardLogRow } from "@/components/ui/dashboard-logs-table";
 import { DEFAULT_DASHBOARD_LAYOUT } from "@/lib/dashboard/default-layout";
 import type { DashboardLayout } from "@/lib/dashboard/layout-schema";
 import { getUserDashboardLayout } from "@/lib/dashboard/layout-storage";
-import { authOptions } from "@/lib/next-auth-options";
+import { requireSession } from "@/lib/auth/require-session";
 import { prisma } from "@/lib/prisma";
 import { getUserAgentCards } from "@/lib/user-agents";
 import { getDashboardProjectPayload } from "@/lib/user-project-cards";
@@ -31,12 +30,10 @@ export default function DashboardPage(props: DashboardPageProps) {
 }
 
 export const getServerSideProps: GetServerSideProps<DashboardPageProps> = async (ctx) => {
-  const session = await getServerSession(ctx.req, ctx.res, authOptions);
-  if (!session?.user?.id) {
-    return { redirect: { destination: "/login", permanent: false } };
-  }
+  const auth = await requireSession(ctx);
+  if ("redirect" in auth) return auth;
 
-  const userId = session.user.id;
+  const userId = auth.userId;
 
   const [{ projects, kpiItems, activityLogs }, agents, storedLayout, apiKeysCount] =
     await Promise.all([

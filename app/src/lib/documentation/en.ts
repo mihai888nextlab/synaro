@@ -342,9 +342,19 @@ export const DOC_PAGES: Record<string, DocPage> = {
         headers: ["Action", "Purpose"],
         rows: [
           ["Run", "Start a manual run with optional input text"],
-          ["runs →", "Open run history with live status and markdown output"],
+          ["runs →", "Open run history; click a run for the live step trace"],
+          ["Edit", "Update name, prompt, tools, max steps, and schedule"],
+          ["Enable toggle", "Disable agents to block manual and cron runs"],
           ["Delete", "Remove the agent and all associated runs"],
         ],
+      },
+      {
+        type: "h2",
+        text: "Run detail page",
+      },
+      {
+        type: "p",
+        text: "Each run opens at /agents/{agentId}/runs/{runId} with a live ReAct step timeline while status is PENDING or RUNNING (polls every 2 seconds), plus input and markdown output when available.",
       },
       {
         type: "h2",
@@ -1184,6 +1194,7 @@ cd app && npm run dev`,
           "Docker environment provisioning and workspace download",
           "Dashboard, logs, workspace UI, and Agents page",
           "Standalone AI agents with web search, HTTP tools, and cron scheduling",
+          "Agent edit UI, enable/disable toggles, and per-step run trace viewer",
           "Public API v1 (/api/v1) with per-user API keys for projects, tasks, and agents",
         ],
       },
@@ -1206,8 +1217,6 @@ cd app && npm run dev`,
       {
         type: "ul",
         items: [
-          "Agent edit UI and enable/disable toggles in the dashboard",
-          "Per-step tool trace in the runs viewer",
           "CI-style test pipelines per project",
           "Self-optimization recommendations",
           "Collaborative real-time editing",

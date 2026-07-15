@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronDown, Cloud, Menu, ShieldCheck, Waypoints, X } from "lucide-react";
+import { ChevronDown, Cloud, Menu, Mic, Bot, Container, MessageSquare, ShieldCheck, Waypoints, X } from "lucide-react";
 import { useState } from "react";
 
 import { useTranslation } from "@/components/ui/locale-provider";
@@ -11,6 +11,7 @@ import { SynaroLogo } from "@/components/ui/synaro-logo";
 type DropdownCard = {
   title: string;
   image: string;
+  href?: string;
 };
 
 type DropdownData = {
@@ -29,20 +30,22 @@ const dropdowns: DropdownData[] = [
     key: "features",
     label: "Features",
     links: [
-      { title: "Infrastructure API", icon: Cloud },
-      { title: "Secure Workflows", icon: ShieldCheck },
-      { title: "Runtime Operations", icon: Waypoints },
-      { title: "Templates", icon: Cloud },
-      { title: "Broadcasts", icon: Waypoints },
+      { title: "Docker workspaces", icon: Container, href: "/features#workspaces" },
+      { title: "AI chat", icon: MessageSquare, href: "/features#ai-chat" },
+      { title: "Voice input", icon: Mic, href: "/features#voice" },
+      { title: "Autonomous agents", icon: Bot, href: "/features#agents" },
+      { title: "All features", icon: Cloud, href: "/features" },
     ],
     cards: [
       {
-        title: "Transactional emails",
+        title: "Public API",
+        href: "/features#api",
         image:
           "https://images.unsplash.com/photo-1518773553398-650c184e0bb3?auto=format&fit=crop&w=600&q=80",
       },
       {
-        title: "Marketing emails",
+        title: "Global search",
+        href: "/features#search",
         image:
           "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?auto=format&fit=crop&w=600&q=80",
       },
@@ -52,7 +55,7 @@ const dropdowns: DropdownData[] = [
     key: "company",
     label: "Company",
     links: [
-      { title: "About", icon: Cloud },
+      { title: "About", icon: Cloud, href: "/about" },
       { title: "Careers", icon: ShieldCheck },
       { title: "Customers", icon: Waypoints },
       { title: "Partners", icon: Cloud },
@@ -138,26 +141,47 @@ export function SiteHeader() {
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
-                        {menu.cards.map((card) => (
-                          <a
-                            key={card.title}
-                            href="#"
-                            className="group relative overflow-hidden rounded-xl border border-white/10 bg-zinc-900"
-                          >
-                            <div className="relative h-[122px] w-full">
-                              <Image
-                                src={card.image}
-                                alt={card.title}
-                                fill
-                                className="object-cover transition duration-300 group-hover:scale-105"
-                              />
-                            </div>
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
-                            <p className="absolute bottom-2 left-2 pr-2 text-xs leading-tight text-white">
-                              {card.title}
-                            </p>
-                          </a>
-                        ))}
+                        {menu.cards.map((card) =>
+                          card.href ? (
+                            <Link
+                              key={card.title}
+                              href={card.href}
+                              className="group relative overflow-hidden rounded-xl border border-white/10 bg-zinc-900"
+                            >
+                              <div className="relative h-[122px] w-full">
+                                <Image
+                                  src={card.image}
+                                  alt={card.title}
+                                  fill
+                                  className="object-cover transition duration-300 group-hover:scale-105"
+                                />
+                              </div>
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+                              <p className="absolute bottom-2 left-2 pr-2 text-xs leading-tight text-white">
+                                {card.title}
+                              </p>
+                            </Link>
+                          ) : (
+                            <a
+                              key={card.title}
+                              href="#"
+                              className="group relative overflow-hidden rounded-xl border border-white/10 bg-zinc-900"
+                            >
+                              <div className="relative h-[122px] w-full">
+                                <Image
+                                  src={card.image}
+                                  alt={card.title}
+                                  fill
+                                  className="object-cover transition duration-300 group-hover:scale-105"
+                                />
+                              </div>
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+                              <p className="absolute bottom-2 left-2 pr-2 text-xs leading-tight text-white">
+                                {card.title}
+                              </p>
+                            </a>
+                          ),
+                        )}
                       </div>
                     </div>
                     </div>
@@ -257,27 +281,49 @@ export function SiteHeader() {
                             )}
                           </div>
                           <div className="mt-3 grid grid-cols-2 gap-2">
-                            {menu.cards.map((card) => (
-                              <a
-                                key={card.title}
-                                href="#"
-                                onClick={() => setMobileOpen(false)}
-                                className="group relative overflow-hidden rounded-lg border border-white/10 bg-zinc-900"
-                              >
-                                <div className="relative h-24 w-full">
-                                  <Image
-                                    src={card.image}
-                                    alt={card.title}
-                                    fill
-                                    className="object-cover"
-                                  />
-                                </div>
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/85 to-transparent" />
-                                <p className="absolute bottom-2 left-2 pr-1 text-[11px] text-white">
-                                  {card.title}
-                                </p>
-                              </a>
-                            ))}
+                            {menu.cards.map((card) =>
+                              card.href ? (
+                                <Link
+                                  key={card.title}
+                                  href={card.href}
+                                  onClick={() => setMobileOpen(false)}
+                                  className="group relative overflow-hidden rounded-lg border border-white/10 bg-zinc-900"
+                                >
+                                  <div className="relative h-24 w-full">
+                                    <Image
+                                      src={card.image}
+                                      alt={card.title}
+                                      fill
+                                      className="object-cover"
+                                    />
+                                  </div>
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 to-transparent" />
+                                  <p className="absolute bottom-2 left-2 pr-1 text-[11px] text-white">
+                                    {card.title}
+                                  </p>
+                                </Link>
+                              ) : (
+                                <a
+                                  key={card.title}
+                                  href="#"
+                                  onClick={() => setMobileOpen(false)}
+                                  className="group relative overflow-hidden rounded-lg border border-white/10 bg-zinc-900"
+                                >
+                                  <div className="relative h-24 w-full">
+                                    <Image
+                                      src={card.image}
+                                      alt={card.title}
+                                      fill
+                                      className="object-cover"
+                                    />
+                                  </div>
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 to-transparent" />
+                                  <p className="absolute bottom-2 left-2 pr-1 text-[11px] text-white">
+                                    {card.title}
+                                  </p>
+                                </a>
+                              ),
+                            )}
                           </div>
                         </div>
                       )}

@@ -54,6 +54,8 @@ interface SignInPageProps {
   onCreateAccount?: () => void;
   /** Shown inside the form below the checkbox row. */
   error?: string | null;
+  /** Shown inside the form as a success banner (e.g. after email verification). */
+  success?: string | null;
   /** Legacy loading flag (currently unused in the form UI). */
   loading?: boolean;
   /** Shown under the form (e.g. API or sign-in errors). */
@@ -122,6 +124,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   footerActionHref,
   resetPasswordHref,
   error,
+  success,
   onSignIn,
   oauthCallbackUrl = "/dashboard",
   onResetPassword,
@@ -260,26 +263,34 @@ export const SignInPage: React.FC<SignInPageProps> = ({
                   <input type="checkbox" name="rememberMe" className="custom-checkbox" />
                   <span className="text-zinc-300">{t("auth.keepMeSignedIn")}</span>
                 </label>
-                {resetPasswordHref ? (
-                  <Link
-                    href={resetPasswordHref}
-                    className="text-violet-400 transition-colors hover:underline"
-                  >
-                    {t("auth.resetPassword")}
-                  </Link>
-                ) : (
-                  <a
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      onResetPassword?.();
-                    }}
-                    className="text-violet-400 transition-colors hover:underline"
-                  >
-                    {t("auth.resetPassword")}
-                  </a>
-                )}
+                {mode === "login" ? (
+                  resetPasswordHref ? (
+                    <Link
+                      href={resetPasswordHref}
+                      className="text-violet-400 transition-colors hover:underline"
+                    >
+                      {t("auth.resetPassword")}
+                    </Link>
+                  ) : (
+                    <a
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        onResetPassword?.();
+                      }}
+                      className="text-violet-400 transition-colors hover:underline"
+                    >
+                      {t("auth.resetPassword")}
+                    </a>
+                  )
+                ) : null}
               </div>
+
+              {success ? (
+                <p className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                  {success}
+                </p>
+              ) : null}
 
               {error && (
                 <p className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">

@@ -10,7 +10,6 @@ import {
   HelpCircleIcon,
   ImageIcon,
   LoaderIcon,
-  Mic,
   MonitorIcon,
   Paperclip,
   PlayIcon,
@@ -38,12 +37,14 @@ import { isTerminalTaskStatus, resolveTaskAnswerContent } from "@/lib/ai-task-me
 import type { TaskResult } from "@/lib/ai-task-types";
 import { SpeechWaveform } from "@/components/ui/speech-waveform";
 import { SynaroAssistantAvatar } from "@/components/ui/synaro-logo";
-import { canUseMicrophone, supportsSpeechRecognition } from "@/lib/speech/capabilities";
+import { VoiceMicButton } from "@/components/ui/voice-mic-button";
+import { localeToBcp47 } from "@/lib/speech/locale-bcp47";
 import { useMicrophoneLevels } from "@/lib/speech/use-microphone-levels";
 import { useSpeechInput } from "@/lib/speech/use-speech-input";
 import { isGitOnlyWorkflowPrompt } from "@/lib/git-workflow-prompt";
 import { cn } from "@/lib/utils";
 import { useAiBackgroundTask, type AiRemoteTask, type AiTaskStatus } from "@/components/ui/ai-background-task";
+import { useAutoResizeTextarea } from "@/hooks/use-auto-resize-textarea";
 
 type TaskStatus = AiTaskStatus;
 
@@ -137,37 +138,6 @@ function isLikelyQuestion(prompt: string): boolean {
   if (lower.includes("what is this") || lower.includes("what's this")) return true;
 
   return false;
-}
-
-function useAutoResizeTextarea(minHeight: number, maxHeight = 200) {
-  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-
-  const adjustHeight = React.useCallback(
-    (reset?: boolean) => {
-      const textarea = textareaRef.current;
-      if (!textarea) return;
-      if (reset) {
-        textarea.style.height = `${minHeight}px`;
-        return;
-      }
-      textarea.style.height = `${minHeight}px`;
-      const newHeight = Math.max(minHeight, Math.min(textarea.scrollHeight, maxHeight));
-      textarea.style.height = `${newHeight}px`;
-    },
-    [minHeight, maxHeight],
-  );
-
-  React.useEffect(() => {
-    adjustHeight(true);
-  }, [adjustHeight]);
-
-  React.useEffect(() => {
-    const onResize = () => adjustHeight();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [adjustHeight]);
-
-  return { textareaRef, adjustHeight };
 }
 
 function TypingDots() {
@@ -684,7 +654,7 @@ export function AnimatedAIChat({
   onRunApp?: () => void;
 }) {
   const storageKey = projectId ? `synaro:chat:${projectId}` : null;
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const { activeTask, polledTask, setActiveTask } = useAiBackgroundTask();
   const chatPreview = useWorkspaceChatPreview();
   const handleOpenWorkspaceFile = React.useCallback(
@@ -1115,15 +1085,12 @@ export function AnimatedAIChat({
 
   const isBusy = isSubmitting || isAsking;
 
-  const [voiceSupported, setVoiceSupported] = React.useState(false);
   const [voiceError, setVoiceError] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    setVoiceSupported(supportsSpeechRecognition() && canUseMicrophone());
-  }, []);
-
   const { isListening, toggle: toggleVoice, stop: stopVoice } = useSpeechInput({
-    disabled: isBusy || !voiceSupported,
+    disabled: isBusy,
+    lang: localeToBcp47(locale),
+    locale,
     onInterim: (text) => {
       setValue(text);
       adjustHeight();
@@ -1438,23 +1405,16 @@ export function AnimatedAIChat({
             </div>
 
             <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-                {voiceSupported ? (
-                  <motion.button
-                    type="button"
-                    onClick={toggleVoice}
-                    disabled={isBusy}
-                    whileTap={{ scale: 0.94 }}
-                    className={cn(
-                      "relative inline-flex h-9 w-9 items-center justify-center rounded-[28%] border border-border/70 bg-card/80 text-muted-foreground transition hover:bg-muted hover:text-foreground sm:h-10 sm:w-10",
-                      isListening && "border-primary/50 bg-primary/10 text-primary",
-                      isBusy && "pointer-events-none opacity-50",
-                    )}
-                    aria-label={isListening ? t("aiChat.stopVoice") : t("aiChat.startVoice")}
-                    aria-pressed={isListening}
-                  >
-                    <Mic className={cn("h-4 w-4", isListening && "animate-pulse")} />
-                  </motion.button>
-                ) : null}
+                <VoiceMicButton
+                  isListening={isListening}
+                  busy={isBusy}
+                  sizeClassName="h-9 w-9 sm:h-10 sm:w-10"
+                  onToggle={toggleVoice}
+                  onUnsupported={(msg) => {
+                    setVoiceError(msg);
+                    window.setTimeout(() => setVoiceError(null), 5000);
+                  }}
+                />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button

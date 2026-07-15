@@ -5,10 +5,9 @@ import type { FormEvent } from "react";
 import { useRouter } from "next/router";
 import { Pencil } from "lucide-react";
 import { getProviders, signIn } from "next-auth/react";
-import { getServerSession } from "next-auth/next";
 
 import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/lib/next-auth-options";
+import { requireSession } from "@/lib/auth/require-session";
 import { oauthErrorMessage } from "@/lib/auth-oauth-errors";
 import { useTranslation } from "@/components/ui/locale-provider";
 
@@ -260,13 +259,11 @@ export default function ProfilePage({
 }
 
 export const getServerSideProps: GetServerSideProps<ProfilePageProps> = async (ctx) => {
-  const session = await getServerSession(ctx.req, ctx.res, authOptions);
-  if (!session?.user?.id) {
-    return { redirect: { destination: "/login", permanent: false } };
-  }
+  const auth = await requireSession(ctx);
+  if ("redirect" in auth) return auth;
 
   const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
+    where: { id: auth.userId },
     select: {
       passwordHash: true,
       accounts: { select: { provider: true } },

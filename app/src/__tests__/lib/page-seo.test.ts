@@ -3,10 +3,13 @@ import { describe, expect, it } from "@jest/globals";
 import { DEFAULT_DOC_SLUG } from "@/lib/documentation";
 import {
   docPageSeo,
+  featuresPageSeo,
+  forgotPasswordPageSeo,
   homePageSeo,
   invitePageSeo,
   mergePageSeo,
   projectShareSeo,
+  agentShareSeo,
 } from "@/lib/seo/page-seo";
 import { routeHeadProps } from "@/lib/seo/route-head";
 import { OG_IMAGE_VERSION, buildOgImageUrl } from "@/lib/seo/og-url";
@@ -44,6 +47,28 @@ describe("page seo builders", () => {
     expect(seo.ogType).toBe("project");
     expect(seo.ogParams).toEqual({ slug: "my-app" });
     expect(seo.title).toBe("My App");
+  });
+
+  it("featuresPageSeo points at features path", () => {
+    const seo = featuresPageSeo();
+    expect(seo.path).toBe("/features");
+    expect(seo.ogType).toBe("site");
+    expect(seo.title).toBe("Features");
+  });
+
+  it("forgotPasswordPageSeo points at forgot-password path", () => {
+    const seo = forgotPasswordPageSeo();
+    expect(seo.path).toBe("/forgot-password");
+    expect(seo.noIndex).toBe(true);
+  });
+
+  it("agentShareSeo points at public agent path", () => {
+    const seo = agentShareSeo("agent-123", "Research Bot", "Finds papers");
+    expect(seo.path).toBe("/a/agent-123");
+    expect(seo.ogType).toBe("agent");
+    expect(seo.ogParams).toEqual({ id: "agent-123" });
+    expect(seo.title).toBe("Research Bot");
+    expect(seo.description).toBe("Finds papers");
   });
 });
 

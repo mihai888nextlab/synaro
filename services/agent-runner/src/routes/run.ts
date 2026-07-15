@@ -33,7 +33,7 @@ export const runRoutes: FastifyPluginAsync = async (app) => {
     if (!agent) return reply.status(404).send({ error: 'Agent not found' })
 
     // Start the loop in the background — don't await
-    void runReActLoop(run, agent).catch((err) => {
+    void runReActLoop(run, agent, app.log).catch((err) => {
       app.log.error({ err, runId }, 'Unhandled error in ReAct loop')
     })
 

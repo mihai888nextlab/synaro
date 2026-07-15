@@ -1,5 +1,4 @@
 import type { GetServerSideProps } from "next";
-import { getServerSession } from "next-auth/next";
 import { useRouter } from "next/router";
 
 import type { SynaroProjectEnvironmentStatus } from "@/components/ui/project-cards-grid";
@@ -8,9 +7,9 @@ import {
   latestEnvironmentSummariesByProjectId,
   parseEnvironmentStatusFromService,
 } from "@/lib/environment-service-live";
+import { requireSession } from "@/lib/auth/require-session";
 import { whereProjectBySlugForUser } from "@/lib/project-access";
 import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/lib/next-auth-options";
 import { projectWorkspaceSeo, type PageSeoProps } from "@/lib/seo/page-seo";
 
 type ProjectWorkspacePageProps = {
@@ -49,10 +48,8 @@ export default function ProjectWorkspacePage({
 }
 
 export const getServerSideProps: GetServerSideProps<ProjectWorkspacePageProps> = async (ctx) => {
-  const session = await getServerSession(ctx.req, ctx.res, authOptions);
-  if (!session?.user?.id) {
-    return { redirect: { destination: "/login", permanent: false } };
-  }
+  const auth = await requireSession(ctx);
+  if ("redirect" in auth) return auth;
 
   const raw = ctx.params?.projectSlug;
   const slug = typeof raw === "string" ? raw : Array.isArray(raw) ? (raw[0] ?? "") : "";
@@ -61,7 +58,7 @@ export const getServerSideProps: GetServerSideProps<ProjectWorkspacePageProps> =
   }
 
   const project = await prisma.project.findFirst({
-    where: whereProjectBySlugForUser(slug, session.user.id),
+    where: whereProjectBySlugForUser(slug, auth.userId),
     select: {
       id: true,
       name: true,
@@ -85,7 +82,7 @@ export const getServerSideProps: GetServerSideProps<ProjectWorkspacePageProps> =
     props: {
       projectId: project.id,
       initialEnvironmentStatus: environmentStatus,
-      viewerIsOwner: project.userId === session.user.id,
+      viewerIsOwner: project.userId === auth.userId,
       seo: projectWorkspaceSeo(project.slug, project.name, project.description),
     },
   };

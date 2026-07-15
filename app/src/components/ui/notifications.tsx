@@ -2,7 +2,12 @@
 
 import * as React from "react";
 
-export type AppNotificationType = "ai_task_done" | "ai_task_failed" | "info";
+export type AppNotificationType =
+  | "ai_task_done"
+  | "ai_task_failed"
+  | "agent_run_done"
+  | "agent_run_failed"
+  | "info";
 
 export type AppNotification = {
   id: string;
@@ -128,6 +133,72 @@ export function showBrowserNotification(title: string, options?: NotificationOpt
     new Notification(title, options);
   } catch {
     // ignore
+  }
+}
+
+let notificationAudioContext: AudioContext | null = null;
+
+type ChimeNote = {
+  frequency: number;
+  at: number;
+  duration: number;
+  peak: number;
+};
+
+/** Soft ascending completion chime (~650ms), similar to SaaS success alerts. */
+export function playNotificationSound() {
+  if (typeof window === "undefined") return;
+  try {
+    const ctx = notificationAudioContext ?? new AudioContext();
+    notificationAudioContext = ctx;
+    if (ctx.state === "suspended") {
+      void ctx.resume();
+    }
+
+    const start = ctx.currentTime + 0.01;
+    const notes: ChimeNote[] = [
+      { frequency: 523.25, at: 0, duration: 0.2, peak: 0.055 },
+      { frequency: 659.25, at: 0.13, duration: 0.24, peak: 0.065 },
+      { frequency: 783.99, at: 0.28, duration: 0.42, peak: 0.05 },
+    ];
+
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(1, start);
+    master.connect(ctx.destination);
+
+    for (const note of notes) {
+      const t0 = start + note.at;
+      const osc = ctx.createOscillator();
+      const tone = ctx.createGain();
+      const shimmer = ctx.createOscillator();
+      const shimmerGain = ctx.createGain();
+
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(note.frequency, t0);
+
+      shimmer.type = "sine";
+      shimmer.frequency.setValueAtTime(note.frequency * 2, t0);
+
+      tone.gain.setValueAtTime(0.0001, t0);
+      tone.gain.exponentialRampToValueAtTime(note.peak, t0 + 0.028);
+      tone.gain.exponentialRampToValueAtTime(0.0001, t0 + note.duration);
+
+      shimmerGain.gain.setValueAtTime(0.0001, t0);
+      shimmerGain.gain.exponentialRampToValueAtTime(note.peak * 0.18, t0 + 0.02);
+      shimmerGain.gain.exponentialRampToValueAtTime(0.0001, t0 + note.duration * 0.85);
+
+      osc.connect(tone);
+      shimmer.connect(shimmerGain);
+      tone.connect(master);
+      shimmerGain.connect(master);
+
+      osc.start(t0);
+      shimmer.start(t0);
+      osc.stop(t0 + note.duration + 0.06);
+      shimmer.stop(t0 + note.duration + 0.06);
+    }
+  } catch {
+    // ignore — autoplay policies or missing Web Audio
   }
 }
 

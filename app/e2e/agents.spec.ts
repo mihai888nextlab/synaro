@@ -3,7 +3,6 @@ import { expect, test } from "@playwright/test";
 import {
   acceptNextDialog,
   E2E_AGENT_ID,
-  E2E_AGENT_SCHEDULED_ID,
   E2E_RUN_ID,
   E2E_RUN_NEEDS_INPUT_ID,
   makeAutoAgent,
@@ -17,11 +16,11 @@ import {
   makeScheduledAgent,
   mockAgentApi,
 } from "./helpers/agents";
-import { useEnglishLocale } from "./helpers/locale";
+import { forceEnglishLocale } from "./helpers/locale";
 
 test.describe("Agents", () => {
   test.beforeEach(async ({ page }) => {
-    await useEnglishLocale(page);
+    await forceEnglishLocale(page);
   });
 
   test.describe("page basics", () => {

@@ -5,11 +5,11 @@ import {
   E2E_PROJECT_PRIMARY_SLUG,
   E2E_PROJECT_SECONDARY_NAME,
 } from "./helpers/seed";
-import { useEnglishLocale } from "./helpers/locale";
+import { forceEnglishLocale } from "./helpers/locale";
 
 test.describe("Projects", () => {
   test.beforeEach(async ({ page }) => {
-    await useEnglishLocale(page);
+    await forceEnglishLocale(page);
   });
 
   test("lists seeded project cards", async ({ page }) => {

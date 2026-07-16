@@ -5,11 +5,11 @@ import {
   E2E_PROJECT_PRIMARY_NAME,
   E2E_PROJECT_SECONDARY_NAME,
 } from "./helpers/seed";
-import { useEnglishLocale } from "./helpers/locale";
+import { forceEnglishLocale } from "./helpers/locale";
 
 test.describe("Dashboard", () => {
   test.beforeEach(async ({ page }) => {
-    await useEnglishLocale(page);
+    await forceEnglishLocale(page);
   });
 
   test("shows seeded projects and activity", async ({ page }) => {

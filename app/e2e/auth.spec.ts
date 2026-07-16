@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 import { E2E_USER_EMAIL } from "./helpers/seed";
-import { acceptTermsIfNeeded, loginAsE2eUser, loginSubmitButton, useEnglishLocale } from "./helpers/locale";
+import { acceptTermsIfNeeded, loginAsE2eUser, loginSubmitButton, forceEnglishLocale } from "./helpers/locale";
 
 test.describe("Authentication", () => {
   test.beforeEach(async ({ page }) => {
-    await useEnglishLocale(page);
+    await forceEnglishLocale(page);
   });
 
   test("rejects invalid credentials", async ({ page }) => {

@@ -6,7 +6,7 @@ import { E2E_USER_EMAIL, E2E_USER_PASSWORD } from "./seed";
 const LOCALE_COOKIE = "synaro.locale";
 
 /** Force English UI so E2E selectors stay stable across i18n. */
-export async function useEnglishLocale(page: Page) {
+export async function forceEnglishLocale(page: Page) {
   await page.context().addInitScript(() => {
     localStorage.setItem("synaro.locale", "en");
     document.documentElement.lang = "en";
@@ -38,7 +38,7 @@ export async function acceptTermsIfNeeded(page: Page) {
 }
 
 export async function loginAsE2eUser(page: Page) {
-  await useEnglishLocale(page);
+  await forceEnglishLocale(page);
   await page.goto("/login");
   await acceptTermsIfNeeded(page);
   await page.fill('[name="email"]', E2E_USER_EMAIL);

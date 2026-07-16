@@ -114,54 +114,55 @@ export function SpeechOutputProvider({ children }: { children: React.ReactNode }
     setIsSpeaking(false);
   }, []);
 
-  const speakNextBrowserChunk = React.useCallback(() => {
-    const synth = getSpeechSynthesis();
-    if (!synth || cancelledRef.current) {
-      setIsSpeaking(false);
-      return;
-    }
+  const speakNextBrowserChunkRef = React.useRef<() => void>(() => {});
 
-    const index = chunkIndexRef.current;
-    const chunk = chunksRef.current[index];
-    if (!chunk) {
-      setIsSpeaking(false);
-      return;
-    }
-
-    const utterance = new SpeechSynthesisUtterance(chunk);
-    utterance.lang = localeToBcp47(locale);
-    utteranceRef.current = utterance;
-
-    utterance.onend = () => {
-      chunkIndexRef.current += 1;
-      if (chunkIndexRef.current >= chunksRef.current.length || cancelledRef.current) {
-        utteranceRef.current = null;
+  React.useEffect(() => {
+    speakNextBrowserChunkRef.current = () => {
+      const synth = getSpeechSynthesis();
+      if (!synth || cancelledRef.current) {
         setIsSpeaking(false);
         return;
       }
-      speakNextBrowserChunk();
-    };
 
-    utterance.onerror = () => {
-      utteranceRef.current = null;
-      setIsSpeaking(false);
-    };
+      const index = chunkIndexRef.current;
+      const chunk = chunksRef.current[index];
+      if (!chunk) {
+        setIsSpeaking(false);
+        return;
+      }
 
-    synth.speak(utterance);
+      const utterance = new SpeechSynthesisUtterance(chunk);
+      utterance.lang = localeToBcp47(locale);
+      utteranceRef.current = utterance;
+
+      utterance.onend = () => {
+        chunkIndexRef.current += 1;
+        if (chunkIndexRef.current >= chunksRef.current.length || cancelledRef.current) {
+          utteranceRef.current = null;
+          setIsSpeaking(false);
+          return;
+        }
+        speakNextBrowserChunkRef.current();
+      };
+
+      utterance.onerror = () => {
+        utteranceRef.current = null;
+        setIsSpeaking(false);
+      };
+
+      synth.speak(utterance);
+    };
   }, [locale]);
 
-  const speakWithBrowser = React.useCallback(
-    (plain: string) => {
-      const synth = getSpeechSynthesis();
-      if (!synth || !plain) return;
+  const speakWithBrowser = React.useCallback((plain: string) => {
+    const synth = getSpeechSynthesis();
+    if (!synth || !plain) return;
 
-      chunksRef.current = chunkForSpeech(plain, CHUNK_MAX_CHARS);
-      chunkIndexRef.current = 0;
-      setIsSpeaking(true);
-      speakNextBrowserChunk();
-    },
-    [speakNextBrowserChunk],
-  );
+    chunksRef.current = chunkForSpeech(plain, CHUNK_MAX_CHARS);
+    chunkIndexRef.current = 0;
+    setIsSpeaking(true);
+    speakNextBrowserChunkRef.current();
+  }, []);
 
   const speakChunkViaApi = React.useCallback(
     async (chunk: string, signal: AbortSignal) => {

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import path from "node:path";
 
-import { useEnglishLocale } from "./helpers/locale";
+import { forceEnglishLocale } from "./helpers/locale";
 
 const authFile = path.join(__dirname, ".auth/user.json");
 const emptyStorage = { cookies: [] as [], origins: [] as [] };
@@ -11,7 +11,7 @@ test.describe("Accessibility (guest)", () => {
   test.use({ storageState: emptyStorage });
 
   test.beforeEach(async ({ page }) => {
-    await useEnglishLocale(page);
+    await forceEnglishLocale(page);
   });
 
   test("login page has no axe violations", async ({ page }) => {
@@ -25,7 +25,7 @@ test.describe("Accessibility (authenticated)", () => {
   test.use({ storageState: authFile });
 
   test.beforeEach(async ({ page }) => {
-    await useEnglishLocale(page);
+    await forceEnglishLocale(page);
   });
 
   test("dashboard has no axe violations", async ({ page }) => {

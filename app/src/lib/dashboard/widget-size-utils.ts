@@ -37,7 +37,7 @@ export function clampWidgetSize(
 ): { w: number; h: number; x: number } {
   const c = getWidgetSizeConstraints(type);
   let nextW = Math.max(c.minW, Math.min(c.maxW, Math.floor(w)));
-  let nextH = Math.max(c.minH, Math.min(c.maxH, Math.floor(h)));
+  const nextH = Math.max(c.minH, Math.min(c.maxH, Math.floor(h)));
   let nextX = Math.floor(x);
 
   if (nextX + nextW > DASHBOARD_GRID_COLS) {

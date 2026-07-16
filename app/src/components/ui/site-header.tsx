@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronDown, Cloud, Menu, Mic, Bot, Container, MessageSquare, ShieldCheck, Waypoints, X } from "lucide-react";
+import { ChevronDown, Cloud, Menu, Mic, Bot, Container, MessageSquare, X } from "lucide-react";
 import { useState } from "react";
 
 import { useTranslation } from "@/components/ui/locale-provider";
@@ -48,29 +48,6 @@ const dropdowns: DropdownData[] = [
         href: "/features#search",
         image:
           "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?auto=format&fit=crop&w=600&q=80",
-      },
-    ],
-  },
-  {
-    key: "company",
-    label: "Company",
-    links: [
-      { title: "About", icon: Cloud, href: "/about" },
-      { title: "Careers", icon: ShieldCheck },
-      { title: "Customers", icon: Waypoints },
-      { title: "Partners", icon: Cloud },
-      { title: "Press", icon: Waypoints },
-    ],
-    cards: [
-      {
-        title: "Case studies",
-        image:
-          "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=80",
-      },
-      {
-        title: "Team updates",
-        image:
-          "https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=600&q=80",
       },
     ],
   },
@@ -190,6 +167,9 @@ export function SiteHeader() {
               </div>
             ))}
 
+            <Link href="/about" className="text-sm font-medium text-zinc-300 transition hover:text-white">
+              About
+            </Link>
             <Link href="/documentation" className="text-sm font-medium text-zinc-300 transition hover:text-white">
               Docs
             </Link>
@@ -334,20 +314,27 @@ export function SiteHeader() {
             </div>
 
             <div className="mt-4 flex flex-col gap-3">
-            <Link
-              href="/documentation"
-              onClick={() => setMobileOpen(false)}
-              className="text-sm font-medium text-zinc-200"
-            >
-              Docs
-            </Link>
-            <Link
-              href="/pricing"
-              onClick={() => setMobileOpen(false)}
-              className="text-sm font-medium text-zinc-200"
-            >
-              Pricing
-            </Link>
+              <Link
+                href="/about"
+                onClick={() => setMobileOpen(false)}
+                className="text-sm font-medium text-zinc-200"
+              >
+                About
+              </Link>
+              <Link
+                href="/documentation"
+                onClick={() => setMobileOpen(false)}
+                className="text-sm font-medium text-zinc-200"
+              >
+                Docs
+              </Link>
+              <Link
+                href="/pricing"
+                onClick={() => setMobileOpen(false)}
+                className="text-sm font-medium text-zinc-200"
+              >
+                Pricing
+              </Link>
             </div>
 
             <div className="mt-6 flex gap-3">

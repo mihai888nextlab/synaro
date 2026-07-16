@@ -83,19 +83,53 @@ async function notifyComplete(
   status: 'DONE' | 'FAILED' | 'CANCELLED',
   output: string,
   steps: ReActStep[],
+  log?: FastifyBaseLogger,
 ): Promise<void> {
   if (await isRunCancelled(runId)) return
+
+  // Always write locally first so the UI stops showing RUNNING even if the webhook fails.
   try {
-    await fetch(`${agentServiceUrl()}/api/webhook/run-complete`, {
+    await prisma.agentRun.updateMany({
+      where: { id: runId, status: { not: 'CANCELLED' } },
+      data: {
+        status,
+        output,
+        steps: steps as unknown as Prisma.InputJsonValue,
+        finishedAt: new Date(),
+      },
+    })
+  } catch (err) {
+    log?.error({ err, runId, status }, 'Failed to persist run completion locally')
+  }
+
+  const url = `${agentServiceUrl()}/api/webhook/run-complete`
+  try {
+    const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Service-Key': process.env.AGENT_SERVICE_KEY ?? '',
       },
-      body: JSON.stringify({ runId, status, output, steps }),
+      // Steps are already persisted locally; omit bulky observations from the webhook payload.
+      body: JSON.stringify({
+        runId,
+        status,
+        output,
+        steps: steps.map((s) => ({
+          step: s.step,
+          tool: s.tool,
+          args: s.args,
+          observation:
+            s.observation.length > 2_000 ? `${s.observation.slice(0, 2_000)}…` : s.observation,
+        })),
+      }),
     })
-  } catch {
-    // best-effort
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      log?.error({ status: res.status, body, runId, url }, 'run-complete webhook rejected')
+    }
+  } catch (err) {
+    log?.error({ err, runId, url }, 'run-complete webhook failed')
   }
 }
 
@@ -134,7 +168,7 @@ export async function runReActLoop(
     }
 
     if (toolset.tools.length === 0) {
-      await notifyComplete(run.id, 'FAILED', 'Agent has no tools enabled', [])
+      await notifyComplete(run.id, 'FAILED', 'Agent has no tools enabled', [], log)
       return
     }
 
@@ -153,6 +187,7 @@ export async function runReActLoop(
         'FAILED',
         `Could not connect to any MCP server. ${detail}`,
         [],
+        log,
       )
       return
     }
@@ -177,19 +212,19 @@ export async function runReActLoop(
       try {
         response = await callKimiWithRetry(model, messages, definitions)
       } catch (err) {
-        await notifyComplete(run.id, 'FAILED', `LLM error: ${String(err)}`, steps)
+        await notifyComplete(run.id, 'FAILED', `LLM error: ${String(err)}`, steps, log)
         return
       }
 
       const assistantMsg = response.choices[0]?.message
       if (!assistantMsg) {
-        await notifyComplete(run.id, 'FAILED', 'Empty response from LLM', steps)
+        await notifyComplete(run.id, 'FAILED', 'Empty response from LLM', steps, log)
         return
       }
 
       const toolCalls = assistantMsg.tool_calls ?? []
       if (toolCalls.length === 0) {
-        await notifyComplete(run.id, 'DONE', assistantMsg.content ?? '', steps)
+        await notifyComplete(run.id, 'DONE', assistantMsg.content ?? '', steps, log)
         return
       }
 
@@ -212,17 +247,17 @@ export async function runReActLoop(
         messages.push({ role: 'tool', tool_call_id: call.id, content: observation })
 
         if (call.function.name === 'finish') {
-          await notifyComplete(run.id, 'DONE', String(args.answer ?? observation), steps)
+          await notifyComplete(run.id, 'DONE', String(args.answer ?? observation), steps, log)
           return
         }
       }
     }
 
-    await notifyComplete(run.id, 'FAILED', 'Max steps reached without finishing', steps)
+    await notifyComplete(run.id, 'FAILED', 'Max steps reached without finishing', steps, log)
   } catch (err) {
     log.error({ err, runId: run.id }, 'ReAct loop failed')
     const message = err instanceof Error ? err.message : String(err)
-    await notifyComplete(run.id, 'FAILED', `Runner error: ${message}`, [])
+    await notifyComplete(run.id, 'FAILED', `Runner error: ${message}`, [], log)
   } finally {
     if (toolset) await toolset.close()
   }

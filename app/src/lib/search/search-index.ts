@@ -11,7 +11,26 @@ export type SearchIndexAgent = {
   description: string;
 };
 
+export type SearchIndexActivityLog = {
+  id: string;
+  action: string;
+  status: string;
+  entityName: string;
+  href: string | null;
+  occurredAt: string | null;
+};
+
+export type SearchIndexAgentRun = {
+  id: string;
+  agentId: string;
+  agentName: string;
+  status: string;
+  createdAt: string;
+};
+
 export type SearchIndex = {
   projects: SearchIndexProject[];
   agents: SearchIndexAgent[];
+  activityLogs: SearchIndexActivityLog[];
+  agentRuns: SearchIndexAgentRun[];
 };

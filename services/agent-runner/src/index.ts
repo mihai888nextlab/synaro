@@ -5,7 +5,12 @@ import { healthRoutes } from './routes/health.js'
 import { runRoutes } from './routes/run.js'
 import { cronRoutes } from './routes/cron.js'
 import { prisma } from './lib/prisma.js'
-import { reloadCronJobs, startReaper, startPendingDispatcher } from './lib/scheduler.js'
+import {
+  reloadCronJobsAtStartup,
+  startPeriodicCronReload,
+  startReaper,
+  startPendingDispatcher,
+} from './lib/scheduler.js'
 
 const app = Fastify({
   logger: { level: process.env.LOG_LEVEL ?? 'info' },
@@ -31,7 +36,8 @@ process.on('SIGINT', shutdown)
 try {
   const port = Number(process.env.PORT ?? 3006)
   await app.listen({ port, host: '0.0.0.0' })
-  await reloadCronJobs(app.log)
+  await reloadCronJobsAtStartup(app.log)
+  startPeriodicCronReload(app.log)
   startReaper(app.log)
   startPendingDispatcher(app.log)
 } catch (err) {

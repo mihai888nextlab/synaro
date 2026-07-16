@@ -47,4 +47,20 @@ describe("MarkdownLite", () => {
     const { container } = render(<MarkdownLite text="## Section title" />);
     expect(container.querySelector("h3")?.textContent).toBe("Section title");
   });
+
+  it("renders h4–h6 atx headings including trailing hashes", () => {
+    const { container } = render(
+      <MarkdownLite text={"#### Why It Matters\n\n##### Details ####"} />,
+    );
+    expect(container.querySelector("h5")?.textContent).toBe("Why It Matters");
+    expect(container.querySelectorAll("h5")).toHaveLength(2);
+    expect(container.querySelectorAll("h5")[1]?.textContent).toBe("Details");
+  });
+
+  it("renders thematic breaks for --- *** and ___", () => {
+    const { container } = render(
+      <MarkdownLite text={"Before\n\n---\n\nAfter\n\n***\n\n___\n"} />,
+    );
+    expect(container.querySelectorAll("hr")).toHaveLength(3);
+  });
 });

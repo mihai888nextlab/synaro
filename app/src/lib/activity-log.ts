@@ -4,6 +4,7 @@ import type { DashboardLogRow } from "@/components/ui/dashboard-logs-table";
 import { whereProjectVisibleToUser } from "@/lib/project-access";
 import { prisma } from "@/lib/prisma";
 import { formatLogTimestamp, formatShortRelativeTime } from "@/lib/relative-time";
+import { getUserAgentCards } from "@/lib/user-agents";
 
 /** Midnight UTC for the given instant — activity logs are kept for the current UTC day only. */
 export function startOfUtcDay(date = new Date()): Date {
@@ -58,6 +59,68 @@ export function dockerActivityMessage(
   return "Container start requested";
 }
 
+export type AgentActivityKind =
+  | "created"
+  | "deleted"
+  | "run_started"
+  | "run_completed"
+  | "run_failed"
+  | "run_cancelled";
+
+export function agentActivityMessage(kind: AgentActivityKind, agentName: string): string {
+  const name = agentName.trim() || "Agent";
+  switch (kind) {
+    case "created":
+      return `Agent created — ${name}`;
+    case "deleted":
+      return `Agent deleted — ${name}`;
+    case "run_started":
+      return `Agent run started — ${name}`;
+    case "run_completed":
+      return `Agent run completed — ${name}`;
+    case "run_failed":
+      return `Agent run failed — ${name}`;
+    case "run_cancelled":
+      return `Agent run cancelled — ${name}`;
+    default:
+      return `Agent activity — ${name}`;
+  }
+}
+
+function agentActivityStatus(kind: AgentActivityKind): ActivityLogStatus {
+  switch (kind) {
+    case "run_started":
+      return "RUNNING";
+    case "run_failed":
+    case "run_cancelled":
+      return "STOPPED";
+    default:
+      return "DONE";
+  }
+}
+
+/** Resolve a deep-link for an activity log row from stored ids + project slug. */
+export function activityLogHref(input: {
+  agentId?: string | null;
+  runId?: string | null;
+  projectSlug?: string | null;
+}): string | undefined {
+  const agentId = input.agentId?.trim();
+  const runId = input.runId?.trim();
+  const projectSlug = input.projectSlug?.trim();
+
+  if (agentId && runId) {
+    return `/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(runId)}`;
+  }
+  if (agentId) {
+    return `/agents?highlight=${encodeURIComponent(agentId)}`;
+  }
+  if (projectSlug) {
+    return `/projects/${encodeURIComponent(projectSlug)}`;
+  }
+  return undefined;
+}
+
 export async function recordProjectActivityLog(input: {
   userId: string;
   projectId: string;
@@ -89,6 +152,28 @@ export async function recordDockerActivityLog(input: {
   });
 }
 
+export async function recordAgentActivityLog(input: {
+  userId: string;
+  agentName: string;
+  kind: AgentActivityKind;
+  projectId?: string | null;
+  agentId?: string | null;
+  runId?: string | null;
+}): Promise<void> {
+  await purgeActivityLogsFromPreviousDays();
+  await prisma.activityLog.create({
+    data: {
+      userId: input.userId,
+      projectId: input.projectId ?? null,
+      entityName: input.agentName.trim() || "Agent",
+      agentId: input.agentId?.trim() || null,
+      runId: input.runId?.trim() || null,
+      action: agentActivityMessage(input.kind, input.agentName),
+      status: agentActivityStatus(input.kind),
+    },
+  });
+}
+
 export async function getUserActivityLogs(
   userId: string,
   opts?: { limit?: number; timeFormat?: "relative" | "datetime" },
@@ -99,26 +184,116 @@ export async function getUserActivityLogs(
 
   await purgeActivityLogsFromPreviousDays();
 
+  const projectVisibility = whereProjectVisibleToUser(userId);
+
   const rows = await prisma.activityLog.findMany({
     where: {
-      project: whereProjectVisibleToUser(userId),
+      userId,
       createdAt: { gte: todayStart },
+      // Agent rows have no project; project rows must be visible to the user.
+      OR: [{ project: null }, { project: projectVisibility }],
     },
     orderBy: { createdAt: "desc" },
     take: limit,
-    include: { project: { select: { name: true } } },
+    include: { project: { select: { name: true, slug: true } } },
   });
 
-  return rows.map((row) => ({
-    id: row.id,
-    action: row.action,
-    project: row.project.name,
-    status: toRowStatus(row.status),
-    time:
-      timeFormat === "datetime"
-        ? formatLogTimestamp(row.createdAt)
-        : formatShortRelativeTime(row.createdAt),
-    timeTitle: formatLogTimestamp(row.createdAt),
-    occurredAt: row.createdAt.toISOString(),
-  }));
+  const needsAgentLookup = rows.some((row) => !row.agentId && row.entityName);
+  const agentIdByName = new Map<string, string>();
+  if (needsAgentLookup) {
+    const agents = await getUserAgentCards(userId);
+    for (const agent of agents) {
+      const key = agent.name.trim().toLowerCase();
+      if (key && !agentIdByName.has(key)) agentIdByName.set(key, agent.id);
+    }
+  }
+
+  return rows.map((row) => {
+    const resolvedAgentId =
+      row.agentId ??
+      (row.entityName ? agentIdByName.get(row.entityName.trim().toLowerCase()) : undefined) ??
+      null;
+
+    return {
+      id: row.id,
+      action: row.action,
+      project: row.project?.name ?? row.entityName ?? "Agent",
+      status: toRowStatus(row.status),
+      time:
+        timeFormat === "datetime"
+          ? formatLogTimestamp(row.createdAt)
+          : formatShortRelativeTime(row.createdAt),
+      timeTitle: formatLogTimestamp(row.createdAt),
+      occurredAt: row.createdAt.toISOString(),
+      href:
+        activityLogHref({
+          agentId: resolvedAgentId,
+          runId: row.runId,
+          projectSlug: row.project?.slug,
+        }) ?? null,
+    };
+  });
+}
+
+/** Minimal activity rows for global search (today's logs only). */
+export async function getUserSearchActivityLogs(
+  userId: string,
+  limit = 30,
+): Promise<
+  {
+    id: string;
+    action: string;
+    status: string;
+    entityName: string;
+    occurredAt: string;
+    href: string | null;
+  }[]
+> {
+  const todayStart = startOfUtcDay();
+
+  await purgeActivityLogsFromPreviousDays();
+
+  const projectVisibility = whereProjectVisibleToUser(userId);
+
+  const rows = await prisma.activityLog.findMany({
+    where: {
+      userId,
+      createdAt: { gte: todayStart },
+      OR: [{ project: null }, { project: projectVisibility }],
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    include: { project: { select: { name: true, slug: true } } },
+  });
+
+  const needsAgentLookup = rows.some((row) => !row.agentId && row.entityName);
+  const agentIdByName = new Map<string, string>();
+  if (needsAgentLookup) {
+    const agents = await getUserAgentCards(userId);
+    for (const agent of agents) {
+      const key = agent.name.trim().toLowerCase();
+      if (key && !agentIdByName.has(key)) agentIdByName.set(key, agent.id);
+    }
+  }
+
+  return rows.map((row) => {
+    const resolvedAgentId =
+      row.agentId ??
+      (row.entityName ? agentIdByName.get(row.entityName.trim().toLowerCase()) : undefined) ??
+      null;
+
+    return {
+      id: row.id,
+      action: row.action,
+      status: row.status,
+      entityName: row.project?.name ?? row.entityName ?? "Agent",
+      occurredAt: row.createdAt.toISOString(),
+      href:
+        activityLogHref({
+          agentId: resolvedAgentId,
+          runId: row.runId,
+          projectSlug: row.project?.slug,
+        }) ?? null,
+    };
+  });
 }

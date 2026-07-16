@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 
 import { authOptions } from "@/lib/next-auth-options";
 import { getUserSearchIndex } from "@/lib/search/get-search-index";
+import { EMPTY_SEARCH_INDEX } from "@/lib/search/normalize-search-index";
 import type { SearchIndex } from "@/lib/search/search-index";
 
 type SearchIndexResponse = SearchIndex | { error: string };
@@ -22,7 +23,13 @@ export default async function handler(
     return res.status(405).json({ error: "Method not allowed." });
   }
 
-  const index = await getUserSearchIndex(userId);
-  res.setHeader("Cache-Control", "private, max-age=60");
-  return res.status(200).json(index);
+  try {
+    const index = await getUserSearchIndex(userId);
+    res.setHeader("Cache-Control", "private, max-age=60");
+    return res.status(200).json(index);
+  } catch (err) {
+    console.error("[api/account/search-index]", err);
+    res.setHeader("Cache-Control", "private, max-age=10");
+    return res.status(200).json(EMPTY_SEARCH_INDEX);
+  }
 }

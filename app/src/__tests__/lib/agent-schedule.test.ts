@@ -81,10 +81,16 @@ describe("agent-schedule", () => {
   });
 
   it("computes next daily run in the future", () => {
-    const now = new Date("2026-07-15T08:00:00");
-    const next = getNextScheduledRun("0 9 * * *", now);
-    expect(next?.getHours()).toBe(9);
-    expect(next?.getMinutes()).toBe(0);
+    const now = new Date("2026-07-15T08:00:00Z");
+    const next = getNextScheduledRun("0 9 * * *", now, "Europe/Bucharest");
+    expect(next).not.toBeNull();
     expect(next!.getTime()).toBeGreaterThan(now.getTime());
+    const label = next!.toLocaleString("en", {
+      timeZone: "Europe/Bucharest",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: false,
+    });
+    expect(label).toContain("9:00");
   });
 });

@@ -112,6 +112,12 @@ export function mergeLayoutPositions(
   return stored.map((widget) => {
     const item = byId.get(widget.id);
     if (!item) return widget;
-    return { ...widget, x: item.x, y: item.y };
+    return {
+      ...widget,
+      x: item.x,
+      y: item.y,
+      w: item.w,
+      h: item.h,
+    };
   });
 }

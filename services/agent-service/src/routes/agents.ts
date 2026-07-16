@@ -51,12 +51,99 @@ function agentRunnerUrl(): string {
   return process.env.AGENT_RUNNER_URL?.trim() || 'http://agent-runner:3006'
 }
 
-/** Fire-and-forget: ask the runner to re-read cron schedules after an agent changes. */
-function notifyCronReload(onError: (err: unknown) => void): void {
-  void fetch(`${agentRunnerUrl()}/api/cron/reload`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Service-Key': process.env.AGENT_SERVICE_KEY ?? '' },
-  }).catch(onError)
+function appInternalUrl(): string {
+  return (
+    process.env.APP_INTERNAL_URL?.trim() ||
+    process.env.NEXTAUTH_URL?.trim() ||
+    'http://host.docker.internal:3000'
+  ).replace(/\/$/, '')
+}
+
+/** Ask the app to email the agent owner when a run finishes. */
+async function notifyRunCompleteEmail(
+  payload: {
+    runId: string
+    agentId: string
+    userId: string
+    agentName: string
+    status: 'DONE' | 'FAILED'
+    trigger: string
+    output: string | null
+    finishedAt: string
+  },
+  log: { error: (obj: object, msg: string) => void },
+): Promise<void> {
+  const url = `${appInternalUrl()}/api/internal/agent-run-email`
+  const key = process.env.AGENT_SERVICE_KEY?.trim() ?? ''
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (key) headers['X-Service-Key'] = key
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      log.error({ status: res.status, body, url, runId: payload.runId }, 'run complete email request failed')
+    }
+  } catch (err) {
+    log.error({ err, url, runId: payload.runId }, 'run complete email request failed')
+  }
+}
+
+/** Ask the app to record a dashboard activity log for agent run completion. */
+async function notifyRunCompleteActivity(
+  payload: {
+    userId: string
+    agentName: string
+    status: 'DONE' | 'FAILED' | 'CANCELLED'
+    projectId?: string | null
+    agentId?: string
+    runId?: string
+  },
+  log: { error: (obj: object, msg: string) => void },
+): Promise<void> {
+  const url = `${appInternalUrl()}/api/internal/agent-activity`
+  const key = process.env.AGENT_SERVICE_KEY?.trim() ?? ''
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (key) headers['X-Service-Key'] = key
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      log.error({ status: res.status, body, url }, 'run complete activity request failed')
+    }
+  } catch (err) {
+    log.error({ err, url }, 'run complete activity request failed')
+  }
+}
+
+/** Ask the runner to re-read cron schedules after an agent changes. */
+async function notifyCronReload(log: { error: (obj: object, msg: string) => void; info: (obj: object, msg: string) => void }): Promise<void> {
+  const url = `${agentRunnerUrl()}/api/cron/reload`
+  const key = process.env.AGENT_SERVICE_KEY?.trim() ?? ''
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (key) headers['X-Service-Key'] = key
+
+  try {
+    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({}) })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      log.error({ status: res.status, body, url }, 'cron reload returned error')
+      return
+    }
+    const data = (await res.json().catch(() => ({}))) as { scheduled?: number }
+    log.info({ scheduled: data.scheduled, url }, 'cron schedules reloaded in agent-runner')
+  } catch (err) {
+    log.error({ err, url }, 'cron reload request failed')
+  }
 }
 
 const ToolModeSchema = z.enum(['auto', 'manual'])
@@ -73,6 +160,7 @@ const BaseAgentSchema = z.object({
   maxSteps: z.number().int().min(1).max(50).default(20),
   schedule: z.string().nullish(),
   enabled: z.boolean().default(true),
+  emailOnComplete: z.boolean().default(false),
   model: z.enum(VALID_MODELS).nullish(),
   // an empty array clears configured servers; the UI never sends null here
   mcpServers: z.array(McpServerSchema).optional(),
@@ -202,7 +290,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() })
 
     const agent = await prisma.agent.create({ data: sanitizeAgentBody(parsed.data) })
-    notifyCronReload((err) => app.log.error({ err }, 'cron reload failed'))
+    void notifyCronReload(app.log)
     return reply.status(201).send(agent)
   })
 
@@ -225,7 +313,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const agent = await prisma.agent.update({ where: { id }, data: sanitizeAgentBody(parsed.data) })
-      notifyCronReload((err) => app.log.error({ err }, 'cron reload failed'))
+      void notifyCronReload(app.log)
       return reply.send(agent)
     } catch {
       return reply.status(404).send({ error: 'Agent not found' })
@@ -239,7 +327,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       await prisma.agent.delete({ where: { id } })
-      notifyCronReload((err) => app.log.error({ err }, 'cron reload failed'))
+      void notifyCronReload(app.log)
       return reply.status(204).send()
     } catch {
       return reply.status(404).send({ error: 'Agent not found' })
@@ -304,6 +392,21 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       where: { userId, status: { in: ['PENDING', 'RUNNING', 'NEEDS_INPUT'] } },
       include: { agent: { select: { id: true, name: true } } },
       orderBy: { createdAt: 'desc' },
+    })
+    return reply.send(runs)
+  })
+
+  // Recent runs for a user (search index, activity feed)
+  app.get('/runs/recent', async (req, reply) => {
+    if (!requireServiceKey(req, reply)) return
+    const { userId, limit = '30' } = req.query as { userId?: string; limit?: string }
+    if (!userId) return reply.status(400).send({ error: 'userId query param required' })
+
+    const runs = await prisma.agentRun.findMany({
+      where: { userId },
+      include: { agent: { select: { id: true, name: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(Number(limit) || 30, 50),
     })
     return reply.send(runs)
   })
@@ -464,20 +567,62 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() })
 
     const { runId, status, output, steps } = parsed.data
+    const finishedAt = new Date()
 
     try {
+      const existing = await prisma.agentRun.findUnique({
+        where: { id: runId },
+        include: {
+          agent: { select: { id: true, name: true, emailOnComplete: true, projectId: true } },
+        },
+      })
+      if (!existing) return reply.status(404).send({ error: 'Run not found' })
+
       await prisma.agentRun.update({
         where: { id: runId },
         data: {
           status,
           output: output ?? null,
           steps: steps ? (steps as object[]) : undefined,
-          finishedAt: new Date(),
+          finishedAt,
         },
       })
+
+      void notifyRunCompleteActivity(
+        {
+          userId: existing.userId,
+          agentName: existing.agent.name,
+          status,
+          projectId: existing.agent.projectId,
+          agentId: existing.agent.id,
+          runId,
+        },
+        req.log,
+      )
+
+      if (
+        existing.agent.emailOnComplete &&
+        (status === 'DONE' || status === 'FAILED')
+      ) {
+        void notifyRunCompleteEmail(
+          {
+            runId,
+            agentId: existing.agent.id,
+            userId: existing.userId,
+            agentName: existing.agent.name,
+            status,
+            trigger: existing.trigger,
+            output: output ?? null,
+            finishedAt: finishedAt.toISOString(),
+          },
+          req.log,
+        )
+      }
+
       return reply.send({ ok: true })
-    } catch {
-      return reply.status(404).send({ error: 'Run not found' })
+    } catch (err) {
+      req.log.error({ err, runId }, 'run-complete webhook failed')
+      return reply.status(500).send({ error: 'Could not finalize run' })
     }
   })
 }

@@ -1,5 +1,6 @@
 import cron, { type ScheduledTask } from 'node-cron'
 import type { FastifyBaseLogger } from 'fastify'
+import { getAgentCronTimezone } from './cron-timezone.js'
 import { prisma } from './prisma.js'
 
 const SCHEDULE_CRON_SEPARATOR = '|'
@@ -25,6 +26,8 @@ const REAPER_INTERVAL_MS = 60_000
 const RUN_TIMEOUT_MS = 15 * 60_000
 const DISPATCH_INTERVAL_MS = 30_000
 const PENDING_GRACE_MS = 30_000
+const CRON_RELOAD_INTERVAL_MS = 5 * 60_000
+const STARTUP_RELOAD_ATTEMPTS = 5
 
 const tasks = new Map<string, ScheduledTask[]>()
 
@@ -54,6 +57,8 @@ export async function reloadCronJobs(log: FastifyBaseLogger): Promise<number> {
   }
   tasks.clear()
 
+  const timezone = getAgentCronTimezone()
+
   const agents = await prisma.agent.findMany({
     where: { enabled: true, schedule: { not: null } },
     select: { id: true, name: true, schedule: true },
@@ -74,9 +79,13 @@ export async function reloadCronJobs(log: FastifyBaseLogger): Promise<number> {
         log.warn({ agentId: agent.id, schedule: expression }, 'Invalid cron expression — skipping')
         continue
       }
-      const task = cron.schedule(expression, () => {
-        void triggerCronAgent(agent.id, log)
-      })
+      const task = cron.schedule(
+        expression,
+        () => {
+          void triggerCronAgent(agent.id, log)
+        },
+        { timezone },
+      )
       agentTasks.push(task)
       registered += 1
     }
@@ -84,14 +93,44 @@ export async function reloadCronJobs(log: FastifyBaseLogger): Promise<number> {
     if (agentTasks.length > 0) {
       tasks.set(agent.id, agentTasks)
       log.info(
-        { agentId: agent.id, name: agent.name, schedules: expressions.length },
+        { agentId: agent.id, name: agent.name, schedules: expressions.length, timezone },
         'Cron job(s) registered',
       )
     }
   }
 
-  log.info(`Registered ${registered} cron expression(s) for ${tasks.size} agent(s)`)
+  log.info(
+    { timezone, expressions: registered, agents: tasks.size },
+    `Registered ${registered} cron expression(s) for ${tasks.size} agent(s)`,
+  )
   return registered
+}
+
+/** Retry startup reload so a transient DB/Prisma failure does not leave zero cron jobs. */
+export async function reloadCronJobsAtStartup(log: FastifyBaseLogger): Promise<void> {
+  for (let attempt = 1; attempt <= STARTUP_RELOAD_ATTEMPTS; attempt++) {
+    try {
+      const count = await reloadCronJobs(log)
+      log.info({ attempt, count }, 'Cron jobs loaded at startup')
+      return
+    } catch (err) {
+      log.warn({ err, attempt }, 'Cron reload failed at startup — retrying')
+      if (attempt < STARTUP_RELOAD_ATTEMPTS) {
+        await new Promise((r) => setTimeout(r, 2_000 * attempt))
+      }
+    }
+  }
+  log.error('Failed to load cron jobs after startup retries')
+}
+
+/** Periodic safety net when agent-service reload notification is missed. */
+export function startPeriodicCronReload(log: FastifyBaseLogger): void {
+  const timer = setInterval(() => {
+    void reloadCronJobs(log).catch((err) => {
+      log.error({ err }, 'Periodic cron reload failed')
+    })
+  }, CRON_RELOAD_INTERVAL_MS)
+  timer.unref()
 }
 
 export function startReaper(log: FastifyBaseLogger): void {
@@ -99,11 +138,53 @@ export function startReaper(log: FastifyBaseLogger): void {
     void (async () => {
       try {
         const cutoff = new Date(Date.now() - RUN_TIMEOUT_MS)
-        const reaped = await prisma.agentRun.updateMany({
+        const stale = await prisma.agentRun.findMany({
           where: { status: 'RUNNING', startedAt: { lt: cutoff } },
-          data: { status: 'FAILED', output: 'Run timed out', finishedAt: new Date() },
+          take: 50,
+          select: { id: true, steps: true },
         })
-        if (reaped.count > 0) log.warn({ count: reaped.count }, 'Reaped stale runs')
+
+        let timedOut = 0
+        let finalized = 0
+        for (const run of stale) {
+          const steps = Array.isArray(run.steps) ? run.steps : []
+          let finishAnswer: string | null = null
+          for (let i = steps.length - 1; i >= 0; i -= 1) {
+            const step = steps[i] as { tool?: unknown; observation?: unknown } | null
+            if (
+              step &&
+              typeof step === 'object' &&
+              step.tool === 'finish' &&
+              typeof step.observation === 'string' &&
+              step.observation.trim()
+            ) {
+              finishAnswer = step.observation.trim()
+              break
+            }
+          }
+
+          if (finishAnswer) {
+            const updated = await prisma.agentRun.updateMany({
+              where: { id: run.id, status: 'RUNNING' },
+              data: {
+                status: 'DONE',
+                output: finishAnswer,
+                finishedAt: new Date(),
+              },
+            })
+            finalized += updated.count
+            continue
+          }
+
+          const updated = await prisma.agentRun.updateMany({
+            where: { id: run.id, status: 'RUNNING' },
+            data: { status: 'FAILED', output: 'Run timed out', finishedAt: new Date() },
+          })
+          timedOut += updated.count
+        }
+
+        if (finalized > 0) log.warn({ count: finalized }, 'Finalized finished runs that missed webhook')
+        if (timedOut > 0) log.warn({ count: timedOut }, 'Reaped stale runs')
       } catch (err) {
         log.error({ err }, 'Reaper tick failed')
       }

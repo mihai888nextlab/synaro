@@ -1,7 +1,17 @@
 import type { AgentRun } from "@/lib/agents/agent-types";
 import type { ReActStep } from "@/lib/agents/react-step";
 
-const PREVIEW_MAX_LENGTH = 180;
+export type RunPreviewVariant = "compact" | "expanded" | "embedded";
+
+const PREVIEW_MAX_LENGTH: Record<RunPreviewVariant, number> = {
+  compact: 180,
+  expanded: 4000,
+  embedded: 4000,
+};
+
+export type GetRunCardPreviewOptions = {
+  variant?: RunPreviewVariant;
+};
 
 export type RunCardPreviewLabels = {
   running: string;
@@ -46,44 +56,83 @@ export function stripBasicMarkdown(text: string): string {
     .trim();
 }
 
-export function truncatePreview(text: string, maxLength = PREVIEW_MAX_LENGTH): string {
+export function truncatePreview(
+  text: string,
+  maxLength: number = PREVIEW_MAX_LENGTH.compact,
+): string {
   const trimmed = text.trim();
   if (trimmed.length <= maxLength) return trimmed;
   return `${trimmed.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
-function previewFromText(text: string | null | undefined): string | null {
+function previewFromText(
+  text: string | null | undefined,
+  variant: RunPreviewVariant,
+): string | null {
   if (!text?.trim()) return null;
-  return truncatePreview(stripBasicMarkdown(text));
+  const maxLength = PREVIEW_MAX_LENGTH[variant];
+  const source = variant === "compact" ? stripBasicMarkdown(text) : text.trim();
+  return truncatePreview(source, maxLength);
 }
 
-function lastStepObservation(steps: ReActStep[]): string | null {
+function lastStepObservation(steps: ReActStep[], variant: RunPreviewVariant): string | null {
   if (steps.length === 0) return null;
   const last = steps[steps.length - 1];
-  return previewFromText(last?.observation);
+  return previewFromText(last?.observation, variant);
 }
 
-export function getRunCardPreview(run: AgentRun, labels: RunCardPreviewLabels): RunCardPreview {
+function finishAnswerFromSteps(steps: ReActStep[], variant: RunPreviewVariant): string | null {
+  for (let i = steps.length - 1; i >= 0; i -= 1) {
+    const step = steps[i];
+    if (step?.tool === "finish") {
+      return previewFromText(step.observation, variant);
+    }
+  }
+  return null;
+}
+
+export function resolveRunOutputText(run: AgentRun): string | null {
+  if (run.output?.trim()) return run.output.trim();
+  const steps = normalizeSteps(run.steps);
+  for (let i = steps.length - 1; i >= 0; i -= 1) {
+    const step = steps[i];
+    if (step?.tool === "finish" && step.observation.trim()) {
+      return step.observation.trim();
+    }
+  }
+  return null;
+}
+
+export function getRunCardPreview(
+  run: AgentRun,
+  labels: RunCardPreviewLabels,
+  options: GetRunCardPreviewOptions = {},
+): RunCardPreview {
+  const variant = options.variant ?? "compact";
   const steps = normalizeSteps(run.steps);
 
   switch (run.status) {
     case "DONE": {
-      const text = previewFromText(run.output);
+      const text =
+        previewFromText(run.output, variant) ?? finishAnswerFromSteps(steps, variant);
       return text
         ? { kind: "output", text }
         : { kind: "empty", text: labels.noOutput ?? "" };
     }
     case "FAILED": {
-      const text = previewFromText(run.output);
+      const text = previewFromText(run.output, variant);
       return text
         ? { kind: "error", text }
         : { kind: "empty", text: labels.noOutput ?? "" };
     }
     case "RUNNING":
     case "PENDING": {
-      const fromStep = lastStepObservation(steps);
+      // Finish already ran but status may still be stuck as RUNNING (webhook lag/failure).
+      const finished = finishAnswerFromSteps(steps, variant);
+      if (finished) return { kind: "output", text: finished };
+      const fromStep = lastStepObservation(steps, variant);
       if (fromStep) return { kind: "activity", text: fromStep };
-      const fromInput = previewFromText(run.input);
+      const fromInput = previewFromText(run.input, variant);
       if (fromInput) return { kind: "activity", text: fromInput };
       return { kind: "activity", text: labels.running };
     }
@@ -92,11 +141,11 @@ export function getRunCardPreview(run: AgentRun, labels: RunCardPreviewLabels): 
       return { kind: "needs-input", text: labels.needsInput(server), server };
     }
     case "CANCELLED": {
-      const text = previewFromText(run.output);
+      const text = previewFromText(run.output, variant);
       return text ? { kind: "cancelled", text } : { kind: "cancelled", text: labels.cancelled };
     }
     default: {
-      const text = previewFromText(run.output) ?? previewFromText(run.input);
+      const text = previewFromText(run.output, variant) ?? previewFromText(run.input, variant);
       return text ? { kind: "output", text } : { kind: "empty", text: labels.noOutput ?? "" };
     }
   }

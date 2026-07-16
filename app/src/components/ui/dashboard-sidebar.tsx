@@ -12,7 +12,6 @@ import {
   PanelLeftOpen,
   LogOut,
   User,
-  CircleUser,
   Bot,
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
@@ -37,7 +36,6 @@ const navItems: NavItem[] = [
   { labelKey: "nav.projects", href: "/projects", icon: Folder },
   { labelKey: "nav.agents", href: "/agents", icon: Bot },
   { labelKey: "nav.logs", href: "/logs", icon: ScrollText },
-  { labelKey: "nav.settings", href: "/settings", icon: Settings },
 ];
 
 function isActiveRoute(current: string, href: string) {
@@ -261,7 +259,7 @@ export function DashboardSidebar({
                 {status === "authenticated" ? (
                   <>
                     <Link
-                      href="/settings/profile"
+                      href="/settings"
                       onClick={() => {
                         setMenuOpen(false);
                         onNavigate?.();
@@ -269,8 +267,8 @@ export function DashboardSidebar({
                       className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
                       role="menuitem"
                     >
-                      <CircleUser className="size-4 shrink-0 text-muted-foreground" />
-                      {t("nav.profile")}
+                      <Settings className="size-4 shrink-0 text-muted-foreground" />
+                      {t("nav.settings")}
                     </Link>
                     <button
                       type="button"

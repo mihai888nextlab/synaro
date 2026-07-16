@@ -67,7 +67,11 @@ describe("API /api/agents/[agentId]", () => {
   });
 
   it("returns 204 on DELETE when upstream returns 204", async () => {
-    fetchMock().mockResolvedValue(new Response(null, { status: 204 }));
+    fetchMock()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "agent-1", name: "Research" }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "DELETE",
@@ -76,6 +80,7 @@ describe("API /api/agents/[agentId]", () => {
     await handler(req, res);
 
     expect(res.statusCode).toBe(204);
+    expect(fetchMock()).toHaveBeenCalledTimes(2);
   });
 
   it("returns 502 when agent service is unreachable", async () => {

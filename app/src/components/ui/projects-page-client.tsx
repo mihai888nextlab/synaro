@@ -202,6 +202,14 @@ export function ProjectsPageClient({
     setProjects(initialProjects);
   }, [initialProjects]);
 
+  React.useEffect(() => {
+    const raw = router.query.create;
+    const shouldOpen = raw === "1" || raw === "true";
+    if (!shouldOpen) return;
+    setOpen(true);
+    void router.replace("/projects", undefined, { shallow: true });
+  }, [router, router.query.create]);
+
   /** Refresh Docker/runtime pills from environment-service (falls back to DB if unreachable). */
   React.useEffect(() => {
     let cancelled = false;

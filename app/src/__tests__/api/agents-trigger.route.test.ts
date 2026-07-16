@@ -31,9 +31,13 @@ describe("API /api/agents/[agentId]/trigger", () => {
   });
 
   it("proxies POST trigger with body", async () => {
-    fetchMock().mockResolvedValue(
-      new Response(JSON.stringify({ runId: "run-1", status: "queued" }), { status: 202 }),
-    );
+    fetchMock()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "agent-1", name: "Research" }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ runId: "run-1", status: "queued" }), { status: 202 }),
+      );
 
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "POST",
@@ -43,8 +47,10 @@ describe("API /api/agents/[agentId]/trigger", () => {
     await handler(req, res);
 
     expect(res.statusCode).toBe(202);
-    const [url, init] = fetchMock().mock.calls[0] as [string, RequestInit];
-    expect(requestUrl(url)).toBe("http://agent-service.test/api/agents/agent-1/trigger");
+    const [agentUrl] = fetchMock().mock.calls[0] as [string, RequestInit];
+    const [triggerUrl, init] = fetchMock().mock.calls[1] as [string, RequestInit];
+    expect(requestUrl(agentUrl)).toBe("http://agent-service.test/api/agents/agent-1");
+    expect(requestUrl(triggerUrl)).toBe("http://agent-service.test/api/agents/agent-1/trigger");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ input: "hello" });
     expect(JSON.parse(res._getData() as string)).toEqual({ runId: "run-1", status: "queued" });

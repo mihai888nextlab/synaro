@@ -62,6 +62,7 @@ export type Agent = {
   maxSteps: number;
   schedule?: string | null;
   enabled: boolean;
+  emailOnComplete?: boolean;
   model?: string | null;
   mcpServers?: McpServer[] | null;
   createdAt: string;
@@ -75,6 +76,7 @@ export type AgentFormValues = {
   tools: string[];
   maxSteps: number;
   schedule: string;
+  emailOnComplete: boolean;
   model: string;
   mcpServers: string;
 };
@@ -87,6 +89,7 @@ export const DEFAULT_AGENT_FORM_VALUES: AgentFormValues = {
   tools: [],
   maxSteps: 20,
   schedule: "",
+  emailOnComplete: false,
   model: MODEL_OPTIONS[0],
   mcpServers: "",
 };
@@ -101,6 +104,7 @@ export function agentToFormValues(agent: Agent): AgentFormValues {
     tools: [...agent.tools],
     maxSteps: agent.maxSteps,
     schedule: agent.schedule ?? "",
+    emailOnComplete: agent.emailOnComplete ?? false,
     model: agent.model ?? MODEL_OPTIONS[0],
     mcpServers: agent.mcpServers ? JSON.stringify(agent.mcpServers, null, 2) : "",
   };
@@ -121,6 +125,7 @@ export function buildAgentCreateBody(form: AgentFormValues): Record<string, unkn
     toolMode: form.toolMode,
     maxSteps: form.maxSteps,
     model: form.model,
+    emailOnComplete: form.emailOnComplete,
   };
   const description = form.description.trim();
   if (description) body.description = description;
@@ -148,6 +153,7 @@ export function buildAgentUpdateBody(form: AgentFormValues): Record<string, unkn
     maxSteps: form.maxSteps,
     schedule: form.schedule.trim() || null,
     model: form.model,
+    emailOnComplete: form.emailOnComplete,
     mcpServers: mcpRaw ? parseMcpServers(mcpRaw) : [],
   };
 }

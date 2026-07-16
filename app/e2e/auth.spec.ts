@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-import { E2E_USER_EMAIL, E2E_USER_PASSWORD } from "./helpers/seed";
-import { loginSubmitButton, useEnglishLocale } from "./helpers/locale";
+import { E2E_USER_EMAIL } from "./helpers/seed";
+import { acceptTermsIfNeeded, loginAsE2eUser, loginSubmitButton, useEnglishLocale } from "./helpers/locale";
 
 test.describe("Authentication", () => {
   test.beforeEach(async ({ page }) => {
@@ -18,11 +18,7 @@ test.describe("Authentication", () => {
   });
 
   test("logs in with valid credentials", async ({ page }) => {
-    await page.goto("/login");
-    await page.fill('[name="email"]', E2E_USER_EMAIL);
-    await page.fill('[name="password"]', E2E_USER_PASSWORD);
-    await loginSubmitButton(page).click();
-    await expect(page).toHaveURL("/dashboard");
+    await loginAsE2eUser(page);
   });
 
   test("signup shows check-email screen without logging in", async ({ page }) => {
@@ -32,6 +28,7 @@ test.describe("Authentication", () => {
     await page.fill('[name="email"]', email);
     await page.fill('[name="password"]', "e2e-signup-password-12");
     await page.fill('[name="confirmPassword"]', "e2e-signup-password-12");
+    await acceptTermsIfNeeded(page);
     await page.getByRole("button", { name: "Create account" }).click();
 
     await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible();

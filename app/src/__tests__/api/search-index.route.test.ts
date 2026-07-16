@@ -12,8 +12,13 @@ jest.mock("next-auth/next", () => ({
   getServerSession: jest.fn(),
 }));
 
+jest.mock("@/lib/user-agents", () => ({
+  getUserAgentCards: jest.fn().mockResolvedValue([]),
+}));
+
 const getServerSessionMock = getServerSession as jest.MockedFunction<typeof getServerSession>;
 const findManyMock = jest.mocked(prisma.project.findMany);
+const activityFindManyMock = jest.mocked(prisma.activityLog.findMany);
 
 const origFetch = globalThis.fetch;
 const origAgentKey = process.env.AGENT_SERVICE_KEY;
@@ -29,11 +34,17 @@ describe("API /api/account/search-index", () => {
     findManyMock.mockResolvedValue([
       { id: "p1", slug: "demo", name: "Demo", description: "" },
     ]);
-    (globalThis.fetch as jest.Mock).mockResolvedValue(
-      new Response(JSON.stringify([{ id: "a1", name: "Research", description: "" }]), {
-        status: 200,
-      }),
-    );
+    activityFindManyMock.mockResolvedValue([]);
+    (globalThis.fetch as jest.Mock).mockImplementation((url: string) => {
+      if (url.includes("/api/runs/recent")) {
+        return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([{ id: "a1", name: "Research", description: "" }]), {
+          status: 200,
+        }),
+      );
+    });
   });
 
   afterEach(() => {
@@ -61,6 +72,25 @@ describe("API /api/account/search-index", () => {
     expect(JSON.parse(res._getData() as string)).toEqual({
       projects: [{ id: "p1", slug: "demo", name: "Demo", description: "" }],
       agents: [{ id: "a1", name: "Research", description: "" }],
+      activityLogs: [],
+      agentRuns: [],
+    });
+    expect(res.getHeader("Cache-Control")).toBe("private, max-age=60");
+  });
+
+  it("returns partial index when project lookup fails", async () => {
+    getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } } as never);
+    findManyMock.mockRejectedValue(new Error("db down"));
+
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({ method: "GET" });
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res._getData() as string)).toEqual({
+      projects: [],
+      agents: [{ id: "a1", name: "Research", description: "" }],
+      activityLogs: [],
+      agentRuns: [],
     });
     expect(res.getHeader("Cache-Control")).toBe("private, max-age=60");
   });

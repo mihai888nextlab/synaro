@@ -82,7 +82,7 @@ export function AgentRunSteps({
               {step.observation.trim() ? (
                 <p
                   className={cn(
-                    "mt-2 text-sm leading-relaxed",
+                    "mt-2 max-w-full overflow-hidden break-words text-sm leading-relaxed [overflow-wrap:anywhere]",
                     isLatest ? "text-foreground" : "text-muted-foreground",
                   )}
                 >

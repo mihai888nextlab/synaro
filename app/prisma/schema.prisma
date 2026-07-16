@@ -108,20 +108,27 @@ model Project {
   @@index([userId])
 }
 
-/// User-visible audit trail (container start/stop, etc.) for dashboard and `/logs`.
+/// User-visible audit trail (project containers, agent runs, etc.) for dashboard and `/logs`.
 model ActivityLog {
-  id        String            @id @default(uuid())
-  userId    String
-  projectId String
-  action    String
-  status    ActivityLogStatus
-  createdAt DateTime          @default(now())
+  id         String            @id @default(uuid())
+  userId     String
+  projectId  String?
+  /// Display name when there is no project (e.g. agent name).
+  entityName String?
+  /// Agent id in agent-service (not an app DB FK).
+  agentId    String?
+  /// Agent run id in agent-service (not an app DB FK).
+  runId      String?
+  action     String
+  status     ActivityLogStatus
+  createdAt  DateTime          @default(now())
 
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([projectId, createdAt(sort: Desc)])
+  @@index([agentId, createdAt(sort: Desc)])
 }
 
 enum ActivityLogStatus {

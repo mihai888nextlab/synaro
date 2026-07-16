@@ -17,6 +17,7 @@ services:
       AI_ORCHESTRATION_URL: http://ai-orchestration-service:3003
       AI_SERVICE_URL: http://ai-orchestration-service:3003
       NODE_ENV: production
+      NEXT_PUBLIC_AGENT_CRON_TIMEZONE: ${AGENT_CRON_TIMEZONE:-Europe/Bucharest}
     ports:
       - '3080:3000'
     extra_hosts:
@@ -177,6 +178,7 @@ services:
       CORS_ORIGIN: '*'
       AGENT_SERVICE_KEY: ${AGENT_SERVICE_KEY:-synaro-agent-key-dev}
       AGENT_RUNNER_URL: http://agent-runner:3006
+      APP_INTERNAL_URL: ${APP_INTERNAL_URL:-http://host.docker.internal:3000}
     volumes:
       - ./services/agent-service/src:/app/src
       - ./services/agent-service/prisma:/app/prisma
@@ -201,6 +203,7 @@ services:
       BRAVE_SEARCH_API_KEY: ${BRAVE_SEARCH_API_KEY:-}
       AGENT_SERVICE_URL: http://agent-service:3005
       AGENT_SERVICE_KEY: ${AGENT_SERVICE_KEY:-synaro-agent-key-dev}
+      AGENT_CRON_TIMEZONE: ${AGENT_CRON_TIMEZONE:-Europe/Bucharest}
       ENVIRONMENT_SERVICE_URL: http://environment-service:3002
       WORKSPACES_PATH: /workspaces
     volumes:

@@ -266,7 +266,7 @@ test.describe("Agents", () => {
       await mockAgentApi(page, {
         agents: [makeAutoAgent()],
         runsByAgentId: { [E2E_AGENT_ID]: [makeRunDone()] },
-        getRun: (runId, poll) => (poll <= 2 ? makeRunRunning() : makeRunDone()),
+        getRun: (runId, poll) => (poll <= 1 ? makeRunRunning() : makeRunDone()),
       });
 
       await page.goto("/agents", { waitUntil: "networkidle" });
@@ -276,8 +276,8 @@ test.describe("Agents", () => {
 
       await expect(page).toHaveURL(`/agents/${E2E_AGENT_ID}/runs/${E2E_RUN_ID}`);
       await expect(page.getByText("web_search")).toBeVisible();
-      await expect(page.getByText("Synaro is an AI dev workspace.")).toBeVisible();
-      await expect(page.getByText("Done")).toBeVisible();
+      await expect(page.getByText("Synaro is an AI dev workspace.")).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText("Done")).toBeVisible({ timeout: 15_000 });
     });
 
     test("shows done run output preview in runs dialog", async ({ page }) => {

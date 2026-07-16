@@ -44,6 +44,7 @@ export default defineConfig({
       {
         name: `guest-${browser.name}`,
         testMatch: guestSpecs,
+        dependencies: ["setup"],
         use: { ...browser.use },
       },
       {

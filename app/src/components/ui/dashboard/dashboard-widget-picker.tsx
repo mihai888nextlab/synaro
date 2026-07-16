@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   useKpiMetricOptions,
+  useKpiClusterLayoutOptions,
   usePageShortcutOptions,
   useWidgetRegistryMeta,
 } from "@/lib/dashboard/widget-registry-meta";
@@ -64,11 +65,15 @@ function buildPendingDrag(
 
 function defaultConfig(meta: WidgetRegistryMeta, data: DashboardPageData): WidgetConfig | undefined {
   if (meta.type === "single_kpi") return { metric: "projects" };
+  if (meta.type === "kpi_cluster") return { layout: "grid" };
   if (meta.type === "page_shortcut") return { route: "projects" };
   if (meta.type === "project_shortcut" && data.projects[0]) {
     return { projectId: data.projects[0].id };
   }
   if (meta.type === "agent_shortcut" && data.agents[0]) {
+    return { agentId: data.agents[0].id };
+  }
+  if (meta.type === "agent_last_run" && data.agents[0]) {
     return { agentId: data.agents[0].id };
   }
   return undefined;
@@ -86,6 +91,7 @@ export function DashboardWidgetPicker({
   const { t } = useTranslation();
   const widgetRegistryMeta = useWidgetRegistryMeta();
   const kpiMetricOptions = useKpiMetricOptions();
+  const kpiClusterLayoutOptions = useKpiClusterLayoutOptions();
   const pageShortcutOptions = usePageShortcutOptions();
   const [query, setQuery] = useState("");
   const [configStep, setConfigStep] = useState<ConfigStep | null>(null);
@@ -215,6 +221,26 @@ export function DashboardWidgetPicker({
               </div>
             ) : null}
 
+            {configStep.meta.type === "kpi_cluster" ? (
+              <div className="grid grid-cols-3 gap-2">
+                {kpiClusterLayoutOptions.map((option) => (
+                  <button
+                    key={option.layout}
+                    type="button"
+                    onClick={() => setDraftConfig({ layout: option.layout })}
+                    className={cn(
+                      "rounded-xl border px-3 py-3 text-center text-sm transition",
+                      (draftConfig as { layout?: string } | undefined)?.layout === option.layout
+                        ? "border-primary bg-primary/5"
+                        : "border-border/70 hover:bg-muted/40",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
             {configStep.meta.type === "page_shortcut" ? (
               <div className="grid grid-cols-2 gap-2">
                 {pageShortcutOptions.map((option) => (
@@ -283,6 +309,30 @@ export function DashboardWidgetPicker({
               </div>
             ) : null}
 
+            {configStep.meta.type === "agent_last_run" ? (
+              <div className="grid max-h-56 gap-2 overflow-auto">
+                {data.agents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t("widgets.createAgentFirst")}</p>
+                ) : (
+                  data.agents.map((agent) => (
+                    <button
+                      key={agent.id}
+                      type="button"
+                      onClick={() => setDraftConfig({ agentId: agent.id })}
+                      className={cn(
+                        "rounded-xl border px-4 py-3 text-left text-sm transition",
+                        (draftConfig as { agentId?: string } | undefined)?.agentId === agent.id
+                          ? "border-primary bg-primary/5"
+                          : "border-border/70 hover:bg-muted/40",
+                      )}
+                    >
+                      {agent.name}
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : null}
+
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
@@ -296,7 +346,8 @@ export function DashboardWidgetPicker({
                 onClick={confirmConfig}
                 disabled={
                   (configStep.meta.type === "project_shortcut" && data.projects.length === 0) ||
-                  (configStep.meta.type === "agent_shortcut" && data.agents.length === 0)
+                  (configStep.meta.type === "agent_shortcut" && data.agents.length === 0) ||
+                  (configStep.meta.type === "agent_last_run" && data.agents.length === 0)
                 }
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
               >

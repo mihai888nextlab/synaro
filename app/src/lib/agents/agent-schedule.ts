@@ -1,7 +1,14 @@
 /**
  * Friendly schedule UI ↔ cron conversion for agent scheduling.
  * Multiple times per day use pipe-separated cron expressions (e.g. `0 9 * * *|30 17 * * *`).
+ * Cron times are interpreted in the agent-runner timezone (see agent-cron-timezone.ts).
  */
+
+import {
+  getAgentCronTimezone,
+  getZonedParts,
+  zonedTimeToUtc,
+} from "@/lib/agents/agent-cron-timezone";
 
 export type ScheduleFrequency = "daily" | "weekly" | "monthly";
 
@@ -249,32 +256,27 @@ export function getScheduleSummary(schedule: string | null | undefined): Schedul
   return { kind: "monthly", times: ui.times, monthDays: ui.monthDays };
 }
 
-function setLocalTime(base: Date, hour: number, minute: number): Date {
-  const next = new Date(base);
-  next.setSeconds(0, 0);
-  next.setHours(hour, minute, 0, 0);
-  return next;
-}
-
-function nextDailyRun(time: ScheduleTime, now: Date): Date {
-  const candidate = setLocalTime(now, time.hour, time.minute);
+function nextDailyRun(time: ScheduleTime, now: Date, timeZone: string): Date {
+  const parts = getZonedParts(now, timeZone);
+  let candidate = zonedTimeToUtc(parts.year, parts.month, parts.day, time.hour, time.minute, timeZone);
   if (candidate.getTime() <= now.getTime()) {
-    candidate.setDate(candidate.getDate() + 1);
+    const tomorrow = new Date(now.getTime() + 86_400_000);
+    const tParts = getZonedParts(tomorrow, timeZone);
+    candidate = zonedTimeToUtc(tParts.year, tParts.month, tParts.day, time.hour, time.minute, timeZone);
   }
   return candidate;
 }
 
-function nextWeeklyRun(time: ScheduleTime, weekDays: number[], now: Date): Date {
+function nextWeeklyRun(time: ScheduleTime, weekDays: number[], now: Date, timeZone: string): Date {
   const sortedDays = [...weekDays].sort((a, b) => a - b);
   let best: Date | null = null;
 
   for (let offset = 0; offset < 8; offset += 1) {
-    const day = new Date(now);
-    day.setDate(now.getDate() + offset);
-    const dow = day.getDay();
-    if (!sortedDays.includes(dow)) continue;
+    const probe = new Date(now.getTime() + offset * 86_400_000);
+    const parts = getZonedParts(probe, timeZone);
+    if (!sortedDays.includes(parts.dayOfWeek)) continue;
 
-    const candidate = setLocalTime(day, time.hour, time.minute);
+    const candidate = zonedTimeToUtc(parts.year, parts.month, parts.day, time.hour, time.minute, timeZone);
     if (candidate.getTime() <= now.getTime()) continue;
     best = candidate;
     break;
@@ -282,48 +284,41 @@ function nextWeeklyRun(time: ScheduleTime, weekDays: number[], now: Date): Date 
 
   if (best) return best;
 
-  // wrap to next week's first matching day
   for (let offset = 1; offset <= 14; offset += 1) {
-    const day = new Date(now);
-    day.setDate(now.getDate() + offset);
-    if (!sortedDays.includes(day.getDay())) continue;
-    return setLocalTime(day, time.hour, time.minute);
+    const probe = new Date(now.getTime() + offset * 86_400_000);
+    const parts = getZonedParts(probe, timeZone);
+    if (!sortedDays.includes(parts.dayOfWeek)) continue;
+    return zonedTimeToUtc(parts.year, parts.month, parts.day, time.hour, time.minute, timeZone);
   }
 
-  return nextDailyRun(time, now);
+  return nextDailyRun(time, now, timeZone);
 }
 
-function daysInMonth(year: number, month: number): number {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-function nextMonthlyRun(time: ScheduleTime, monthDays: number[], now: Date): Date {
+function nextMonthlyRun(time: ScheduleTime, monthDays: number[], now: Date, timeZone: string): Date {
   const sortedDays = [...monthDays].sort((a, b) => a - b);
   let best: Date | null = null;
 
   for (let monthOffset = 0; monthOffset < 14; monthOffset += 1) {
-    const base = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
-    const dim = daysInMonth(base.getFullYear(), base.getMonth());
+    const probe = new Date(now.getTime() + monthOffset * 28 * 86_400_000);
+    const baseParts = getZonedParts(probe, timeZone);
 
     for (const dom of sortedDays) {
-      if (dom < 1 || dom > dim) continue;
-      const candidate = new Date(base.getFullYear(), base.getMonth(), dom);
-      const at = setLocalTime(candidate, time.hour, time.minute);
-      if (at.getTime() <= now.getTime()) continue;
-      if (best === null) {
-        best = at;
-      } else if (at.getTime() < best.getTime()) {
-        best = at;
+      if (dom < 1 || dom > 31) continue;
+      const candidate = zonedTimeToUtc(baseParts.year, baseParts.month, dom, time.hour, time.minute, timeZone);
+      if (candidate.getTime() <= now.getTime()) continue;
+      if (getZonedParts(candidate, timeZone).day !== dom) continue;
+      if (best === null || candidate.getTime() < best.getTime()) {
+        best = candidate;
       }
     }
 
     if (best) break;
   }
 
-  return best ?? nextDailyRun(time, now);
+  return best ?? nextDailyRun(time, now, timeZone);
 }
 
-function nextRunForSingleCron(cron: string, now: Date): Date | null {
+function nextRunForSingleCron(cron: string, now: Date, timeZone: string): Date | null {
   const parsed = parseSingleCron(cron);
   if (!parsed) return null;
   const times = timesFromParsed(parsed);
@@ -333,13 +328,13 @@ function nextRunForSingleCron(cron: string, now: Date): Date | null {
 
   for (const time of times) {
     if (isDaily(parsed)) {
-      candidates.push(nextDailyRun(time, now));
+      candidates.push(nextDailyRun(time, now, timeZone));
     } else if (isWeekly(parsed)) {
       const days = parseCronPart(parsed.dayOfWeek);
-      candidates.push(nextWeeklyRun(time, days.length ? days : [1], now));
+      candidates.push(nextWeeklyRun(time, days.length ? days : [1], now, timeZone));
     } else if (isMonthly(parsed)) {
       const days = parseCronPart(parsed.dayOfMonth);
-      candidates.push(nextMonthlyRun(time, days.length ? days : [1], now));
+      candidates.push(nextMonthlyRun(time, days.length ? days : [1], now, timeZone));
     }
   }
 
@@ -347,16 +342,17 @@ function nextRunForSingleCron(cron: string, now: Date): Date | null {
   return candidates.reduce((min, d) => (d.getTime() < min.getTime() ? d : min));
 }
 
-/** Next local run time for a stored schedule string, or null if unparseable/disabled. */
+/** Next run time in the agent-runner timezone, or null if unparseable/disabled. */
 export function getNextScheduledRun(
   schedule: string | null | undefined,
   now: Date = new Date(),
+  timeZone: string = getAgentCronTimezone(),
 ): Date | null {
   const crons = splitScheduleCrons(schedule);
   if (crons.length === 0) return null;
 
   const candidates = crons
-    .map((cron) => nextRunForSingleCron(cron, now))
+    .map((cron) => nextRunForSingleCron(cron, now, timeZone))
     .filter((d): d is Date => d !== null);
 
   if (candidates.length === 0) return null;
@@ -367,10 +363,12 @@ export function formatNextScheduledRun(
   schedule: string | null | undefined,
   locale?: string,
   now: Date = new Date(),
+  timeZone: string = getAgentCronTimezone(),
 ): string | null {
-  const next = getNextScheduledRun(schedule, now);
+  const next = getNextScheduledRun(schedule, now, timeZone);
   if (!next) return null;
   return next.toLocaleString(locale ?? undefined, {
+    timeZone,
     weekday: "short",
     month: "short",
     day: "numeric",

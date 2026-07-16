@@ -10,7 +10,7 @@ import { useAgentBackgroundRuns } from "@/components/ui/agent-background-runs";
 import { MarkdownLite } from "@/components/ui/markdown-lite";
 import { useTranslation } from "@/components/ui/locale-provider";
 import type { AgentRun, McpCredentialRequest } from "@/lib/agents/agent-types";
-import { normalizeSteps } from "@/lib/agents/run-preview";
+import { normalizeSteps, resolveRunOutputText } from "@/lib/agents/run-preview";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 2_000;
@@ -168,7 +168,13 @@ export function AgentRunDetailPageClient({
 
   const displayName = initialAgentName?.trim() || t("agents.runDetailTitle");
   const steps = normalizeSteps(run?.steps);
-  const isLive = Boolean(run && isActiveStatus(run.status));
+  const displayOutput = run ? resolveRunOutputText(run) : null;
+  const finishedViaSteps = Boolean(
+    run &&
+      isActiveStatus(run.status) &&
+      steps.some((step) => step.tool === "finish" && step.observation.trim()),
+  );
+  const isLive = Boolean(run && isActiveStatus(run.status) && !finishedViaSteps);
   const startedAt = formatTimestamp(run?.startedAt ?? run?.createdAt);
   const finishedAt = formatTimestamp(run?.finishedAt);
 
@@ -311,7 +317,7 @@ export function AgentRunDetailPageClient({
               <AgentRunSteps steps={steps} isLive={isLive} />
             </section>
 
-            {run.output?.trim() ? (
+            {displayOutput ? (
               <section
                 className={cn(
                   "rounded-xl border p-5 sm:p-6",
@@ -330,15 +336,15 @@ export function AgentRunDetailPageClient({
                       : t("agents.runOutput")}
                 </h2>
                 {run.status === "FAILED" ? (
-                  <p className="mt-3 max-h-[32rem] overflow-auto whitespace-pre-wrap text-sm leading-relaxed text-red-400">
-                    {run.output}
+                  <p className="mt-3 max-h-[32rem] overflow-auto whitespace-pre-wrap break-words text-sm leading-relaxed text-red-400 [overflow-wrap:anywhere]">
+                    {displayOutput}
                   </p>
                 ) : run.status === "CANCELLED" ? (
-                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{run.output}</p>
+                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{displayOutput}</p>
                 ) : (
                   <MarkdownLite
-                    text={run.output}
-                    className="mt-3 max-h-[32rem] overflow-auto"
+                    text={displayOutput}
+                    className="mt-3 max-h-[32rem] min-w-0 overflow-auto break-words [overflow-wrap:anywhere]"
                   />
                 )}
               </section>

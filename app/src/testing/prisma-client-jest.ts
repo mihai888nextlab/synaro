@@ -26,4 +26,9 @@ export class PrismaClient {
     findFirst: jest.fn() as jest.MockedFunction<any>,
     update: (jest.fn() as jest.MockedFunction<any>).mockResolvedValue({}),
   };
+  activityLog = {
+    findMany: jest.fn() as jest.MockedFunction<any>,
+    deleteMany: (jest.fn() as jest.MockedFunction<any>).mockResolvedValue({ count: 0 }),
+    create: jest.fn() as jest.MockedFunction<any>,
+  };
 }

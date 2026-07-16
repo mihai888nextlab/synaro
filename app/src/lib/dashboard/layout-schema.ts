@@ -9,6 +9,7 @@ export const DASHBOARD_ROW_HEIGHT_PX = 80;
 
 export const WIDGET_TYPES = [
   "kpi_strip",
+  "kpi_cluster",
   "single_kpi",
   "projects_showcase",
   "agents_showcase",
@@ -17,6 +18,7 @@ export const WIDGET_TYPES = [
   "page_shortcut",
   "project_shortcut",
   "agent_shortcut",
+  "agent_last_run",
   "api_keys_summary",
 ] as const;
 
@@ -32,11 +34,28 @@ export type PageShortcutRoute =
   | "api_keys"
   | "documentation";
 
+export type KpiClusterLayoutMode = "row" | "grid" | "column";
+
 export type WidgetConfig =
   | { metric: KpiMetricKey }
   | { route: PageShortcutRoute }
   | { projectId: string }
-  | { agentId: string };
+  | { agentId: string }
+  | { layout: KpiClusterLayoutMode };
+
+export type WidgetSizeConstraints = {
+  minW: number;
+  maxW: number;
+  minH: number;
+  maxH: number;
+};
+
+export type WidgetSizePreset = {
+  id: string;
+  labelKey: string;
+  w: number;
+  h: number;
+};
 
 export type DashboardWidgetInstance = {
   id: string;
@@ -80,6 +99,8 @@ export type WidgetRegistryMeta = {
   categoryLabel: string;
   keywords: string[];
   allowedSizes: WidgetSize[];
+  sizeConstraints: WidgetSizeConstraints;
+  sizePresets: WidgetSizePreset[];
   maxInstances: number;
   defaultSize: WidgetSize;
   requiresConfig?: boolean;

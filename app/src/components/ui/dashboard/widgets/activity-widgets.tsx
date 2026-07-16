@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/router";
 
 import { useTranslation } from "@/components/ui/locale-provider";
 import { DashboardSectionLink } from "@/components/ui/dashboard-section-link";
@@ -36,6 +37,7 @@ const statusTone: Record<string, string> = {
 
 export function ActivityFeedCompactWidget({ data, variant, layoutMode = "grid" }: DashboardWidgetRenderProps) {
   const { t } = useTranslation();
+  const router = useRouter();
   const logs = (variant === "preview" ? DASHBOARD_PLACEHOLDER_LOGS : data.activityLogs).slice(0, 5);
   const fluid = layoutMode === "fluid";
 
@@ -62,12 +64,29 @@ export function ActivityFeedCompactWidget({ data, variant, layoutMode = "grid" }
         )}
       >
         {logs.map((log) => (
-          <li key={log.id} className="flex items-start justify-between gap-3 py-2.5 text-sm">
-            <div className="min-w-0">
-              <p className="truncate font-medium text-foreground">{log.action}</p>
-              <p className="text-xs text-muted-foreground">{log.project}</p>
-            </div>
-            <span className={cn("shrink-0 text-xs capitalize", statusTone[log.status])}>{log.time}</span>
+          <li key={log.id} className="py-2.5 text-sm">
+            <button
+              type="button"
+              disabled={!log.href}
+              onClick={() => {
+                if (log.href) void router.push(log.href);
+              }}
+              aria-label={log.href ? t("logs.openRelated", { action: log.action }) : undefined}
+              className={cn(
+                "flex w-full items-start justify-between gap-3 rounded-lg text-left outline-offset-2 transition",
+                log.href
+                  ? "cursor-pointer hover:bg-muted/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70"
+                  : "cursor-default",
+              )}
+            >
+              <div className="min-w-0">
+                <p className={cn("truncate font-medium text-foreground", log.href && "hover:underline")}>
+                  {log.action}
+                </p>
+                <p className="text-xs text-muted-foreground">{log.project}</p>
+              </div>
+              <span className={cn("shrink-0 text-xs capitalize", statusTone[log.status])}>{log.time}</span>
+            </button>
           </li>
         ))}
       </ul>

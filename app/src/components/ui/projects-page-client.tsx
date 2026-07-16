@@ -205,28 +205,34 @@ export function ProjectsPageClient({
   /** Refresh Docker/runtime pills from environment-service (falls back to DB if unreachable). */
   React.useEffect(() => {
     let cancelled = false;
+    let timer: number | undefined;
     async function refresh() {
+      let nextDelay = 18000;
       try {
         const res = await fetch("/api/projects");
         if (!res.ok || cancelled) return;
         const body = (await res.json()) as { projects?: SynaroProjectCardModel[] };
         if (body.projects && !cancelled) {
           const hidden = deleteInFlightRef.current;
-          setProjects(
+          const next =
             hidden.size === 0
               ? body.projects
-              : body.projects.filter((p) => !hidden.has(p.id)),
-          );
+              : body.projects.filter((p) => !hidden.has(p.id));
+          setProjects(next);
+          // Poll faster while a container is still coming up so the card flips to
+          // RUNNING promptly (start is now async — see /api/projects/:id/docker).
+          if (next.some((p) => p.environmentStatus === "PROVISIONING")) nextDelay = 4000;
         }
       } catch {
         /* ignore */
+      } finally {
+        if (!cancelled) timer = window.setTimeout(refresh, nextDelay);
       }
     }
     void refresh();
-    const id = window.setInterval(refresh, 18000);
     return () => {
       cancelled = true;
-      window.clearInterval(id);
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, []);
 

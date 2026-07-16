@@ -53,6 +53,54 @@ async function respondWithSyncedCard(projectId: string, res: NextApiResponse, vi
   res.status(200).json({ project: projectRowToCardModel(merged, 0, { viewerUserId }) });
 }
 
+/** Return the project's current card immediately with a 202 (work continues in the background). */
+async function respondProvisioning(projectId: string, res: NextApiResponse, viewerUserId: string) {
+  const row = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
+  res.status(202).json({ project: projectRowToCardModel(row, 0, { viewerUserId }) });
+}
+
+/**
+ * Run a long provisioning op (image pull + git clone can take minutes) WITHOUT holding the
+ * HTTP request open — that would blow past Cloudflare's ~100s origin timeout and surface as a
+ * 524 HTML page ("Invalid response from server."). environment-service owns the authoritative
+ * status; when the op settles we reconcile the app's Project row, and the projects list poll
+ * flips the card to RUNNING (or ERROR) in the meantime.
+ */
+function provisionInBackground(
+  projectId: string,
+  actorUserId: string,
+  op: () => Promise<RemoteEnvironment>,
+): void {
+  void op()
+    .then(async (env) => {
+      const patch = projectUpdateFromRemoteEnv(env);
+      await prisma.project.update({ where: { id: projectId }, data: patch });
+      await recordDockerActivityLog({
+        userId: actorUserId,
+        projectId,
+        kind: "start",
+        environmentStatus: patch.environmentStatus,
+      });
+    })
+    .catch(async (err) => {
+      console.error("[api/projects/docker] background provision failed", err);
+      try {
+        await prisma.project.update({
+          where: { id: projectId },
+          data: { environmentStatus: "ERROR" },
+        });
+        await recordProjectActivityLog({
+          userId: actorUserId,
+          projectId,
+          action: "Container start failed",
+          status: "STOPPED",
+        });
+      } catch {
+        /* ignore */
+      }
+    });
+}
+
 async function persistDockerResult(
   projectId: string,
   actorUserId: string,
@@ -151,33 +199,46 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const rows = await fetchEnvironmentsForProject(projectId);
       const active = pickActiveRuntimeEnvironment(rows);
 
-      if (!active) {
-        const stopped = rows.find((r) => r.status === "STOPPED" && r.containerId);
-        if (stopped) {
-          env = await remoteStartEnvironment(stopped.id);
-        } else if (!rows.length) {
-          env = await remoteCreateEnvironment(projectId, "node:20-alpine", createOpts);
-        } else {
-          const head = rows[0]!;
-          await remoteDestroyEnvironment(head.id);
-          const image =
-            typeof head.image === "string" && head.image.length > 0 ? head.image : "node:20-alpine";
-          env = await remoteCreateEnvironment(projectId, image, createOpts);
-        }
-      } else {
-        if (active.status === "RUNNING") {
-          const patch = projectUpdateFromRemoteEnv(active);
-          await prisma.project.update({ where: { id: projectId }, data: patch });
-          await respondWithSyncedCard(projectId, res, session.user.id);
-          return;
-        }
-        if (active.status === "PROVISIONING") {
-          res.status(409).json({ error: "Environment is already starting. Wait for it to finish." });
-          return;
-        }
-        res.status(500).json({ error: `Unexpected environment status: ${active.status}` });
+      // Already running — sync the card and return immediately (fast path).
+      if (active?.status === "RUNNING") {
+        const patch = projectUpdateFromRemoteEnv(active);
+        await prisma.project.update({ where: { id: projectId }, data: patch });
+        await respondWithSyncedCard(projectId, res, session.user.id);
         return;
       }
+
+      // Already starting — report PROVISIONING; the projects list poll keeps watching.
+      if (active?.status === "PROVISIONING") {
+        await prisma.project.update({
+          where: { id: projectId },
+          data: { environmentStatus: "PROVISIONING" },
+        });
+        await respondProvisioning(projectId, res, session.user.id);
+        return;
+      }
+
+      // Otherwise we must provision (start a stopped env, create a fresh one, or replace a
+      // dead one). Any of these can take minutes, so kick the op off in the background, mark
+      // the project PROVISIONING, and return 202 immediately — see provisionInBackground.
+      const startOp = (): Promise<RemoteEnvironment> => {
+        const stopped = rows.find((r) => r.status === "STOPPED" && r.containerId);
+        if (stopped) return remoteStartEnvironment(stopped.id);
+        if (!rows.length) return remoteCreateEnvironment(projectId, "node:20-alpine", createOpts);
+        const head = rows[0]!;
+        const image =
+          typeof head.image === "string" && head.image.length > 0 ? head.image : "node:20-alpine";
+        return remoteDestroyEnvironment(head.id).then(() =>
+          remoteCreateEnvironment(projectId, image, createOpts),
+        );
+      };
+
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { environmentStatus: "PROVISIONING" },
+      });
+      provisionInBackground(projectId, session.user.id, startOp);
+      await respondProvisioning(projectId, res, session.user.id);
+      return;
     }
 
     if (!env) {

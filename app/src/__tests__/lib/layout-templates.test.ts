@@ -14,8 +14,8 @@ describe("layout-templates", () => {
     const agentWidget = added.find((w) => w.type === "agent_last_run");
     const kpiWidget = added.find((w) => w.type === "kpi_cluster");
 
-    expect(agentWidget).toMatchObject({ x: 0, w: 8, h: 8, config: { agentId: "agent-1" } });
-    expect(kpiWidget).toMatchObject({ x: 8, w: 4, h: 8, config: { layout: "grid" } });
+    expect(agentWidget).toMatchObject({ x: 0, w: 6, h: 4, config: { agentId: "agent-1" } });
+    expect(kpiWidget).toMatchObject({ x: 6, w: 6, h: 4, config: { layout: "grid" } });
     expect(agentWidget!.y).toBe(kpiWidget!.y);
   });
 

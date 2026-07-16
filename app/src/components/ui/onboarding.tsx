@@ -6,19 +6,26 @@ import { useRouter } from "next/router";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Check, MousePointerClick, Sparkles } from "lucide-react";
 
+import { useSession } from "next-auth/react";
+
 import { Button } from "@/components/ui/button";
 import {
   consumeOnboardingPending,
+  isOnboardingCompleted,
   markOnboardingCompleted,
 } from "@/lib/onboarding-storage";
 import {
+  dispatchCloseMobileSidebar,
+  dispatchOpenMobileSidebar,
   findClickedTourTarget,
   findVisibleTourTarget,
   getEffectiveStepIndex,
   getOnboardingTourSteps,
   getPreviousEffectiveStepIndex,
   getStepIndexById,
+  isAppShellPath,
   isElementVisible,
+  isMobileViewport,
   resolveNavigateTo,
   resolveStepSelectors,
   routeMatches,
@@ -38,9 +45,11 @@ type Ctx = {
 const OnboardingContext = React.createContext<Ctx | null>(null);
 
 const SPOTLIGHT_PAD = 10;
-const Z_OVERLAY = 10000;
-const Z_TARGET = 10003;
-const Z_POPOVER = 10004;
+/** Dim/spotlight sit below app dialogs (z 9998/9999) so modals are never covered. */
+const Z_OVERLAY = 9000;
+const Z_TARGET = 9003;
+/** Tour card stays above dialogs so Next/Skip remain clickable. */
+const Z_POPOVER = 10050;
 
 function clearTargetElevation(el: HTMLElement | null) {
   if (!el) return;
@@ -63,12 +72,41 @@ function elevateTarget(el: HTMLElement) {
   }
   const pos = window.getComputedStyle(el).position;
   if (pos === "static") el.style.position = "relative";
-  el.style.zIndex = String(Z_TARGET);
+  const computed = window.getComputedStyle(el).zIndex;
+  const current = computed === "auto" ? 0 : Number(computed);
+  // Never lower an already-high stacking context (e.g. Radix dialog at 9999).
+  el.style.zIndex = String(Math.max(Number.isFinite(current) ? current : 0, Z_TARGET));
+}
+
+/** App modal open during the tour (excludes the tour popover itself). */
+function findOpenAppDialog(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  for (const node of document.querySelectorAll('[role="dialog"]')) {
+    if (!(node instanceof HTMLElement)) continue;
+    if (node.getAttribute("aria-labelledby") === "onboarding-tour-title") continue;
+    const r = node.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) continue;
+    const style = window.getComputedStyle(node);
+    if (style.display === "none" || style.visibility === "hidden") continue;
+    return node;
+  }
+  return null;
 }
 
 function measureElement(el: Element): Rect {
   const r = el.getBoundingClientRect();
   return { top: r.top, left: r.left, width: r.width, height: r.height };
+}
+
+function rectsEqual(a: Rect | null, b: Rect | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.top === b.top &&
+    a.left === b.left &&
+    a.width === b.width &&
+    a.height === b.height
+  );
 }
 
 function SpotlightPanels({ rect }: { rect: Rect | null }) {
@@ -203,12 +241,12 @@ function TourPopover({
             {t("onboarding.stepProgress", { current: stepIndex + 1, total: totalSteps })}
           </span>
         </div>
-        <div className="flex gap-1">
+        <div className="hidden gap-1 sm:flex" aria-hidden>
           {Array.from({ length: totalSteps }).map((_, i) => (
             <div
               key={i}
               className={cn(
-                "h-1 w-4 rounded-full transition-colors",
+                "h-1 w-3 rounded-full transition-colors md:w-4",
                 i <= stepIndex ? "bg-primary" : "bg-border/80",
               )}
             />
@@ -273,7 +311,6 @@ function TourPopover({
               size="sm"
               className="rounded-xl"
               onClick={onNext}
-              disabled={targetClicked}
             >
               {targetClicked ? (
                 t("onboarding.continuing")
@@ -367,18 +404,34 @@ function SpotlightTourLayer({
       const resolvedIdx = getEffectiveStepIndex(targetIdx, tourSteps);
       const nextStep = tourSteps[resolvedIdx]!;
 
-      const finish = () => onStepIndexChange(resolvedIdx);
+      const finish = () => {
+        onStepIndexChange(resolvedIdx);
+      };
 
       const isOnTargetRoute = () => routeMatches(router.pathname, nextStep.route);
 
-      // Sidebar nav — tour drives navigation explicitly.
+      // Sidebar nav — tour drives navigation; route-sync effect also advances as backup.
       if (step.id === "nav-projects" || step.id === "nav-agents") {
         const href = step.id === "nav-projects" ? "/projects" : "/agents";
+        dispatchCloseMobileSidebar();
         if (isOnTargetRoute()) {
           finish();
           return;
         }
-        void router.push(href).finally(finish);
+        void router.push(href).catch(() => {
+          // Fall through to route-sync / timeout backup
+        });
+        window.setTimeout(() => {
+          const here =
+            typeof window !== "undefined" ? window.location.pathname : router.pathname;
+          if (
+            routeMatches(here, nextStep.route) ||
+            here === href ||
+            here.startsWith(`${href}/`)
+          ) {
+            finish();
+          }
+        }, 400);
         return;
       }
 
@@ -388,7 +441,14 @@ function SpotlightTourLayer({
           finish();
           return;
         }
-        void router.push(clickedHref).finally(finish);
+        void router.push(clickedHref).catch(() => {});
+        window.setTimeout(() => {
+          const here =
+            typeof window !== "undefined" ? window.location.pathname : router.pathname;
+          if (routeMatches(here, nextStep.route) || routeMatches(router.pathname, nextStep.route)) {
+            finish();
+          }
+        }, 400);
         return;
       }
 
@@ -403,13 +463,39 @@ function SpotlightTourLayer({
       if (!active || !hasTarget) {
         clearTargetElevation(elevatedElRef.current);
         elevatedElRef.current = null;
-        setTargetRect(null);
+        setTargetRect((prev) => (prev === null ? prev : null));
         return;
       }
 
-      const el = findVisibleTourTarget(stepSelectors);
-      if (!el || !(el instanceof HTMLElement)) {
-        setTargetRect(null);
+      let el = findVisibleTourTarget(stepSelectors) as HTMLElement | null;
+      const openDialog = findOpenAppDialog();
+
+      // If a modal opened over the previous target, spotlight inside it (or the dialog).
+      if (openDialog) {
+        if (el && openDialog.contains(el)) {
+          // keep el
+        } else {
+          const dialogMatch = stepSelectors.some((sel) => {
+            try {
+              return openDialog.matches(sel) || Boolean(openDialog.querySelector(sel));
+            } catch {
+              return false;
+            }
+          });
+          if (dialogMatch) {
+            el = openDialog;
+          } else {
+            clearTargetElevation(elevatedElRef.current);
+            elevatedElRef.current = null;
+            const nextRect = measureElement(openDialog);
+            setTargetRect((prev) => (rectsEqual(prev, nextRect) ? prev : nextRect));
+            return;
+          }
+        }
+      }
+
+      if (!el) {
+        setTargetRect((prev) => (prev === null ? prev : null));
         return;
       }
 
@@ -419,10 +505,11 @@ function SpotlightTourLayer({
         elevateTarget(el);
       }
 
-      if (opts?.scroll) {
+      if (opts?.scroll && !openDialog) {
         el.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
       }
-      setTargetRect(measureElement(el));
+      const nextRect = measureElement(el);
+      setTargetRect((prev) => (rectsEqual(prev, nextRect) ? prev : nextRect));
     },
     [active, hasTarget, stepSelectors],
   );
@@ -435,6 +522,13 @@ function SpotlightTourLayer({
     }
 
     step.onEnter?.();
+
+    if (step.needsMobileSidebar && isMobileViewport()) {
+      dispatchOpenMobileSidebar();
+    } else if (!step.needsMobileSidebar) {
+      // Leaving sidebar-targeted steps: collapse the mobile drawer so content is free.
+      if (isMobileViewport()) dispatchCloseMobileSidebar();
+    }
 
     if (!routeMatches(router.pathname, step.route)) {
       const href = resolveNavigateTo(step);
@@ -461,7 +555,9 @@ function SpotlightTourLayer({
     window.addEventListener("scroll", onLayoutChange, true);
 
     const observer = new MutationObserver(onLayoutChange);
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    // childList only — attribute mutations from elevateTarget / framer-motion
+    // would otherwise re-enter updateTarget every animation frame.
+    observer.observe(document.body, { childList: true, subtree: true, attributes: false });
 
     const poll = window.setInterval(onLayoutChange, 400);
 
@@ -540,21 +636,54 @@ function SpotlightTourLayer({
   }, [active, step.advanceWhenVisible, step.id, effectiveIndex, goToStep]);
 
   React.useEffect(() => {
-    // Navigation for click-to-advance steps is handled in advanceAfterInteraction.
-    if (!active || !step.advanceOnNavigateTo || step.advanceOnTargetClick) return;
+    if (!active || !step.advanceOnNavigateTo) return;
     const { prefix, stepId } = step.advanceOnNavigateTo;
-    const matches =
-      prefix === "/projects/"
-        ? router.pathname.startsWith("/projects/") && router.pathname !== "/projects"
-        : router.pathname === prefix || router.pathname.startsWith(`${prefix}/`);
-    if (!matches) return;
 
-    const targetIdx = getStepIndexById(stepId, tourSteps);
-    if (targetIdx < 0 || targetIdx === effectiveIndex) return;
+    const pathMatches = (path: string) => {
+      const pathname = path.split("?")[0] ?? path;
+      if (prefix === "/projects/") {
+        return pathname.startsWith("/projects/") && pathname !== "/projects";
+      }
+      return pathname === prefix || pathname.startsWith(`${prefix}/`);
+    };
 
-    const t = window.setTimeout(() => goToStep(targetIdx), 350);
-    return () => window.clearTimeout(t);
-  }, [active, step.advanceOnNavigateTo, step.advanceOnTargetClick, router.pathname, effectiveIndex, goToStep]);
+    const tryAdvance = (path: string = router.pathname) => {
+      if (!pathMatches(path)) return;
+      // Click-to-advance steps: only follow the URL after the user hit the target
+      // (or if they somehow landed on the route while Continuing… was showing).
+      if (step.advanceOnTargetClick && !targetClicked && !interactionHandledRef.current) {
+        return;
+      }
+      const targetIdx = getStepIndexById(stepId, tourSteps);
+      if (targetIdx < 0) return;
+      const resolved = getEffectiveStepIndex(targetIdx, tourSteps);
+      if (resolved === effectiveIndex) return;
+      onStepIndexChange(resolved);
+    };
+
+    // Already on the destination (e.g. push resolved but step index never moved).
+    tryAdvance(router.pathname);
+    tryAdvance(typeof window !== "undefined" ? window.location.pathname : router.pathname);
+
+    const onComplete = (url: string) => tryAdvance(url);
+    router.events.on("routeChangeComplete", onComplete);
+    const t = window.setTimeout(() => tryAdvance(), 350);
+    return () => {
+      router.events.off("routeChangeComplete", onComplete);
+      window.clearTimeout(t);
+    };
+  }, [
+    active,
+    step.advanceOnNavigateTo,
+    step.advanceOnTargetClick,
+    step.id,
+    router,
+    router.pathname,
+    effectiveIndex,
+    targetClicked,
+    tourSteps,
+    onStepIndexChange,
+  ]);
 
   if (!active || !mounted) return null;
 
@@ -572,8 +701,18 @@ function SpotlightTourLayer({
           isLast={isLast}
           onBack={() => goToStep(getPreviousEffectiveStepIndex(effectiveIndex, tourSteps))}
           onNext={() => {
-            if (isLast) onFinish();
-            else goToStep(effectiveIndex + 1);
+            if (isLast) {
+              onFinish();
+              return;
+            }
+            // If the user already clicked the target but the step index stalled
+            // (common after client-side nav), jump via advanceOnNavigateTo.
+            if (targetClicked && step.advanceOnNavigateTo) {
+              const targetIdx = getStepIndexById(step.advanceOnNavigateTo.stepId, tourSteps);
+              goToStep(targetIdx >= 0 ? targetIdx : effectiveIndex + 1);
+              return;
+            }
+            goToStep(effectiveIndex + 1);
           }}
           onSkip={onFinish}
           onSkipStep={() => goToStep(effectiveIndex + 1)}
@@ -588,6 +727,7 @@ function SpotlightTourLayer({
 
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const { status } = useSession();
   const [active, setActive] = React.useState(false);
   const [stepIndex, setStepIndex] = React.useState(0);
   const hasAutoStartedRef = React.useRef(false);
@@ -606,17 +746,30 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 
   const finishOnboarding = React.useCallback(() => {
     markOnboardingCompleted();
+    dispatchCloseMobileSidebar();
     setActive(false);
   }, []);
 
   React.useEffect(() => {
+    if (status === "loading") return;
+    if (status === "unauthenticated") {
+      hasAutoStartedRef.current = true;
+      return;
+    }
+    if (status !== "authenticated") return;
+    if (!isAppShellPath(router.pathname)) return;
     if (hasAutoStartedRef.current) return;
     hasAutoStartedRef.current = true;
-    if (consumeOnboardingPending()) {
-      setStepIndex(0);
-      setActive(true);
+
+    const pending = consumeOnboardingPending();
+    if (!pending && isOnboardingCompleted()) return;
+
+    setStepIndex(0);
+    setActive(true);
+    if (router.pathname !== "/dashboard") {
+      void router.push("/dashboard");
     }
-  }, []);
+  }, [status, router]);
 
   const value = React.useMemo(
     () => ({ active, openOnboarding, closeOnboarding }),

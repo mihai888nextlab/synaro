@@ -1,15 +1,19 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 
 import { AgentStatusBadge } from "@/components/ui/agents/agent-status-badge";
+import { AgentRunSteps } from "@/components/ui/agents/agent-run-steps";
 import { useTranslation } from "@/components/ui/locale-provider";
 import { MarkdownLite } from "@/components/ui/markdown-lite";
 import type { AgentRun } from "@/lib/agents/agent-types";
 import {
   getRunCardPreview,
   normalizeSteps,
+  resolveRunOutputText,
+  truncatePreview,
   type RunPreviewVariant,
 } from "@/lib/agents/run-preview";
 import { cn } from "@/lib/utils";
@@ -19,6 +23,13 @@ type AgentRunCardProps = {
   agentId: string;
   variant?: RunPreviewVariant;
 };
+
+function isLiveStatus(status: AgentRun["status"]): boolean {
+  return status === "PENDING" || status === "RUNNING" || status === "NEEDS_INPUT";
+}
+
+/** Final output only — keep it bounded so MarkdownLite stays cheap. */
+const EMBEDDED_OUTPUT_MAX = 2_000;
 
 export function AgentRunCard({ run, agentId, variant = "compact" }: AgentRunCardProps) {
   const { t } = useTranslation();
@@ -45,51 +56,7 @@ export function AgentRunCard({ run, agentId, variant = "compact" }: AgentRunCard
 
   const isEmbedded = variant === "embedded";
   const isExpanded = variant === "expanded" || isEmbedded;
-  const showPreview = preview.kind !== "empty" || preview.text.length > 0;
-
-  const previewContent = (() => {
-    if (!showPreview) return null;
-
-    if (isExpanded && preview.kind === "output") {
-      return (
-        <MarkdownLite
-          text={preview.text}
-          className={cn(
-            "text-sm leading-relaxed",
-            !isEmbedded && "text-muted-foreground [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_pre]:text-xs",
-          )}
-        />
-      );
-    }
-
-    if (isExpanded && preview.kind === "activity") {
-      return (
-        <MarkdownLite
-          text={preview.text}
-          className={cn(
-            "text-sm leading-relaxed",
-            !isEmbedded && "text-muted-foreground [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_pre]:text-xs",
-          )}
-        />
-      );
-    }
-
-    const previewClassName = cn(
-      "text-sm leading-relaxed",
-      !isExpanded && "line-clamp-2",
-      preview.kind === "error" && "text-red-400",
-      preview.kind === "needs-input" && "text-amber-400/90",
-      (preview.kind === "output" ||
-        preview.kind === "activity" ||
-        preview.kind === "cancelled" ||
-        preview.kind === "empty") &&
-        (preview.kind === "empty" ? "text-muted-foreground/50 italic" : "text-muted-foreground"),
-      isExpanded && preview.kind === "error" && "whitespace-pre-wrap",
-      isExpanded && preview.kind === "cancelled" && "whitespace-pre-wrap",
-    );
-
-    return <p className={previewClassName}>{preview.text}</p>;
-  })();
+  const live = isLiveStatus(run.status);
 
   const header = (
     <div className="flex shrink-0 items-start justify-between gap-3">
@@ -118,18 +85,89 @@ export function AgentRunCard({ run, agentId, variant = "compact" }: AgentRunCard
     </div>
   );
 
+  // Dashboard / expanded: live steps while running, markdown only for the final answer.
+  let bodyPreview: ReactNode = null;
+  if (isExpanded && live) {
+    // Webhook lag: finish already wrote the answer but status is still RUNNING.
+    const earlyOutput = resolveRunOutputText(run);
+    const hasFinish = steps.some((s) => s.tool === "finish" && s.observation.trim());
+    if (earlyOutput && hasFinish) {
+      bodyPreview = (
+        <MarkdownLite
+          text={truncatePreview(earlyOutput, EMBEDDED_OUTPUT_MAX)}
+          className={cn(
+            "text-sm leading-relaxed",
+            !isEmbedded && "text-muted-foreground [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_pre]:text-xs",
+          )}
+        />
+      );
+    } else {
+      bodyPreview = <AgentRunSteps steps={steps} isLive />;
+    }
+  } else if (isExpanded && run.status === "DONE") {
+    const output = resolveRunOutputText(run);
+    if (output) {
+      bodyPreview = (
+        <MarkdownLite
+          text={truncatePreview(output, EMBEDDED_OUTPUT_MAX)}
+          className={cn(
+            "text-sm leading-relaxed",
+            !isEmbedded && "text-muted-foreground [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_pre]:text-xs",
+          )}
+        />
+      );
+    } else {
+      bodyPreview = (
+        <p className="text-sm italic text-muted-foreground/50">{t("agents.runPreviewNoOutput")}</p>
+      );
+    }
+  } else if (isExpanded && (preview.kind === "error" || preview.kind === "cancelled")) {
+    bodyPreview = (
+      <p
+        className={cn(
+          "whitespace-pre-wrap text-sm leading-relaxed",
+          preview.kind === "error" ? "text-red-400" : "text-muted-foreground",
+        )}
+      >
+        {preview.text}
+      </p>
+    );
+  } else if (!isExpanded) {
+    const showPreview = preview.kind !== "empty" || preview.text.length > 0;
+    if (showPreview) {
+      bodyPreview = (
+        <p
+          className={cn(
+            "line-clamp-2 text-sm leading-relaxed",
+            preview.kind === "error" && "text-red-400",
+            preview.kind === "needs-input" && "text-amber-400/90",
+            (preview.kind === "output" ||
+              preview.kind === "activity" ||
+              preview.kind === "cancelled" ||
+              preview.kind === "empty") &&
+              (preview.kind === "empty"
+                ? "text-muted-foreground/50 italic"
+                : "text-muted-foreground"),
+          )}
+        >
+          {preview.text}
+        </p>
+      );
+    }
+  }
+
   const body = (
     <>
       {header}
 
-      {previewContent ? (
+      {bodyPreview ? (
         <div
           className={cn(
             "mt-3 min-w-0 overflow-hidden break-words [overflow-wrap:anywhere]",
             isExpanded && "min-h-0 flex-1 overflow-y-auto",
           )}
         >
-          {previewContent}
+          {bodyPreview}
         </div>
       ) : null}
 

@@ -193,6 +193,7 @@ export function AgentCard({
               type="button"
               onClick={() => onTrigger(agent.id)}
               disabled={runDisabled}
+              data-onboarding="agent-run"
               title={!agent.enabled ? t("agents.agentDisabledRunTooltip") : undefined}
               className="flex items-center gap-1 rounded-lg border border-border/70 bg-muted px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-accent disabled:opacity-50"
             >
@@ -206,6 +207,7 @@ export function AgentCard({
             <button
               type="button"
               onClick={() => onViewRuns(agent)}
+              data-onboarding="agent-runs-link"
               className="inline-flex items-center gap-0.5 text-muted-foreground transition hover:text-foreground"
             >
               <span>{t("agents.runs")}</span>

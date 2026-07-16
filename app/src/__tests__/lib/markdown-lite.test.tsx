@@ -63,4 +63,35 @@ describe("MarkdownLite", () => {
     );
     expect(container.querySelectorAll("hr")).toHaveLength(3);
   });
+
+  it("does not hang on unmatched inline markers", () => {
+    const started = Date.now();
+    const { container } = render(
+      <MarkdownLite
+        text={"Price ~7,560* open 7,558 and a lone ` backtick plus [orphan bracket"}
+      />,
+    );
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(container.textContent).toContain("7,560*");
+    expect(container.textContent).toContain("`");
+    expect(container.textContent).toContain("[orphan");
+  });
+
+  it("renders stock-style tables with stray asterisks without hanging", () => {
+    const started = Date.now();
+    render(
+      <MarkdownLite
+        text={`## S&P 500 — Live Price*
+
+| Metric | Value |
+|--------|-------|
+| Live Price | ~7,560.00 |
+| Open | 7,558.80* |
+`}
+      />,
+    );
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByText("~7,560.00")).toBeInTheDocument();
+  });
 });

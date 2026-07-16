@@ -43,6 +43,10 @@ function parseInline(md: string): Node[] {
         i = end + 1;
         continue;
       }
+      // Unmatched backtick — emit literally and advance (avoids infinite loop).
+      pushText("`");
+      i += 1;
+      continue;
     }
 
     // strong: **...**
@@ -54,6 +58,9 @@ function parseInline(md: string): Node[] {
         i = end + 2;
         continue;
       }
+      pushText("**");
+      i += 2;
+      continue;
     }
 
     // emphasis: *...*
@@ -65,6 +72,9 @@ function parseInline(md: string): Node[] {
         i = end + 1;
         continue;
       }
+      pushText("*");
+      i += 1;
+      continue;
     }
 
     // link: [text](href)
@@ -79,9 +89,12 @@ function parseInline(md: string): Node[] {
         i = closeParen + 1;
         continue;
       }
+      pushText("[");
+      i += 1;
+      continue;
     }
 
-    // plain text chunk
+    // plain text chunk until the next special character
     const nextSpecials = [
       md.indexOf("`", i),
       md.indexOf("**", i),
@@ -92,6 +105,12 @@ function parseInline(md: string): Node[] {
     if (next === -1) {
       pushText(md.slice(i));
       break;
+    }
+    // Guard: never stall (should not happen after unmatched handlers above).
+    if (next <= i) {
+      pushText(md[i]!);
+      i += 1;
+      continue;
     }
     pushText(md.slice(i, next));
     i = next;

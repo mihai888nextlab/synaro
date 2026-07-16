@@ -89,7 +89,6 @@ export function SynaroAgentCard({
 
       <Link
         href={href}
-        data-onboarding="agent-card-link"
         aria-label={t("agents.openAgent", { name: agent.name })}
         className={cn(
           "mt-4 block min-w-0 flex-1 rounded-lg outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70",

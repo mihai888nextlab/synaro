@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { Component, useMemo, useRef, useState, type ReactNode } from "react";
 import { Search } from "lucide-react";
 
 import { DashboardWidgetRenderer } from "@/components/ui/dashboard/dashboard-widget-renderer";
@@ -46,6 +46,28 @@ type DashboardWidgetPickerProps = {
 type ConfigStep = {
   meta: WidgetRegistryMeta;
 };
+
+class PickerPreviewBoundary extends Component<
+  { children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-border/50 bg-muted/20 text-[10px] text-muted-foreground">
+          Preview
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function countInstances(layout: DashboardLayout, type: WidgetType): number {
   return countWidgetInstances(layout, type);
@@ -421,11 +443,13 @@ export function DashboardWidgetPicker({
                           <div className="pointer-events-none h-28 overflow-hidden bg-muted/15 p-2">
                             <div className="origin-top-left scale-[0.45]">
                               <div style={{ width: 280, height: 160 }}>
-                                <DashboardWidgetRenderer
-                                  variant="preview"
-                                  widget={previewWidget}
-                                  data={data}
-                                />
+                                <PickerPreviewBoundary>
+                                  <DashboardWidgetRenderer
+                                    variant="preview"
+                                    widget={previewWidget}
+                                    data={data}
+                                  />
+                                </PickerPreviewBoundary>
                               </div>
                             </div>
                           </div>

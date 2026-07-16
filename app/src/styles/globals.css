@@ -298,6 +298,7 @@ html.theme-transition * {
 }
 
 .dashboard-grid-root .react-grid-item {
+  /* Keep resize handles usable; clip happens on the inner content wrapper. */
   overflow: visible !important;
   transition: box-shadow 150ms ease;
 }
@@ -307,8 +308,13 @@ html.theme-transition * {
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
 }
 
+/* Lock widgets to the grid cell — content must not stretch the card taller than `h`. */
 .dashboard-grid-item__content {
-  min-height: 100%;
+  box-sizing: border-box;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* Edit mode: light grey border on the full grid cell (widget slot) */

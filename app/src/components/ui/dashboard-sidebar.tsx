@@ -50,10 +50,13 @@ export function DashboardSidebar({
   isCollapsed,
   onToggleCollapse,
   onNavigate,
+  headerEnd,
 }: {
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   onNavigate?: () => void;
+  /** Optional trailing control in the brand row (e.g. mobile close). */
+  headerEnd?: React.ReactNode;
 }) {
   const router = useRouter();
   const { t } = useTranslation();
@@ -107,13 +110,14 @@ export function DashboardSidebar({
       <div className="flex h-full flex-col">
         <div
           className={[
-            "flex h-14 items-center justify-between",
+            "flex h-14 items-center justify-between gap-2",
+            headerEnd ? "pr-2" : "",
           ].join(" ")}
         >
           <Link
             href="/dashboard"
             className={[
-              "ml-0 flex w-full items-center gap-0",
+              "ml-0 flex min-w-0 flex-1 items-center gap-0",
               isCollapsed ? "justify-center" : "justify-start",
             ].join(" ")}
           >
@@ -131,6 +135,7 @@ export function DashboardSidebar({
               Synaro
             </span>
           </Link>
+          {headerEnd ? <div className="shrink-0">{headerEnd}</div> : null}
         </div>
 
         <button

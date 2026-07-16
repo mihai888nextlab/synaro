@@ -46,9 +46,19 @@ export function DashboardPageClient({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isDefault, setIsDefault] = useState(isDefaultLayout);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(max-width: 767px)");
+    const sync = () => setIsMobileViewport(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   const scheduleSave = useCallback((next: DashboardLayout) => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -108,9 +118,10 @@ export function DashboardPageClient({
   return (
     <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-4 sm:gap-6">
       <h1 className="sr-only">{t("nav.dashboard")}</h1>
-      {/* Mobile: read-only monitoring stack — desktop grid is unchanged below */}
+      {/* Mobile: read-only monitoring stack — desktop grid is unchanged below.
+          Only mount on small viewports so we don't double-poll agent last-run widgets. */}
       <div className="md:hidden">
-        <DashboardMobileMonitor layout={layout} data={data} />
+        {isMobileViewport ? <DashboardMobileMonitor layout={layout} data={data} /> : null}
       </div>
 
       <div className="hidden md:contents">
@@ -126,10 +137,16 @@ export function DashboardPageClient({
             {saveError ? <p className="text-xs text-destructive">{saveError}</p> : null}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2" data-onboarding="dashboard-customize">
             {editMode ? (
               <>
-                <Button type="button" variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  data-onboarding="dashboard-add-widget"
+                  onClick={() => setPickerOpen(true)}
+                >
                   <Plus className="size-4" aria-hidden />
                   {t("dashboard.addWidget")}
                 </Button>
@@ -144,7 +161,13 @@ export function DashboardPageClient({
                 </Button>
               </>
             ) : (
-              <Button type="button" variant="outline" size="sm" onClick={() => setEditMode(true)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-onboarding="dashboard-edit"
+                onClick={() => setEditMode(true)}
+              >
                 <Pencil className="size-4" aria-hidden />
                 {t("dashboard.edit")}
               </Button>

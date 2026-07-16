@@ -592,12 +592,24 @@ export const enAppExt: Messages = {
       welcome: {
         title: "Welcome to Synaro",
         description:
-          "This tour walks through the main parts of the app. Click highlighted areas when prompted — the tour will follow your actions.",
+          "A guided tour of the main parts of the app. Click highlighted areas when prompted — the tour follows your actions.",
       },
       sidebar: {
         title: "Navigation",
         description:
-          "The sidebar is your home base: Dashboard, Projects, Agents, Logs, and Settings. Your account menu is at the bottom.",
+          "The sidebar is your home base: Dashboard, Projects, Agents, and Logs. Your account menu (including Settings) is at the bottom.",
+      },
+      dashboardEdit: {
+        title: "Customize your dashboard",
+        description:
+          "Edit mode lets you rearrange and resize widgets. Changes save automatically while you customize.",
+        encourageClick: "Click Edit to enter customize mode.",
+      },
+      dashboardWidgets: {
+        title: "Add and arrange widgets",
+        description:
+          "Use Add widget to open the gallery. Drag widgets onto the grid, then resize with the corner handle or size chips. Click Done when you're finished.",
+        encourageClick: "Click Add widget to browse the gallery, or continue with Next.",
       },
       navProjects: {
         title: "Projects",
@@ -608,88 +620,54 @@ export const enAppExt: Messages = {
       projectsNew: {
         title: "Create or import",
         description:
-          "Start blank, import from GitHub, or upload a folder. Each project gets an isolated container and AI chat.",
-        encourageClick: "Click + New project to open the creation dialog.",
-      },
-      projectsNewDialog: {
-        title: "Project setup",
-        description:
-          "Pick a runtime image and describe what you want to build. You can also import GitHub repos or upload files.",
-        encourageClick: "Explore the form, then click Next — or open an existing project below.",
+          "Start blank, import from GitHub, or upload a folder. Pick a runtime and describe what you want to build.",
+        encourageClick: "Click + New project to open the creation dialog, or continue with Next.",
       },
       projectsOpen: {
         title: "Open a project",
         description:
-          "Click any project card to enter the workspace — file tree, terminal, AI chat, and deployments live there.",
+          "Click a project card to enter the workspace — AI chat, files, terminal, and deployments live there.",
         encourageClick: "Click a project — the tour continues inside the workspace.",
       },
-      workspaceTabs: {
-        title: "Workspace tabs",
+      workspaceAi: {
+        title: "Workspace & AI chat",
         description:
-          "Switch between AI chat, file tree, terminal, and deployments. Everything runs inside your project's container.",
+          "Use the tabs for AI chat, file tree, terminal, and deployments. Describe changes in plain English — Synaro analyzes the repo and applies code.",
       },
-      aiChat: {
-        title: "AI chat",
+      dockerRuntime: {
+        title: "Runtime & terminal",
         description:
-          "Describe changes in plain English. Synaro analyzes your repo, asks clarifying questions when needed, and applies code.",
-        encourageClick: "Click AI chat to select this tab.",
-      },
-      aiComposer: {
-        title: "Send a prompt",
-        description:
-          "Type your request and press Enter. You'll see live progress, file-change previews, and markdown responses.",
-      },
-      fileTree: {
-        title: "File tree",
-        description:
-          "Browse files in your container workspace. Open files to view and edit — the tree refreshes when the AI writes changes.",
-        encourageClick: "Click File tree to explore your project files.",
-      },
-      dockerPill: {
-        title: "Runtime environment",
-        description:
-          "Start or stop the Docker container for this project. Files, terminal, and previews need the runtime running.",
-        encourageClick: "Try starting the runtime if it's stopped.",
-      },
-      terminal: {
-        title: "Terminal",
-        description:
-          "Run shell commands in your project container — install packages, run scripts, or debug alongside the AI.",
-        encourageClick: "Click Terminal to open the in-browser shell.",
-      },
-      deployments: {
-        title: "Deployments & preview",
-        description:
-          "Run your app and open a live preview. Use Run in the toolbar when the container is active.",
-        encourageClick: "Click Deployments to see preview options.",
+          "Start the Docker runtime so files, terminal, and previews work. Use the Terminal tab for shell commands in the container.",
+        encourageClick: "Try starting the runtime if it's stopped, then continue.",
       },
       navAgents: {
         title: "AI agents",
         description:
           "Agents are separate from project chat — use them for web research, HTTP calls, and scheduled tasks that return a text answer.",
-        encourageClick: "Click Agents in the sidebar.",
+        encourageClick: "Click Agents in the sidebar to open the agents page.",
       },
-      agentsIntro: {
+      agents: {
         title: "Build an agent",
         description:
           "Create agents with a system prompt and tools (web search, HTTP GET/POST). Run them on demand or on a cron schedule.",
-        encourageClick: "Click + New agent to see the setup form.",
+        encourageClick: "Click + New agent to peek at the setup form, or continue with Next.",
       },
-      agentsCreateDialog: {
-        title: "Agent configuration",
+      agentsRun: {
+        title: "Run an agent",
         description:
-          "Name your agent, write a system prompt, pick tools, and set max steps. Optional cron syntax runs the agent automatically.",
-        encourageClick: "Review the options, then continue with Next.",
+          "Press Run on an agent card to start a live run (you can add optional input). Use Runs to open history and inspect steps or output.",
+        encourageClick: "Click Run on an agent if you have one, or continue with Next.",
       },
-      header: {
-        title: "Header tools",
+      agentsRunDialog: {
+        title: "Confirm the run",
         description:
-          "Notifications alert you when AI tasks finish. The ? menu replays this tour or opens documentation. The pill shows background AI work.",
+          "Add optional input, then press Run Agent. You can follow progress from the header pill and the agent's run history.",
+        encourageClick: "Review the form, then continue with Next when you're ready.",
       },
       finish: {
         title: "You're ready to build",
         description:
-          "Create a project for code changes, or an agent for research tasks. Press ? anytime for the intro tour or docs.",
+          "Customize your dashboard, build in projects, or run agents for research. Open the help menu (circle icon) anytime to replay this tour or open documentation.",
       },
     },
   },

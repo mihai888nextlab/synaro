@@ -135,6 +135,8 @@ export function AiBackgroundTaskProvider({ children }: { children: React.ReactNo
   }, [activeTask, setActiveTask]);
 
   const pollingTaskIdRef = React.useRef<string | null>(null);
+  const activeTaskRef = React.useRef(activeTask);
+  activeTaskRef.current = activeTask;
 
   React.useEffect(() => {
     if (!activeTask?.taskId) return;
@@ -149,8 +151,10 @@ export function AiBackgroundTaskProvider({ children }: { children: React.ReactNo
     let timer: ReturnType<typeof setInterval> | null = null;
 
     async function tick() {
+      const current = activeTaskRef.current;
+      if (!current?.taskId) return;
       try {
-        const res = await fetch(`/api/ai-tasks/${encodeURIComponent(activeTask!.taskId)}`, {
+        const res = await fetch(`/api/ai-tasks/${encodeURIComponent(current.taskId)}`, {
           cache: "no-store",
         });
         if (!res.ok) {
@@ -167,8 +171,8 @@ export function AiBackgroundTaskProvider({ children }: { children: React.ReactNo
         }
 
         const next: ActiveAiTask = {
-          projectId: activeTask!.projectId,
-          projectSlug: activeTask!.projectSlug ?? null,
+          projectId: current.projectId,
+          projectSlug: current.projectSlug ?? null,
           taskId: task.id,
           status: task.status,
           progress: task.progress ?? null,
@@ -179,23 +183,23 @@ export function AiBackgroundTaskProvider({ children }: { children: React.ReactNo
           if (lastNotifiedTaskIdRef.current !== task.id) {
             lastNotifiedTaskIdRef.current = task.id;
             const href =
-              activeTask!.projectSlug?.trim()
-                ? `/projects/${encodeURIComponent(activeTask!.projectSlug)}`
+              current.projectSlug?.trim()
+                ? `/projects/${encodeURIComponent(current.projectSlug)}`
                 : undefined;
             const title = task.status === "DONE" ? "AI finished your task" : "AI task failed";
             const description =
               task.status === "DONE"
                 ? typeof (task.result as { summary?: string })?.summary === "string"
                   ? ((task.result as { summary: string }).summary)
-                  : activeTask!.progress ?? undefined
-                : task.errorMessage ?? activeTask!.progress ?? undefined;
+                  : current.progress ?? undefined
+                : task.errorMessage ?? current.progress ?? undefined;
 
             push({
               type: task.status === "DONE" ? "ai_task_done" : "ai_task_failed",
               title,
               description,
               href,
-              meta: { taskId: task.id, projectId: activeTask!.projectId },
+              meta: { taskId: task.id, projectId: current.projectId },
             });
 
             showBrowserNotification(title, {
@@ -206,8 +210,8 @@ export function AiBackgroundTaskProvider({ children }: { children: React.ReactNo
           }
           setActiveTask(null);
         } else if (
-          activeTask!.status !== task.status ||
-          activeTask!.progress !== (task.progress ?? null)
+          current.status !== task.status ||
+          current.progress !== (task.progress ?? null)
         ) {
           setActiveTaskState(next);
           storeActiveTask(next);
@@ -289,22 +293,22 @@ export function AiBackgroundTaskPill({ className }: { className?: string }) {
     <Link
       href={href}
       className={cn(
-        "group inline-flex max-w-[9.5rem] items-center gap-1.5 rounded-full",
-        "border border-border/35 bg-muted/15 px-2 py-0.5",
-        "text-[11px] leading-none text-muted-foreground",
-        "transition-colors hover:border-border/55 hover:bg-muted/35 hover:text-foreground",
+        "group inline-flex h-7 max-w-[10rem] items-center gap-1.5 rounded-full",
+        "border border-border/40 bg-muted/20 px-2.5",
+        "text-xs leading-none text-muted-foreground",
+        "transition-colors hover:border-border/60 hover:bg-muted/40 hover:text-foreground",
         className,
       )}
       title={fullLabel}
       aria-label={`${fullLabel}. Open project chat.`}
     >
-      <span className="relative flex size-1.5 shrink-0" aria-hidden>
+      <span className="relative flex size-2 shrink-0" aria-hidden>
         <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/40 opacity-60" />
-        <span className="relative inline-flex size-1.5 rounded-full bg-primary/80" />
+        <span className="relative inline-flex size-2 rounded-full bg-primary/80" />
       </span>
-      <span className="min-w-0 truncate">{shortLabel}</span>
+      <span className="min-w-0 truncate font-medium tracking-tight">{shortLabel}</span>
       <ChevronRight
-        className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-50"
+        className="size-3.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-50"
         aria-hidden
       />
     </Link>

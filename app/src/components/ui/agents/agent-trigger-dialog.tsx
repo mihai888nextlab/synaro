@@ -82,7 +82,10 @@ export function AgentTriggerDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md rounded-2xl border border-border/70 bg-card p-0 shadow-2xl">
+      <DialogContent
+        data-onboarding="agent-trigger-dialog"
+        className="max-w-md rounded-2xl border border-border/70 bg-card p-0 shadow-2xl"
+      >
         <div className="border-b border-border/70 px-6 py-4">
           <DialogTitle className="text-base font-semibold text-foreground">
             {t("agents.runAgentTitle", { name: agent?.name ?? "" })}

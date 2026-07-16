@@ -65,20 +65,59 @@ export function truncatePreview(
   return `${trimmed.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
+/** Raw HTTP/HTML tool dumps freeze the UI if fed through MarkdownLite. */
+export function isBulkyToolObservation(text: string): boolean {
+  const head = text.trimStart().slice(0, 280).toLowerCase();
+  if (head.startsWith("<!doctype") || head.startsWith("<html")) return true;
+  if (/^http\/?\d/i.test(head) && (head.includes("<!doctype") || head.includes("<html"))) {
+    return true;
+  }
+  // Minified markup / script payloads with almost no newlines.
+  if (text.length > 8_000 && (text.match(/\n/g) ?? []).length < 20 && /<\/?[a-z][\s\S]*>/i.test(head)) {
+    return true;
+  }
+  return false;
+}
+
+function summarizeBulkyObservation(text: string): string {
+  const bytes = text.length;
+  const kb = Math.max(1, Math.round(bytes / 1024));
+  if (/^http\/?\d/i.test(text.trimStart()) || text.includes("<!doctype") || text.includes("<html")) {
+    return `Fetched web page (~${kb} KB)`;
+  }
+  return `Large tool result (~${kb} KB)`;
+}
+
 function previewFromText(
   text: string | null | undefined,
   variant: RunPreviewVariant,
 ): string | null {
   if (!text?.trim()) return null;
+  if (isBulkyToolObservation(text)) return summarizeBulkyObservation(text);
   const maxLength = PREVIEW_MAX_LENGTH[variant];
   const source = variant === "compact" ? stripBasicMarkdown(text) : text.trim();
   return truncatePreview(source, maxLength);
 }
 
-function lastStepObservation(steps: ReActStep[], variant: RunPreviewVariant): string | null {
+/** Short plain-text line for compact cards / lists — never raw HTML. */
+function formatLiveStepLine(step: ReActStep): string {
+  const tool = step.tool.trim() || "tool";
+  const obs = step.observation?.trim() ?? "";
+  if (!obs) return tool;
+  if (isBulkyToolObservation(obs)) {
+    const kb = Math.max(1, Math.round(obs.length / 1024));
+    return `${tool} · ~${kb} KB`;
+  }
+  const flat = stripBasicMarkdown(obs).replace(/\s+/g, " ");
+  const snippet = flat.length > 100 ? `${flat.slice(0, 99).trimEnd()}…` : flat;
+  return snippet ? `${tool} · ${snippet}` : tool;
+}
+
+function lastStepObservation(steps: ReActStep[], _variant: RunPreviewVariant): string | null {
   if (steps.length === 0) return null;
   const last = steps[steps.length - 1];
-  return previewFromText(last?.observation, variant);
+  if (!last) return null;
+  return formatLiveStepLine(last);
 }
 
 function finishAnswerFromSteps(steps: ReActStep[], variant: RunPreviewVariant): string | null {

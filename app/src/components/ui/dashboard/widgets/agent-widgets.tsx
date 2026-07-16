@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { Loader2 } from "lucide-react";
@@ -29,30 +29,6 @@ const PREVIEW_AGENT: Agent = {
   emailOnComplete: false,
   model: "kimi-k2.6",
   createdAt: new Date().toISOString(),
-};
-
-const PREVIEW_LAST_RUN: AgentRun = {
-  id: "preview-run",
-  status: "DONE",
-  trigger: "manual",
-  output: `## Deployment review
-
-Reviewed the latest deployment logs and found **three follow-up tasks**:
-
-1. Rotate API keys for the staging environment
-2. Update the \`docker-compose\` health check interval
-3. Document the new agent scheduler behavior
-
-### Summary
-
-The deployment completed successfully with no critical errors. Minor warnings in the worker pool were transient and resolved automatically.
-
-\`\`\`text
-worker-2: connection pool exhausted (recovered in 12s)
-\`\`\`
-
-Next check recommended after the evening batch job.`,
-  createdAt: new Date(Date.now() - 1000 * 60 * 42).toISOString(),
 };
 
 function isActiveRun(run: AgentRun): boolean {
@@ -98,34 +74,76 @@ function useFullAgent(agentId: string | undefined, enabled: boolean) {
   return { agent, loading, notFound, refetch: fetchAgent, setAgent };
 }
 
+function runPollFingerprint(run: AgentRun): string {
+  const steps = Array.isArray(run.steps) ? run.steps : [];
+  const last = steps.length > 0 ? steps[steps.length - 1] : null;
+  const lastObs =
+    last && typeof last === "object" && last !== null && "observation" in last
+      ? String((last as { observation?: unknown }).observation ?? "")
+      : "";
+  const lastTool =
+    last && typeof last === "object" && last !== null && "tool" in last
+      ? String((last as { tool?: unknown }).tool ?? "")
+      : "";
+  return [
+    run.id,
+    run.status,
+    run.finishedAt ?? "",
+    run.startedAt ?? "",
+    run.output?.length ?? 0,
+    run.output?.slice(0, 120) ?? "",
+    steps.length,
+    lastTool,
+    lastObs.length,
+    lastObs.slice(0, 120),
+  ].join("\x1e");
+}
+
 function useAgentLastRun(agentId: string | undefined, enabled: boolean) {
   const [run, setRun] = useState<AgentRun | null>(null);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const hasLoadedRef = useRef(false);
+  const fingerprintRef = useRef<string | null>(null);
 
-  const fetchLastRun = useCallback(async () => {
+  const fetchLastRun = useCallback(async (opts?: { silent?: boolean }) => {
     if (!agentId) return;
-    setLoading(true);
-    setNotFound(false);
+    if (!opts?.silent && !hasLoadedRef.current) setLoading(true);
     try {
-      const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/runs`);
+      const res = await fetch(
+        `/api/agents/${encodeURIComponent(agentId)}/runs?limit=1&compact=1`,
+        { cache: "no-store" },
+      );
       if (res.status === 404) {
+        fingerprintRef.current = null;
         setRun(null);
         setNotFound(true);
         return;
       }
       if (!res.ok) {
+        return;
+      }
+      setNotFound(false);
+      const runs = (await res.json()) as AgentRun[];
+      const next = runs[0] ?? null;
+      if (!next) {
+        fingerprintRef.current = null;
         setRun(null);
         return;
       }
-      const runs = (await res.json()) as AgentRun[];
-      setRun(runs[0] ?? null);
+      const fingerprint = runPollFingerprint(next);
+      if (fingerprintRef.current === fingerprint) return;
+      fingerprintRef.current = fingerprint;
+      setRun(next);
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
     }
   }, [agentId]);
 
   useEffect(() => {
+    hasLoadedRef.current = false;
+    fingerprintRef.current = null;
     if (!enabled || !agentId) {
       setRun(null);
       setNotFound(false);
@@ -137,11 +155,19 @@ function useAgentLastRun(agentId: string | undefined, enabled: boolean) {
 
   useEffect(() => {
     if (!enabled || !agentId || !run || !isActiveRun(run)) return;
-    const interval = window.setInterval(() => void fetchLastRun(), 3_000);
+    const interval = window.setInterval(() => void fetchLastRun({ silent: true }), 3_000);
     return () => window.clearInterval(interval);
-  }, [agentId, enabled, run, fetchLastRun]);
+  }, [agentId, enabled, run?.id, run?.status, fetchLastRun]);
 
-  return { run, loading, notFound, refetch: fetchLastRun };
+  // Refresh when background agent polling reports a change for this agent.
+  useEffect(() => {
+    if (!enabled || !agentId) return;
+    const onFocus = () => void fetchLastRun({ silent: true });
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [agentId, enabled, fetchLastRun]);
+
+  return { run, loading, notFound, refetch: () => fetchLastRun({ silent: true }) };
 }
 
 function emptyStateClass(layoutMode: DashboardWidgetRenderProps["layoutMode"]) {
@@ -270,7 +296,32 @@ export function InteractiveAgentCardWidget({
   );
 }
 
-/** Latest run preview for a selected agent (unchanged from prior behavior). */
+/** Static gallery tile — never mounts run polling or MarkdownLite. */
+function AgentLastRunPreviewTile({ agentName }: { agentName: string }) {
+  return (
+    <section
+      className={cn(
+        "flex h-full min-h-0 flex-col rounded-2xl border border-border/60 bg-card p-3 shadow-sm pointer-events-none",
+        "dark:border-border/50 dark:bg-card/90",
+      )}
+    >
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="truncate text-xs font-semibold text-foreground">{agentName}</p>
+        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+          DONE
+        </span>
+      </div>
+      <div className="space-y-1.5 text-[11px] leading-snug text-muted-foreground">
+        <p className="font-mono text-[10px] text-muted-foreground/80">web_search · …</p>
+        <p className="font-mono text-[10px] text-muted-foreground/80">http_get · …</p>
+        <p className="line-clamp-3 text-foreground/90">## Deployment review</p>
+        <p className="line-clamp-2">Reviewed the latest deployment logs…</p>
+      </div>
+    </section>
+  );
+}
+
+/** Latest run preview for a selected agent. */
 export function AgentLastRunWidget({ data, widget, variant, layoutMode = "grid" }: DashboardWidgetRenderProps) {
   const { t } = useTranslation();
   const agentId = (widget.config as { agentId?: string } | undefined)?.agentId;
@@ -280,12 +331,21 @@ export function AgentLastRunWidget({ data, widget, variant, layoutMode = "grid" 
       : data.agents.find((entry) => entry.id === agentId) ?? null;
 
   const liveFetch = useAgentLastRun(agentId, variant === "live");
-  const run = variant === "preview" ? PREVIEW_LAST_RUN : liveFetch.run;
-  const loading = variant === "live" && liveFetch.loading;
-  const agentMissing = variant === "live" && Boolean(agentId) && !agent;
-  const agentNotFound = variant === "live" && liveFetch.notFound;
 
-  if (!agentId && variant === "live") {
+  if (variant === "preview") {
+    return (
+      <AgentLastRunPreviewTile
+        agentName={agent?.name ?? t("widgets.types.agent_last_run.previewAgentName")}
+      />
+    );
+  }
+
+  const run = liveFetch.run;
+  const loading = liveFetch.loading;
+  const agentMissing = Boolean(agentId) && !agent;
+  const agentNotFound = liveFetch.notFound;
+
+  if (!agentId) {
     return (
       <div className={widgetRootClass(layoutMode)}>
         <div className={emptyStateClass(layoutMode)}>{t("widgets.types.agent_last_run.noAgentSelected")}</div>
@@ -301,7 +361,7 @@ export function AgentLastRunWidget({ data, widget, variant, layoutMode = "grid" 
     );
   }
 
-  const resolvedAgentId = agent?.id ?? agentId ?? "preview-agent";
+  const resolvedAgentId = agent?.id ?? agentId;
   const agentHref = `/agents?highlight=${encodeURIComponent(resolvedAgentId)}`;
   const density = getWidgetDensity(widget.w, widget.h);
   const compactHeader = density === "compact" || widget.w <= 5;
@@ -309,9 +369,8 @@ export function AgentLastRunWidget({ data, widget, variant, layoutMode = "grid" 
   return (
     <section
       className={cn(
-        "flex h-full min-h-0 flex-col rounded-2xl border border-border/60 bg-card shadow-sm dark:border-border/50 dark:bg-card/90",
-        layoutMode === "grid" ? "overflow-hidden" : "overflow-visible",
-        variant === "preview" && "pointer-events-none",
+        "flex h-full max-h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm",
+        "dark:border-border/50 dark:bg-card/90",
       )}
     >
       <div
@@ -328,14 +387,12 @@ export function AgentLastRunWidget({ data, widget, variant, layoutMode = "grid" 
             <p className="text-xs text-muted-foreground">{t("widgets.types.agent_last_run.subtitle")}</p>
           ) : null}
         </div>
-        {variant === "live" ? (
-          <Link href={agentHref} className="shrink-0 text-xs text-muted-foreground hover:text-foreground">
-            {t("widgets.types.agent_last_run.openAgent")}
-          </Link>
-        ) : null}
+        <Link href={agentHref} className="shrink-0 text-xs text-muted-foreground hover:text-foreground">
+          {t("widgets.types.agent_last_run.openAgent")}
+        </Link>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
         {loading && !run ? (
           <div className="flex flex-1 items-center justify-center py-6">
             <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden />

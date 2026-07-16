@@ -1,6 +1,7 @@
 const COMPLETED_KEY = "synaro:onboarding:completed";
 const PENDING_KEY = "synaro:onboarding:pending";
-const VERSION = 3;
+/** Written on finish/skip. Older completed records (v >= 3) still count as done. */
+const VERSION = 4;
 
 export function isOnboardingCompleted(): boolean {
   if (typeof window === "undefined") return false;
@@ -8,7 +9,7 @@ export function isOnboardingCompleted(): boolean {
     const raw = localStorage.getItem(COMPLETED_KEY);
     if (!raw) return false;
     const parsed = JSON.parse(raw) as { v?: number };
-    return parsed.v === VERSION;
+    return typeof parsed.v === "number" && parsed.v >= 3;
   } catch {
     return false;
   }

@@ -43,9 +43,24 @@ describe("API /api/agents/[agentId]/runs", () => {
 
     expect(res.statusCode).toBe(200);
     expect(requestUrl(fetchMock().mock.calls[0][0] as string)).toBe(
-      "http://agent-service.test/api/agents/agent-1/runs",
+      "http://agent-service.test/api/agents/agent-1/runs?limit=20",
     );
     expect(JSON.parse(res._getData() as string)).toEqual([{ id: "run-1", status: "completed" }]);
+  });
+
+  it("forwards limit and compact query params", async () => {
+    fetchMock().mockResolvedValue(new Response(JSON.stringify([]), { status: 200 }));
+
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: "GET",
+      query: { agentId: "agent-1", limit: "1", compact: "1" },
+    });
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(requestUrl(fetchMock().mock.calls[0][0] as string)).toBe(
+      "http://agent-service.test/api/agents/agent-1/runs?limit=1&compact=1",
+    );
   });
 
   it("returns 405 for non-GET methods", async () => {

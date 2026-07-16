@@ -27,6 +27,8 @@ export type OnboardingTourStep = {
   advanceWhenVisible?: { selector: string; stepId: string };
   /** When the workspace tab changes to this value, advance to the next step. */
   advanceOnWorkspaceTab?: WorkspaceTab;
+  /** Open the mobile sidebar drawer so sidebar targets are measurable below lg. */
+  needsMobileSidebar?: boolean;
 };
 
 export function routeMatches(pathname: string, route: string): boolean {
@@ -39,14 +41,52 @@ export function routeMatches(pathname: string, route: string): boolean {
   if (route === "/agents") {
     return pathname === "/agents" || pathname.startsWith("/agents/");
   }
+  /** Match any authenticated shell page that shows the dashboard sidebar. */
+  if (route === "*") {
+    return (
+      pathname === "/dashboard" ||
+      pathname === "/projects" ||
+      pathname.startsWith("/projects/") ||
+      pathname === "/agents" ||
+      pathname.startsWith("/agents/") ||
+      pathname === "/logs" ||
+      pathname === "/settings" ||
+      pathname.startsWith("/settings/")
+    );
+  }
   if (route.endsWith("/")) return pathname.startsWith(route);
   return pathname === route;
+}
+
+export function isMobileViewport(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(max-width: 1023px)").matches;
+}
+
+/** Dashboard customize controls are desktop-only (md+). */
+export function isDashboardCustomizeViewport(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(min-width: 768px)").matches;
 }
 
 export function dispatchWorkspaceTab(tab: WorkspaceTab) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent("synaro:onboarding-action", { detail: { type: "workspace-tab", tab } }),
+  );
+}
+
+export function dispatchOpenMobileSidebar() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("synaro:onboarding-action", { detail: { type: "open-mobile-sidebar" } }),
+  );
+}
+
+export function dispatchCloseMobileSidebar() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("synaro:onboarding-action", { detail: { type: "close-mobile-sidebar" } }),
   );
 }
 
@@ -60,6 +100,11 @@ function hasProjects(): boolean {
   return Boolean(firstProjectHref());
 }
 
+function hasAgents(): boolean {
+  if (typeof document === "undefined") return false;
+  return Boolean(document.querySelector('[data-onboarding="agent-run"]'));
+}
+
 export function getStepIndexById(id: string, steps: OnboardingTourStep[] = ONBOARDING_TOUR_STEPS): number {
   return steps.findIndex((s) => s.id === id);
 }
@@ -67,21 +112,17 @@ export function getStepIndexById(id: string, steps: OnboardingTourStep[] = ONBOA
 const ONBOARDING_STEP_I18N_KEYS: Record<string, string> = {
   welcome: "welcome",
   sidebar: "sidebar",
+  "dashboard-edit": "dashboardEdit",
+  "dashboard-widgets": "dashboardWidgets",
   "nav-projects": "navProjects",
   "projects-new": "projectsNew",
-  "projects-new-dialog": "projectsNewDialog",
   "projects-open": "projectsOpen",
-  "workspace-tabs": "workspaceTabs",
-  "ai-chat": "aiChat",
-  "ai-composer": "aiComposer",
-  "file-tree": "fileTree",
-  "docker-pill": "dockerPill",
-  terminal: "terminal",
-  deployments: "deployments",
+  "workspace-ai": "workspaceAi",
+  "docker-runtime": "dockerRuntime",
   "nav-agents": "navAgents",
-  "agents-intro": "agentsIntro",
-  "agents-create-dialog": "agentsCreateDialog",
-  header: "header",
+  agents: "agents",
+  "agents-run": "agentsRun",
+  "agents-run-dialog": "agentsRunDialog",
   finish: "finish",
 };
 
@@ -100,13 +141,17 @@ export function getOnboardingTourSteps(t: (key: string) => string): OnboardingTo
   });
 }
 
+/**
+ * Broader product tour. Empty accounts skip workspace / agent-run steps via skipIf.
+ * Navigation between major areas is click-to-advance (user drives the sidebar).
+ */
 export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
   {
     id: "welcome",
     route: "/dashboard",
     title: "Welcome to Synaro",
     description:
-      "This tour walks through the main parts of the app. Click highlighted areas when prompted — the tour will follow your actions.",
+      "A guided tour of the main parts of the app. Click highlighted areas when prompted — the tour follows your actions.",
     placement: "center",
   },
   {
@@ -115,8 +160,40 @@ export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
     selector: '[data-onboarding="sidebar"]',
     title: "Navigation",
     description:
-      "The sidebar is your home base: Dashboard, Projects, Agents, Logs, and Settings. Your account menu is at the bottom.",
+      "The sidebar is your home base: Dashboard, Projects, Agents, and Logs. Your account menu (including Settings) is at the bottom.",
     placement: "right",
+    needsMobileSidebar: true,
+  },
+  {
+    id: "dashboard-edit",
+    route: "/dashboard",
+    selector: '[data-onboarding="dashboard-edit"]',
+    title: "Customize your dashboard",
+    description:
+      "Edit mode lets you rearrange and resize widgets. Changes save automatically while you customize.",
+    placement: "bottom",
+    encourageClick: "Click Edit to enter customize mode.",
+    advanceOnTargetClick: true,
+    advanceWhenVisible: {
+      selector: '[data-onboarding="dashboard-add-widget"]',
+      stepId: "dashboard-widgets",
+    },
+    onEnter: () => dispatchCloseMobileSidebar(),
+    skipIf: () => !isDashboardCustomizeViewport(),
+  },
+  {
+    id: "dashboard-widgets",
+    route: "/dashboard",
+    selectors: [
+      '[data-onboarding="dashboard-add-widget"]',
+      '[data-onboarding="dashboard-customize"]',
+    ],
+    title: "Add and arrange widgets",
+    description:
+      "Use Add widget to open the gallery. Drag widgets onto the grid, then resize with the corner handle or size chips. Click Done when you're finished.",
+    placement: "bottom",
+    encourageClick: "Click Add widget to browse the gallery, or continue with Next.",
+    skipIf: () => !isDashboardCustomizeViewport(),
   },
   {
     id: "nav-projects",
@@ -129,6 +206,7 @@ export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
     encourageClick: "Click Projects — we'll open the projects page.",
     advanceOnTargetClick: true,
     advanceOnNavigateTo: { prefix: "/projects", stepId: "projects-new" },
+    needsMobileSidebar: true,
   },
   {
     id: "projects-new",
@@ -136,25 +214,10 @@ export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
     selectors: ['[data-onboarding="new-project-dialog"]', '[data-onboarding="new-project"]'],
     title: "Create or import",
     description:
-      "Start blank, import from GitHub, or upload a folder. Each project gets an isolated container and AI chat.",
+      "Start blank, import from GitHub, or upload a folder. Pick a runtime and describe what you want to build.",
     placement: "bottom",
-    navigateTo: "/projects",
-    encourageClick: "Click + New project to open the creation dialog.",
-    advanceWhenVisible: { selector: '[data-onboarding="new-project-dialog"]', stepId: "projects-new-dialog" },
-  },
-  {
-    id: "projects-new-dialog",
-    route: "/projects",
-    selector: '[data-onboarding="new-project-dialog"]',
-    title: "Project setup",
-    description:
-      "Pick a runtime image and describe what you want to build. You can also import GitHub repos or upload files.",
-    placement: "right",
-    encourageClick: "Explore the form, then click Next — or open an existing project below.",
-    skipIf: () => {
-      if (typeof document === "undefined") return true;
-      return !document.querySelector('[data-onboarding="new-project-dialog"]');
-    },
+    encourageClick: "Click + New project to open the creation dialog, or continue with Next.",
+    onEnter: () => dispatchCloseMobileSidebar(),
   },
   {
     id: "projects-open",
@@ -162,114 +225,51 @@ export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
     selector: '[data-onboarding="project-card-link"]',
     title: "Open a project",
     description:
-      "Click any project card to enter the workspace — file tree, terminal, AI chat, and deployments live there.",
+      "Click a project card to enter the workspace — AI chat, files, terminal, and deployments live there.",
     placement: "bottom",
     encourageClick: "Click a project — the tour continues inside the workspace.",
     advanceOnTargetClick: true,
-    advanceOnNavigateTo: { prefix: "/projects/", stepId: "workspace-tabs" },
+    advanceOnNavigateTo: { prefix: "/projects/", stepId: "workspace-ai" },
     skipIf: () => !hasProjects(),
   },
   {
-    id: "workspace-tabs",
+    id: "workspace-ai",
     route: "/projects/",
-    selector: '[data-onboarding="workspace-tabs"]',
-    title: "Workspace tabs",
+    selectors: ['[data-onboarding="ai-composer"]', '[data-onboarding="workspace-tabs"]'],
+    title: "Workspace & AI chat",
     description:
-      "Switch between AI chat, file tree, terminal, and deployments. Everything runs inside your project's container.",
-    placement: "bottom",
+      "Use the tabs for AI chat, file tree, terminal, and deployments. Describe changes in plain English — Synaro analyzes the repo and applies code.",
+    placement: "top",
     navigateTo: () => firstProjectHref(),
     onEnter: () => dispatchWorkspaceTab("chat"),
     skipIf: () => !hasProjects(),
   },
   {
-    id: "ai-chat",
-    route: "/projects/",
-    selector: '[data-onboarding="tab-chat"]',
-    title: "AI chat",
-    description:
-      "Describe changes in plain English. Synaro analyzes your repo, asks clarifying questions when needed, and applies code.",
-    placement: "bottom",
-    encourageClick: "Click AI chat to select this tab.",
-    advanceOnTargetClick: true,
-    advanceOnWorkspaceTab: "chat",
-    skipIf: () => !hasProjects(),
-  },
-  {
-    id: "ai-composer",
-    route: "/projects/",
-    selector: '[data-onboarding="ai-composer"]',
-    title: "Send a prompt",
-    description:
-      "Type your request and press Enter. You'll see live progress, file-change previews, and markdown responses.",
-    placement: "top",
-    onEnter: () => dispatchWorkspaceTab("chat"),
-    skipIf: () => !hasProjects(),
-  },
-  {
-    id: "file-tree",
-    route: "/projects/",
-    selector: '[data-onboarding="tab-tree"]',
-    title: "File tree",
-    description:
-      "Browse files in your container workspace. Open files to view and edit — the tree refreshes when the AI writes changes.",
-    placement: "bottom",
-    encourageClick: "Click File tree to explore your project files.",
-    advanceOnTargetClick: true,
-    advanceOnWorkspaceTab: "tree",
-    skipIf: () => !hasProjects(),
-  },
-  {
-    id: "docker-pill",
+    id: "docker-runtime",
     route: "/projects/",
     selector: '[data-onboarding="docker-pill"]',
-    title: "Runtime environment",
+    title: "Runtime & terminal",
     description:
-      "Start or stop the Docker container for this project. Files, terminal, and previews need the runtime running.",
+      "Start the Docker runtime so files, terminal, and previews work. Use the Terminal tab for shell commands in the container.",
     placement: "left",
-    encourageClick: "Try starting the runtime if it's stopped.",
-    skipIf: () => !hasProjects(),
-  },
-  {
-    id: "terminal",
-    route: "/projects/",
-    selector: '[data-onboarding="tab-terminal"]',
-    title: "Terminal",
-    description:
-      "Run shell commands in your project container — install packages, run scripts, or debug alongside the AI.",
-    placement: "bottom",
-    encourageClick: "Click Terminal to open the in-browser shell.",
-    advanceOnTargetClick: true,
-    advanceOnWorkspaceTab: "terminal",
-    skipIf: () => !hasProjects(),
-  },
-  {
-    id: "deployments",
-    route: "/projects/",
-    selector: '[data-onboarding="tab-deployments"]',
-    title: "Deployments & preview",
-    description:
-      "Run your app and open a live preview. Use Run in the toolbar when the container is active.",
-    placement: "bottom",
-    encourageClick: "Click Deployments to see preview options.",
-    advanceOnTargetClick: true,
-    advanceOnWorkspaceTab: "deployments",
+    encourageClick: "Try starting the runtime if it's stopped, then continue.",
     skipIf: () => !hasProjects(),
   },
   {
     id: "nav-agents",
-    route: "/dashboard",
+    route: "*",
     selector: '[data-onboarding="nav-agents"]',
     title: "AI agents",
     description:
       "Agents are separate from project chat — use them for web research, HTTP calls, and scheduled tasks that return a text answer.",
     placement: "right",
-    navigateTo: "/dashboard",
-    encourageClick: "Click Agents in the sidebar.",
+    encourageClick: "Click Agents in the sidebar to open the agents page.",
     advanceOnTargetClick: true,
-    advanceOnNavigateTo: { prefix: "/agents", stepId: "agents-intro" },
+    advanceOnNavigateTo: { prefix: "/agents", stepId: "agents" },
+    needsMobileSidebar: true,
   },
   {
-    id: "agents-intro",
+    id: "agents",
     route: "/agents",
     selectors: [
       '[data-onboarding="new-agent-dialog"]',
@@ -280,40 +280,44 @@ export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
     description:
       "Create agents with a system prompt and tools (web search, HTTP GET/POST). Run them on demand or on a cron schedule.",
     placement: "bottom",
-    navigateTo: "/agents",
-    encourageClick: "Click + New agent to see the setup form.",
-    advanceWhenVisible: { selector: '[data-onboarding="new-agent-dialog"]', stepId: "agents-create-dialog" },
+    encourageClick: "Click + New agent to peek at the setup form, or continue with Next.",
+    onEnter: () => dispatchCloseMobileSidebar(),
   },
   {
-    id: "agents-create-dialog",
+    id: "agents-run",
     route: "/agents",
-    selector: '[data-onboarding="new-agent-dialog"]',
-    title: "Agent configuration",
+    selectors: ['[data-onboarding="agent-run"]', '[data-onboarding="agent-runs-link"]'],
+    title: "Run an agent",
     description:
-      "Name your agent, write a system prompt, pick tools, and set max steps. Optional cron syntax runs the agent automatically.",
-    placement: "right",
-    encourageClick: "Review the options, then continue with Next.",
+      "Press Run on an agent card to start a live run (you can add optional input). Use Runs to open history and inspect steps or output.",
+    placement: "left",
+    encourageClick: "Click Run on an agent if you have one, or continue with Next.",
+    advanceWhenVisible: {
+      selector: '[data-onboarding="agent-trigger-dialog"]',
+      stepId: "agents-run-dialog",
+    },
+    skipIf: () => !hasAgents(),
+  },
+  {
+    id: "agents-run-dialog",
+    route: "/agents",
+    selector: '[data-onboarding="agent-trigger-dialog"]',
+    title: "Confirm the run",
+    description:
+      "Add optional input, then press Run Agent. You can follow progress from the header pill and the agent's run history.",
+    placement: "left",
+    encourageClick: "Review the form, then continue with Next when you're ready.",
     skipIf: () => {
       if (typeof document === "undefined") return true;
-      return !document.querySelector('[data-onboarding="new-agent-dialog"]');
+      return !document.querySelector('[data-onboarding="agent-trigger-dialog"]');
     },
-  },
-  {
-    id: "header",
-    route: "/dashboard",
-    selector: '[data-onboarding="header-actions"]',
-    title: "Header tools",
-    description:
-      "Notifications alert you when AI tasks finish. The ? menu replays this tour or opens documentation. The pill shows background AI work.",
-    placement: "bottom",
-    navigateTo: "/dashboard",
   },
   {
     id: "finish",
     route: "/dashboard",
     title: "You're ready to build",
     description:
-      "Create a project for code changes, or an agent for research tasks. Press ? anytime for the intro tour or docs.",
+      "Customize your dashboard, build in projects, or run agents for research. Open the help menu (circle icon) anytime to replay this tour or open documentation.",
     placement: "center",
     navigateTo: "/dashboard",
   },
@@ -387,4 +391,14 @@ export function findVisibleTourTarget(selectors: string[]): Element | null {
 
 export function isElementVisible(selector: string): boolean {
   return findVisibleTourTarget([selector]) !== null;
+}
+
+export function isAppShellPath(pathname: string): boolean {
+  if (pathname === "/dashboard") return true;
+  if (pathname === "/projects/invite/[token]") return false;
+  if (pathname === "/projects" || pathname.startsWith("/projects/")) return true;
+  if (pathname === "/agents" || pathname.startsWith("/agents/")) return true;
+  if (pathname === "/logs") return true;
+  if (pathname === "/settings" || pathname.startsWith("/settings/")) return true;
+  return false;
 }

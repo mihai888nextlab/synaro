@@ -4,7 +4,7 @@ export type LayoutTemplateInput = {
   agentId?: string;
 };
 
-/** Agent last run (left) + KPI cluster 2×2 (right) — matches common sidebar layout. */
+/** Agent last run (left) + KPI cluster 2×2 (right) — same 6×4 height. */
 export function buildAgentMetricsSidebarTemplate(
   layout: DashboardLayout,
   input: LayoutTemplateInput,
@@ -18,17 +18,17 @@ export function buildAgentMetricsSidebarTemplate(
       type: "agent_last_run",
       x: 0,
       y: maxY,
-      w: 8,
-      h: 8,
+      w: 6,
+      h: 4,
       config: { agentId: input.agentId },
     },
     {
       id: createWidgetId(),
       type: "kpi_cluster",
-      x: 8,
+      x: 6,
       y: maxY,
-      w: 4,
-      h: 8,
+      w: 6,
+      h: 4,
       config: { layout: "grid" },
     },
   ];

@@ -31,6 +31,36 @@ const VALID_TOOLS = [
 
 const VALID_MODELS = ['kimi-k2.6', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'] as const
 
+/** Keep list/poll payloads small — full HTML observations freeze the dashboard. */
+const COMPACT_OBSERVATION_MAX = 4_000
+
+function compactRunSteps(steps: unknown): unknown {
+  if (!Array.isArray(steps)) return steps
+  return steps.map((step) => {
+    if (!step || typeof step !== 'object') return step
+    const row = step as Record<string, unknown>
+    const observation = row.observation
+    if (typeof observation !== 'string' || observation.length <= COMPACT_OBSERVATION_MAX) {
+      return step
+    }
+    return {
+      ...row,
+      observation: `${observation.slice(0, COMPACT_OBSERVATION_MAX)}…`,
+    }
+  })
+}
+
+function compactAgentRun<T extends { steps?: unknown; output?: string | null }>(run: T): T {
+  return {
+    ...run,
+    steps: compactRunSteps(run.steps),
+    output:
+      typeof run.output === 'string' && run.output.length > COMPACT_OBSERVATION_MAX
+        ? `${run.output.slice(0, COMPACT_OBSERVATION_MAX)}…`
+        : run.output,
+  }
+}
+
 const McpServerSchema = z.object({
   name: z.string().min(1),
   url: z.string().url(),
@@ -371,7 +401,11 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
   app.get('/agents/:id/runs', async (req, reply) => {
     if (!requireServiceKey(req, reply)) return
     const { id } = req.params as { id: string }
-    const { limit = '20', offset = '0' } = req.query as { limit?: string; offset?: string }
+    const {
+      limit = '20',
+      offset = '0',
+      compact,
+    } = req.query as { limit?: string; offset?: string; compact?: string }
 
     const runs = await prisma.agentRun.findMany({
       where: { agentId: id },
@@ -379,7 +413,8 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       take: Math.min(Number(limit) || 20, 100),
       skip: Number(offset) || 0,
     })
-    return reply.send(runs)
+    const useCompact = compact === '1' || compact === 'true'
+    return reply.send(useCompact ? runs.map((run) => compactAgentRun(run)) : runs)
   })
 
   // Active runs for a user (PENDING / RUNNING)

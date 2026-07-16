@@ -11,7 +11,7 @@ setup("authenticate", async ({ page }) => {
   await page.evaluate(() => {
     localStorage.setItem(
       "synaro:onboarding:completed",
-      JSON.stringify({ v: 3, at: Date.now() }),
+      JSON.stringify({ v: 4, at: Date.now() }),
     );
   });
 

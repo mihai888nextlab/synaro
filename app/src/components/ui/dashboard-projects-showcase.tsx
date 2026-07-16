@@ -23,10 +23,7 @@ export function DashboardProjectsShowcase({
 }) {
   const { t } = useTranslation();
   return (
-    <section
-      data-onboarding="dashboard-projects"
-      className={showcaseSectionClass(layoutMode, className)}
-    >
+    <section className={showcaseSectionClass(layoutMode, className)}>
       <div className="flex items-center justify-between gap-3 border-b border-border/50 px-5 py-4 max-sm:px-4 max-sm:py-3.5 sm:px-6">
         <h2 className="min-w-0 text-lg font-semibold tracking-tight text-foreground max-sm:text-base">{t("dashboard.projectsTitle")}</h2>
         <DashboardSectionLink href="/projects" label={t("common.viewAll")} />

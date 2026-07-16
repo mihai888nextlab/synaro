@@ -131,8 +131,32 @@ describe("run-preview", () => {
       );
       expect(preview).toEqual({
         kind: "activity",
-        text: "Found several results about Synaro.",
+        text: "web_search · Found several results about Synaro.",
       });
+    });
+
+    it("summarizes bulky HTML http_get observations instead of rendering them", () => {
+      const html = `HTTP 200 OK\n\n<!doctype html><html><head><title>x</title></head><body>${"a".repeat(12_000)}</body></html>`;
+      const preview = getRunCardPreview(
+        makeRun({
+          status: "RUNNING",
+          steps: [
+            {
+              step: 1,
+              tool: "http_get",
+              args: { url: "https://example.com" },
+              observation: html,
+            },
+          ],
+        }),
+        labels,
+        { variant: "embedded" },
+      );
+      expect(preview.kind).toBe("activity");
+      if (preview.kind === "activity") {
+        expect(preview.text).toMatch(/^http_get · ~\d+ KB$/);
+        expect(preview.text).not.toContain("<!doctype");
+      }
     });
 
     it("falls back to input then running label for active runs", () => {

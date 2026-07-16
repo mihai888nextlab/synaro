@@ -64,6 +64,7 @@ export default async function handler(
     res.status(200).json({ ok: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: "Failed to write file", detail: msg });
+    // Upstream/runtime failures are a bad gateway, not an unhandled crash.
+    res.status(502).json({ error: "Failed to write file", detail: msg });
   }
 }

@@ -58,7 +58,7 @@ describe("Public API /api/v1/agents", () => {
     ]);
   });
 
-  it("POST /v1/agents merges userId into upstream body", async () => {
+  it("POST /v1/agents normalizes snake_case fields to camelCase for agent-service", async () => {
     proxyAgentServiceMock.mockResolvedValue({
       status: 201,
       body: { id: "a1", name: "Research" },
@@ -66,15 +66,36 @@ describe("Public API /api/v1/agents", () => {
 
     const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
       method: "POST",
-      body: { name: "Research" },
+      body: { name: "Research", system_prompt: "Be helpful", tool_mode: "auto" },
     });
     await agentsIndexHandler(req, res);
 
     expect(proxyAgentServiceMock).toHaveBeenCalledWith("/api/agents", {
       method: "POST",
-      body: JSON.stringify({ name: "Research", userId: mockPublicApiAuth.userId }),
+      body: JSON.stringify({
+        name: "Research",
+        systemPrompt: "Be helpful",
+        toolMode: "auto",
+        userId: mockPublicApiAuth.userId,
+      }),
     });
     expect(res.statusCode).toBe(201);
+  });
+
+  it("GET /v1/agents/:id/runs forwards limit and offset", async () => {
+    proxyAgentServiceMock.mockResolvedValue({
+      status: 200,
+      body: [],
+    });
+
+    const { req, res } = createMocks<NextApiRequest, NextApiResponse>({
+      method: "GET",
+      query: { agentId: "agent-1", limit: "10", offset: "5" },
+    });
+    await agentRunsHandler(req, res);
+
+    expect(proxyAgentServiceMock).toHaveBeenCalledWith("/api/agents/agent-1/runs?limit=10&offset=5");
+    expect(res.statusCode).toBe(200);
   });
 
   it("returns 405 for unsupported methods on /v1/agents", async () => {

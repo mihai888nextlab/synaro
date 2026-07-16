@@ -6,24 +6,21 @@ import { requireMethod } from "@/lib/public-api/method";
 import { toSnakeCaseJson } from "@/lib/public-api/serialize";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (!requireMethod(req, res, "GET")) return;
+  if (!requireMethod(req, res, "POST")) return;
 
   const auth = await requirePublicApiAuth(req, res);
   if (!auth) return;
 
-  const agentId = typeof req.query.agentId === "string" ? req.query.agentId : "";
-  if (!agentId) return res.status(400).json({ error: "missing_agent_id" });
-
-  const limit = typeof req.query.limit === "string" ? req.query.limit : undefined;
-  const offset = typeof req.query.offset === "string" ? req.query.offset : undefined;
-  const params = new URLSearchParams();
-  if (limit) params.set("limit", limit);
-  if (offset) params.set("offset", offset);
-  const q = params.toString();
+  const runId = typeof req.query.runId === "string" ? req.query.runId : "";
+  if (!runId) return res.status(400).json({ error: "missing_run_id" });
 
   try {
     const { status, body } = await proxyAgentService(
-      `/api/agents/${encodeURIComponent(agentId)}/runs${q ? `?${q}` : ""}`,
+      `/api/runs/${encodeURIComponent(runId)}/cancel`,
+      {
+        method: "POST",
+        body: JSON.stringify({ userId: auth.userId }),
+      },
     );
     return res.status(status).json(toSnakeCaseJson(body));
   } catch {

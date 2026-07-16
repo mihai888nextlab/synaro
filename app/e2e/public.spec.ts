@@ -18,6 +18,20 @@ test.describe("Public pages", () => {
     await expect(page.getByRole("heading", { name: "Flexible pricing for every stage." })).toBeVisible();
   });
 
+  test("global app search is not available on marketing pages", async ({ page }) => {
+    await page.goto("/");
+    await page.keyboard.press("ControlOrMeta+KeyK");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    await page.goto("/pricing");
+    await page.keyboard.press("ControlOrMeta+KeyK");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    await page.goto("/documentation");
+    await page.keyboard.press("ControlOrMeta+KeyK");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
   test("landing page exposes Open Graph meta tags", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator('meta[property="og:title"]')).toHaveAttribute(

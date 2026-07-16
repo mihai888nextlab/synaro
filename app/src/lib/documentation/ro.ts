@@ -32,6 +32,7 @@ export const DOC_NAV: DocNavGroup[] = [
       { slug: "public-api-projects", label: "Proiecte și medii" },
       { slug: "public-api-tasks", label: "Sarcini AI" },
       { slug: "public-api-agents", label: "Agenți" },
+      { slug: "public-api-sdk", label: "SDK TypeScript" },
     ],
   },
   {
@@ -147,7 +148,7 @@ export const DOC_PAGES: Record<string, DocPage> = {
       },
       {
         type: "p",
-        text: "Pentru scripturi și CI, mergi la Setări → Chei API, creează o cheie și apelează /api/v1 cu Authorization: Bearer <key>. Începe cu GET /api/v1/me, apoi vezi secțiunea API public din Documentație pentru proiecte, sarcini și agenți.",
+        text: "Pentru scripturi și CI, mergi la Setări → Chei API, creează o cheie și apelează /api/v1 cu Authorization: Bearer <key>. Începe cu GET /api/v1/me. Preferă SDK-ul tipizat TypeScript (@synaro/sdk) — vezi /documentation/public-api-sdk — sau paginile HTTP brute din API public pentru proiecte, sarcini și agenți.",
       },
     ],
   },
@@ -443,6 +444,12 @@ export const DOC_PAGES: Record<string, DocPage> = {
       },
       {
         type: "callout",
+        variant: "tip",
+        title: "SDK oficial",
+        text: "Preferă pachetul TypeScript @synaro/sdk pentru helper-e tipizate (așteptare deploy, polling task/run, memorie, anulare). Ghid complet cu exemple: /documentation/public-api-sdk. Sursa: packages/sdk/README și OpenAPI packages/sdk/openapi/v1.yaml.",
+      },
+      {
+        type: "callout",
         variant: "info",
         title: "Nu este API-ul de sesiune al panoului",
         text: "Rutele precum /api/projects și /api/agents necesită o sesiune NextAuth în browser. API-ul public folosește chei API și este suprafața suportată pentru automatizare. Microserviciile interne nu sunt expuse direct niciodată.",
@@ -458,6 +465,7 @@ export const DOC_PAGES: Record<string, DocPage> = {
           "Creează o cheie, copiază secretul imediat (este afișat o singură dată)",
           "Trimite Authorization: Bearer <your_key> la fiecare cerere /api/v1",
           "Apelează GET /api/v1/me pentru a verifica că cheia funcționează",
+          "Opțional: instală @synaro/sdk — vezi TypeScript SDK",
         ],
       },
       {
@@ -494,7 +502,8 @@ export const DOC_PAGES: Record<string, DocPage> = {
       {
         type: "ul",
         items: [
-          "Numele câmpurilor JSON folosesc snake_case atât în cereri cât și în răspunsuri",
+          "Numele câmpurilor JSON folosesc snake_case pentru proiecte, sarcini, deploy și majoritatea răspunsurilor",
+          "Corpurile de create/update pentru agenți preferă camelCase (systemPrompt, toolMode); aliasurile snake_case sunt acceptate",
           "Identificatorii de proiect din URL sunt UUID-uri (project_id), nu slug-uri",
           "Erorile returnează JSON cu un câmp error; multe răspunsuri includ și detail",
           "Colaboratorii cu acces la proiect pot folosi aceleași endpoint-uri ca proprietarul",
@@ -515,6 +524,7 @@ export const DOC_PAGES: Record<string, DocPage> = {
           ["Proiecte", "/api/v1/projects…", "Proiecte și medii"],
           ["Sarcini AI de proiect", "/api/v1/projects/:id/tasks, /api/v1/tasks/:id", "Sarcini AI"],
           ["Agenți independenți", "/api/v1/agents…, /api/v1/runs/:id", "Agenți"],
+          ["Client TypeScript", "@synaro/sdk + CLI synaro", "TypeScript SDK"],
         ],
       },
       {
@@ -569,6 +579,12 @@ export const DOC_PAGES: Record<string, DocPage> = {
       {
         type: "p",
         text: "Proiectele sunt unitatea de nivel superior în Synaro. Fiecare are un UUID (project_id), un slug URL pentru panoul de control și un spațiu de lucru Docker izolat. Aceste endpoint-uri reflectă ce poți face din pagina Proiecte și bara de instrumente a spațiului de lucru.",
+      },
+      {
+        type: "callout",
+        variant: "tip",
+        title: "Preferă SDK-ul",
+        text: "Pentru helper-e tipizate de deploy (waitUntilReady, ensureRunning, withPreview), folosește @synaro/sdk — vezi /documentation/public-api-sdk.",
       },
       {
         type: "h2",
@@ -749,6 +765,12 @@ export const DOC_PAGES: Record<string, DocPage> = {
       },
       {
         type: "callout",
+        variant: "tip",
+        title: "Preferă SDK-ul",
+        text: "Folosește synaro.tasks.run sau tasks.watch din @synaro/sdk în loc de polling manual — vezi /documentation/public-api-sdk.",
+      },
+      {
+        type: "callout",
         variant: "info",
         title: "Nu sunt agenți independenți",
         text: "Aceste endpoint-uri modifică un depozit de proiect. Pentru agenți cu căutare web și instrumente HTTP fără proiect, folosește paginile API Agenți.",
@@ -893,7 +915,7 @@ export const DOC_PAGES: Record<string, DocPage> = {
       },
       {
         type: "p",
-        text: "Creează un agent. Trimite aceleași câmpuri JSON pe care le-ai folosi din panoul de control sau API-ul de sesiune (name, system_prompt, tools, schedule etc.). user_id este setat automat din cheia ta API—nu trebuie să transmiți id-ul altui utilizator.",
+        text: "Creează un agent. Preferă câmpuri camelCase ca în panou (name, systemPrompt, toolMode, tools, schedule, mcpServers). Aliasurile snake_case (system_prompt) sunt acceptate. userId este setat automat din cheia API.",
       },
       {
         type: "code",
@@ -903,7 +925,8 @@ export const DOC_PAGES: Record<string, DocPage> = {
   -H "Content-Type: application/json" \\
   -d '{
     "name": "Research bot",
-    "system_prompt": "Summarize top news about AI infrastructure.",
+    "systemPrompt": "Summarize top news about AI infrastructure.",
+    "toolMode": "auto",
     "tools": ["web_search"]
   }' \\
   https://YOUR_HOST/api/v1/agents`,
@@ -943,7 +966,7 @@ export const DOC_PAGES: Record<string, DocPage> = {
       },
       {
         type: "p",
-        text: "Listează execuțiile anterioare ale agentului (cele mai noi primele).",
+        text: "Listează execuțiile anterioare ale agentului (cele mai noi primele). Query opțional: limit, offset.",
       },
       {
         type: "h3",
@@ -955,6 +978,34 @@ export const DOC_PAGES: Record<string, DocPage> = {
       },
       {
         type: "h2",
+        text: "Anulare, credențiale și feed-uri",
+      },
+      {
+        type: "table",
+        headers: ["Endpoint", "Metodă", "Descriere"],
+        rows: [
+          ["/api/v1/runs/:runId/cancel", "POST", "Anulează o execuție activă"],
+          ["/api/v1/runs/:runId/credentials", "POST", "Trimite mcp_auth și reia NEEDS_INPUT"],
+          ["/api/v1/runs/active", "GET", "Execuții active pentru utilizatorul cheii"],
+          ["/api/v1/runs/recent", "GET", "Execuții recente (limit opțional)"],
+        ],
+      },
+      {
+        type: "h2",
+        text: "Memorie agent",
+      },
+      {
+        type: "table",
+        headers: ["Endpoint", "Metodă", "Descriere"],
+        rows: [
+          ["/api/v1/agents/:agentId/memory", "GET", "Listează memoria"],
+          ["/api/v1/agents/:agentId/memory", "DELETE", "Șterge toată memoria"],
+          ["/api/v1/agents/:agentId/memory/:key", "PUT", "Upsert ({ content })"],
+          ["/api/v1/agents/:agentId/memory/:key", "DELETE", "Șterge o intrare"],
+        ],
+      },
+      {
+        type: "h2",
         text: "Stări ale execuției",
       },
       {
@@ -963,14 +1014,350 @@ export const DOC_PAGES: Record<string, DocPage> = {
         rows: [
           ["PENDING", "În coadă"],
           ["RUNNING", "Buclă ReAct în desfășurare"],
+          ["NEEDS_INPUT", "Pauză pentru credențiale MCP"],
           ["DONE", "Finalizată; output disponibil"],
           ["FAILED", "Eroare sau max steps fără finalizare"],
+          ["CANCELLED", "Oprită de utilizator"],
         ],
       },
       {
         type: "callout",
         variant: "info",
-        text: "Agenții programați necesită agent-runner cu KIMI_API_KEY și BRAVE_SEARCH_API_KEY valide (când web_search este activat). Înregistrarea cron are loc la pornirea runner-ului—repornește runner-ul după modificarea programărilor.",
+        text: "Agenții programați necesită agent-runner cu KIMI_API_KEY și BRAVE_SEARCH_API_KEY valide (când web_search este activat). Înregistrarea cron se face la pornirea runner-ului—repornește runner-ul după schimbarea programărilor. Preferă @synaro/sdk pentru helper-e de polling — vezi /documentation/public-api-sdk.",
+      },
+    ],
+  },
+  "public-api-sdk": {
+    slug: "public-api-sdk",
+    title: "API public — SDK TypeScript",
+    description:
+      "Clientul oficial @synaro/sdk pentru /api/v1: instalare, resurse tipizate, iteratoare watch, erori și CLI-ul synaro.",
+    blocks: [
+      {
+        type: "p",
+        text: "SDK-ul oficial TypeScript/JavaScript învelește API-ul public Synaro (/api/v1). Gestionează autentificarea Bearer, conversia snake_case/camelCase, reîncercări la limită de rată, helper-e pentru operații lungi (deploy, task, run agent), iteratoare async watch și un CLI subtil. Folosește-l din Node.js 18+, scripturi, CI și aplicații server-side.",
+      },
+      {
+        type: "callout",
+        variant: "info",
+        title: "Chei API",
+        text: "Generează chei în Setări → Chei API. Secretul (sk_live_…) este afișat o singură dată. Treci-l ca apiKey la client sau setează SYNARO_API_KEY pentru CLI. Nu există endpoint public pentru crearea cheilor.",
+      },
+      {
+        type: "h2",
+        text: "Instalare",
+      },
+      {
+        type: "code",
+        title: "npm",
+        code: `npm install @synaro/sdk
+# sau: pnpm add @synaro/sdk / yarn add @synaro/sdk`,
+      },
+      {
+        type: "p",
+        text: "În acest monorepo pachetul este la packages/sdk. Construiește cu npm run build în acel folder; binarul CLI este dist/cli.js.",
+      },
+      {
+        type: "h2",
+        text: "Crearea clientului",
+      },
+      {
+        type: "code",
+        title: "Client de bază",
+        code: `import { Synaro } from "@synaro/sdk";
+
+const synaro = new Synaro({
+  apiKey: process.env.SYNARO_API_KEY!,
+  // baseUrl: "https://synaro.tech",     // producție (implicit)
+  // baseUrl: "http://localhost:3000",   // aplicație locală
+  timeoutMs: 30_000,
+  retryOnRateLimit: true,
+});
+
+const me = await synaro.me();
+console.log(me.userId, me.email);`,
+      },
+      {
+        type: "table",
+        headers: ["Opțiune", "Implicit", "Descriere"],
+        rows: [
+          ["apiKey", "(obligatoriu)", "Cheie API din panou (sk_live_…)"],
+          ["baseUrl", "https://synaro.tech", "Doar originea — fără sufix /api/v1"],
+          ["timeoutMs", "30000", "Timeout CRUD implicit în milisecunde"],
+          ["retryOnRateLimit", "true", "Reîncearcă o dată pe HTTP 429 folosind Retry-After"],
+          ["onRequest / onResponse", "—", "Hook-uri opționale de debug"],
+        ],
+      },
+      {
+        type: "h2",
+        text: "Start rapid: proiect → deploy → sarcină AI",
+      },
+      {
+        type: "code",
+        title: "Script end-to-end",
+        code: `import { Synaro } from "@synaro/sdk";
+
+const synaro = new Synaro({ apiKey: process.env.SYNARO_API_KEY! });
+
+const project = await synaro.projects.create({
+  name: "demo-api",
+  description: "Created via @synaro/sdk",
+});
+console.log("project", project.projectId, project.environmentStatus);
+
+const deploy = await synaro.projects.deploy(project.projectId, {
+  waitUntilReady: true,
+  timeoutSeconds: 300,
+});
+console.log("preview", deploy.previewUrl);
+
+const task = await synaro.tasks.run(
+  project.projectId,
+  "Add a GET /health route that returns { ok: true }",
+);
+console.log(task.summary);
+console.log(task.git?.htmlUrl);`,
+      },
+      {
+        type: "h2",
+        text: "Proiecte",
+      },
+      {
+        type: "p",
+        text: "Gestionează spații de lucru și medii. Răspunsurile folosesc camelCase (projectId, environmentStatus, …).",
+      },
+      {
+        type: "table",
+        headers: ["Metodă", "Mapează la", "Note"],
+        rows: [
+          ["projects.list()", "GET /api/v1/projects", "Proiecte vizibile pentru utilizatorul cheii"],
+          ["projects.create(input)", "POST /api/v1/projects", "name, description, repositoryUrl, dockerImage"],
+          ["projects.get(id)", "GET /api/v1/projects/:id", "Un singur proiect"],
+          ["projects.delete(id)", "DELETE …", "204; distruge mediile remote"],
+          ["projects.start / stop(id)", "POST …/environment/start|stop", "409 dacă e deja în provisioning la start"],
+          ["projects.deploy(id, opts?)", "POST …/deploy", "waitUntilReady, timeoutSeconds"],
+          ["projects.logs(id, opts?)", "GET …/logs", "source: runtime | task"],
+          ["projects.ensureRunning(id)", "compus", "Start + poll status până e gata de rulare"],
+          ["projects.withPreview(id)", "compus", "Deploy apoi returnează proiect + previewUrl"],
+        ],
+      },
+      {
+        type: "code",
+        title: "Asigură rularea și citește jurnalele",
+        code: `await synaro.projects.ensureRunning(projectId, {
+  timeoutMs: 180_000,
+  pollIntervalMs: 2_000,
+});
+
+const logs = await synaro.projects.logs(projectId, {
+  source: "runtime",
+  lines: 100,
+});
+console.log(logs.lines.join("\\n"));`,
+      },
+      {
+        type: "h2",
+        text: "Sarcini AI",
+      },
+      {
+        type: "p",
+        text: "Lucru AI la nivel de proiect (generate sau answer). tasks.run creează o sarcină și așteaptă; tasks.watch pollează cu wait=false și yield-uiește fiecare snapshot.",
+      },
+      {
+        type: "code",
+        title: "Creează, urmărește progresul sau rulează one-shot",
+        code: `// One-shot: create + așteptare pe server
+const result = await synaro.tasks.run(projectId, "Refactor auth middleware", {
+  mode: "generate",
+  timeoutSeconds: 300,
+});
+
+// Sau creează și urmărește pe client
+const created = await synaro.tasks.create(projectId, {
+  prompt: "Explain the billing module",
+  mode: "answer",
+});
+
+for await (const snap of synaro.tasks.watch(created.taskId, {
+  pollIntervalMs: 2_000,
+  timeoutMs: 300_000,
+})) {
+  console.log(snap.status, snap.progress ?? "");
+  if (snap.status === "DONE") {
+    console.log(snap.summary);
+  }
+}`,
+      },
+      {
+        type: "h2",
+        text: "Agenți și run-uri",
+      },
+      {
+        type: "p",
+        text: "Agenții independenți nu au nevoie de container de proiect. Fiecare DTO de agent expune un agentId canonic (mapat din id pe fir). Fiecare run expune runId la fel.",
+      },
+      {
+        type: "code",
+        title: "Creează agent, rulează și urmărește statusul",
+        code: `const agent = await synaro.agents.create({
+  name: "Nightly summary",
+  systemPrompt: "Summarize recent repo changes in markdown.",
+  toolMode: "auto",
+  tools: ["web_search"],
+  schedule: null,
+  enabled: true,
+});
+
+console.log(agent.agentId); // mereu setat
+
+const run = await synaro.agents.run(
+  agent.agentId,
+  "Summarize what changed yesterday",
+  { pollIntervalMs: 2_000, timeoutMs: 300_000 },
+);
+console.log(run.runId, run.status, run.output);
+
+// Sau trigger + watch manual
+const { runId } = await synaro.agents.trigger(agent.agentId, {
+  input: "Ping",
+  trigger: "manual",
+});
+
+for await (const snap of synaro.runs.watch(runId)) {
+  console.log(snap.status);
+  if (snap.status === "NEEDS_INPUT") {
+    // Trimite credențiale MCP apoi continuă așteptarea
+    await synaro.runs.submitCredentials(snap.runId, {
+      github: { Authorization: "Bearer ghp_…" },
+    });
+  }
+}`,
+      },
+      {
+        type: "table",
+        headers: ["Metodă", "Descriere"],
+        rows: [
+          ["agents.list / get / create / update / delete", "CRUD; scrierile folosesc camelCase (systemPrompt, toolMode, …)"],
+          ["agents.trigger(id, { input? })", "Returnează { runId }; HTTP 202"],
+          ["agents.run(id, input?, opts?)", "Trigger + așteaptă până la DONE / FAILED / CANCELLED"],
+          ["agents.listRuns(id, { limit?, offset? })", "Istoric run paginat"],
+          ["agents.memory(id).list|upsert|delete|clear", "CRUD memorie agent"],
+          ["runs.get / wait / watch / cancel", "Inspectează, pollează sau anulează un run"],
+          ["runs.active() / recent({ limit? })", "Feed-uri de run la nivel de utilizator"],
+          ["runs.submitCredentials(runId, mcpAuth)", "Reia run-urile NEEDS_INPUT"],
+        ],
+      },
+      {
+        type: "h2",
+        text: "Erori",
+      },
+      {
+        type: "p",
+        text: "Eșecurile HTTP devin erori tipizate. Păstrează status și body.error / body.detail pentru logging.",
+      },
+      {
+        type: "code",
+        title: "Gestionare tipizată a erorilor",
+        code: `import {
+  Synaro,
+  AuthError,
+  NotFoundError,
+  ConflictError,
+  RateLimitError,
+  NeedsInputError,
+  SynaroError,
+} from "@synaro/sdk";
+
+try {
+  await synaro.agents.run(agentId, "hello");
+} catch (err) {
+  if (err instanceof AuthError) {
+    console.error("Invalid API key");
+  } else if (err instanceof NeedsInputError) {
+    console.error("Paused for credentials", err.runId);
+  } else if (err instanceof RateLimitError) {
+    console.error("Rate limited; retry after", err.retryAfterSec, "s");
+  } else if (err instanceof NotFoundError) {
+    console.error("Missing resource");
+  } else if (err instanceof ConflictError) {
+    console.error("Conflict", err.message);
+  } else if (err instanceof SynaroError) {
+    console.error(err.status, err.body);
+  } else {
+    throw err;
+  }
+}`,
+      },
+      {
+        type: "table",
+        headers: ["Clasă", "Status tipic", "Când"],
+        rows: [
+          ["AuthError", "401", "Cheie API lipsă sau invalidă"],
+          ["NotFoundError", "404", "Resursă invizibilă pentru acest utilizator"],
+          ["ConflictError", "409", "ex. mediul e deja în provisioning"],
+          ["RateLimitError", "429", "Fereastra fixă per cheie depășită"],
+          ["NeedsInputError", "409 (logic)", "Status run agent NEEDS_INPUT"],
+          ["SynaroError", "4xx/5xx", "Clasa de bază; include eșecuri upstream 502"],
+        ],
+      },
+      {
+        type: "h2",
+        text: "CLI",
+      },
+      {
+        type: "p",
+        text: "Pachetul livrează binarul synaro (npx synaro … după publicare, sau node packages/sdk/dist/cli.js local). Autentificare via SYNARO_API_KEY; opțional SYNARO_BASE_URL.",
+      },
+      {
+        type: "code",
+        title: "Comenzi uzuale",
+        code: `export SYNARO_API_KEY=sk_live_…
+# export SYNARO_BASE_URL=http://localhost:3000
+
+npx synaro me
+npx synaro projects list
+npx synaro projects deploy <projectId>
+npx synaro projects deploy <projectId> --no-wait
+npx synaro agents list
+npx synaro agents run <agentId> "Summarize yesterday"
+npx synaro tasks run <projectId> Add a health check route
+npx synaro runs wait <runId>
+npx synaro runs cancel <runId>
+npx synaro --help`,
+      },
+      {
+        type: "callout",
+        variant: "tip",
+        title: "Sfat CI",
+        text: "Stochează SYNARO_API_KEY ca secret. Preferă tasks.run / agents.run / projects.deploy cu timeout-uri explicite ca pipeline-urile să eșueze rapid în loc să rămână blocate.",
+      },
+      {
+        type: "h2",
+        text: "Convenții",
+      },
+      {
+        type: "ul",
+        items: [
+          "API-ul public TypeScript este camelCase; SDK-ul convertește snake_case de pe fir pentru tine",
+          "Body-urile de creare/actualizare agent se trimit camelCase (systemPrompt, toolMode, mcpServers)",
+          "Obiectele Agent și Run includ mereu agentId / runId (normalizate din id când e nevoie)",
+          "Non-idempotent: create, trigger, deploy, tasks.create — nu reîncerca orbește fără a verifica starea",
+          "Limita de rată implicită este ~120 cereri la 60 de secunde per cheie API",
+          "Contract HTTP brut: vezi packages/sdk/openapi/v1.yaml și celelalte pagini API public",
+        ],
+      },
+      {
+        type: "h2",
+        text: "Pagini conexe",
+      },
+      {
+        type: "ul",
+        items: [
+          "Prezentare și autentificare — /documentation/public-api",
+          "Proiecte și medii — /documentation/public-api-projects",
+          "Sarcini AI — /documentation/public-api-tasks",
+          "Agenți — /documentation/public-api-agents",
+        ],
       },
     ],
   },

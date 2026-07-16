@@ -1,0 +1,392 @@
+openapi: 3.0.3
+info:
+  title: Synaro Public API
+  version: "1.0.0"
+  description: |
+    Bearer API-key surface at `/api/v1`. Mint keys in the Synaro dashboard (Settings → API keys).
+    TypeScript clients should prefer `@synaro/sdk`. Agent **write** bodies use camelCase
+    (`systemPrompt`, `toolMode`, …); the server also accepts snake_case aliases.
+servers:
+  - url: https://synaro.tech
+  - url: http://localhost:3000
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: sk_live
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        detail: { type: string }
+    Me:
+      type: object
+      properties:
+        user_id: { type: string }
+        email: { type: string, nullable: true }
+        name: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+    Project:
+      type: object
+      properties:
+        project_id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        environment_status: { type: string }
+        repository_location: { type: string, nullable: true }
+        clone_repository_url: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        environment_warning: { type: string, nullable: true }
+    AgentCreate:
+      type: object
+      required: [name, systemPrompt]
+      properties:
+        name: { type: string }
+        systemPrompt: { type: string }
+        description: { type: string }
+        toolMode: { type: string, enum: [auto, manual] }
+        tools: { type: array, items: { type: string } }
+        maxSteps: { type: integer }
+        schedule: { type: string, nullable: true }
+        enabled: { type: boolean }
+        emailOnComplete: { type: boolean }
+        model: { type: string }
+        mcpServers: { type: array, items: { type: object } }
+        projectId: { type: string }
+paths:
+  /api/v1/me:
+    get:
+      summary: Verify API key / identity
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "401":
+          description: Unauthorized
+  /api/v1/status:
+    get:
+      summary: Platform (and optional project) health
+      parameters:
+        - name: project_id
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/v1/projects:
+    get:
+      summary: List projects
+      responses:
+        "200": { description: OK }
+    post:
+      summary: Create project
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                repository_url: { type: string }
+                docker_image: { type: string }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+  /api/v1/projects/{projectId}:
+    get:
+      summary: Get project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+    delete:
+      summary: Delete project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Deleted }
+  /api/v1/projects/{projectId}/environment/start:
+    post:
+      summary: Start / resume environment
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+        "409": { description: Already provisioning }
+  /api/v1/projects/{projectId}/environment/stop:
+    post:
+      summary: Stop environment
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/v1/projects/{projectId}/deploy:
+    post:
+      summary: Deploy / start app process
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                wait_until_ready: { type: boolean }
+                timeout_seconds: { type: integer }
+      responses:
+        "200": { description: OK }
+  /api/v1/projects/{projectId}/logs:
+    get:
+      summary: Runtime or task logs
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: source
+          in: query
+          schema: { type: string, enum: [runtime, task] }
+        - name: lines
+          in: query
+          schema: { type: integer }
+        - name: task_id
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/v1/projects/{projectId}/tasks:
+    get:
+      summary: List AI tasks
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+    post:
+      summary: Create AI task
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                prompt: { type: string }
+                mode: { type: string, enum: [generate, answer] }
+      responses:
+        "202": { description: Accepted }
+  /api/v1/tasks/{taskId}:
+    get:
+      summary: Get / wait for AI task
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: wait
+          in: query
+          schema: { type: boolean, default: true }
+        - name: timeout_seconds
+          in: query
+          schema: { type: integer, default: 300 }
+      responses:
+        "200": { description: OK }
+  /api/v1/agents:
+    get:
+      summary: List agents
+      responses:
+        "200": { description: OK }
+    post:
+      summary: Create agent
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentCreate" }
+      responses:
+        "201": { description: Created }
+  /api/v1/agents/{agentId}:
+    get:
+      summary: Get agent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+    patch:
+      summary: Update agent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+    delete:
+      summary: Delete agent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Deleted }
+  /api/v1/agents/{agentId}/trigger:
+    post:
+      summary: Trigger agent run
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "202": { description: Accepted }
+  /api/v1/agents/{agentId}/runs:
+    get:
+      summary: List agent runs
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+      responses:
+        "200": { description: OK }
+  /api/v1/agents/{agentId}/memory:
+    get:
+      summary: List agent memory
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+    delete:
+      summary: Clear agent memory
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Cleared }
+  /api/v1/agents/{agentId}/memory/{key}:
+    put:
+      summary: Upsert memory entry
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+    delete:
+      summary: Delete memory entry
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Deleted }
+  /api/v1/runs/{runId}:
+    get:
+      summary: Get run
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/v1/runs/{runId}/cancel:
+    post:
+      summary: Cancel active run
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/v1/runs/{runId}/credentials:
+    post:
+      summary: Submit MCP credentials and resume NEEDS_INPUT run
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mcp_auth: { type: object }
+                mcpAuth: { type: object }
+      responses:
+        "200": { description: OK }
+  /api/v1/runs/active:
+    get:
+      summary: List active runs for the API key user
+      responses:
+        "200": { description: OK }
+  /api/v1/runs/recent:
+    get:
+      summary: List recent runs for the API key user
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        "200": { description: OK }

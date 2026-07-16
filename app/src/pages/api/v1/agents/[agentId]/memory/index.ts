@@ -6,7 +6,7 @@ import { requireMethod } from "@/lib/public-api/method";
 import { toSnakeCaseJson } from "@/lib/public-api/serialize";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (!requireMethod(req, res, "GET")) return;
+  if (!requireMethod(req, res, ["GET", "DELETE"])) return;
 
   const auth = await requirePublicApiAuth(req, res);
   if (!auth) return;
@@ -14,17 +14,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const agentId = typeof req.query.agentId === "string" ? req.query.agentId : "";
   if (!agentId) return res.status(400).json({ error: "missing_agent_id" });
 
-  const limit = typeof req.query.limit === "string" ? req.query.limit : undefined;
-  const offset = typeof req.query.offset === "string" ? req.query.offset : undefined;
-  const params = new URLSearchParams();
-  if (limit) params.set("limit", limit);
-  if (offset) params.set("offset", offset);
-  const q = params.toString();
-
   try {
+    if (req.method === "GET") {
+      const url = new URL(
+        `/api/agents/${encodeURIComponent(agentId)}/memory`,
+        "http://agent.local",
+      );
+      url.searchParams.set("userId", auth.userId);
+      const { status, body } = await proxyAgentService(`${url.pathname}${url.search}`);
+      return res.status(status).json(toSnakeCaseJson(body));
+    }
+
     const { status, body } = await proxyAgentService(
-      `/api/agents/${encodeURIComponent(agentId)}/runs${q ? `?${q}` : ""}`,
+      `/api/agents/${encodeURIComponent(agentId)}/memory`,
+      {
+        method: "DELETE",
+        body: JSON.stringify({ userId: auth.userId }),
+      },
     );
+    if (status === 204) return res.status(204).end();
     return res.status(status).json(toSnakeCaseJson(body));
   } catch {
     return res.status(502).json({ error: "agent_service_unavailable" });

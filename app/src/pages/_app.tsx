@@ -19,7 +19,7 @@ import { OnboardingProvider } from "@/components/ui/onboarding";
 import { TermsConsentBanner } from "@/components/ui/terms-consent-banner";
 import { type Locale } from "@/i18n/config";
 import { resolveInitialLocale } from "@/i18n/locale-cookie";
-import { routeHeadProps } from "@/lib/seo/route-head";
+import { isPrivateAppRoute, routeHeadProps } from "@/lib/seo/route-head";
 import { mergePageSeo, type PageSeoProps } from "@/lib/seo/page-seo";
 
 type AppPageProps = {
@@ -68,7 +68,7 @@ function SynaroApp({ Component, pageProps }: AppPropsWithSession) {
                   <AgentBackgroundRunsProvider>
                     <OnboardingProvider>
                       {content}
-                      <GlobalSearch />
+                      {isPrivateAppRoute(router.pathname) ? <GlobalSearch /> : null}
                       <TermsConsentBanner />
                     </OnboardingProvider>
                   </AgentBackgroundRunsProvider>

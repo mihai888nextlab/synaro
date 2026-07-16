@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 
 import {
+  destroyAllRemoteEnvironmentsForProject,
   pickActiveRuntimeEnvironment,
   parseRemoteStatus,
   remoteListWorkspaceFiles,
@@ -100,5 +101,43 @@ describe("remoteListWorkspaceFiles (fetch integration contract)", () => {
       "http://env.test/api/environments/env-1/workspace-files",
       expect.objectContaining({ method: "GET" }),
     );
+  });
+});
+
+describe("destroyAllRemoteEnvironmentsForProject", () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    process.env.ENVIRONMENT_SERVICE_URL = "http://env.test";
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    delete process.env.ENVIRONMENT_SERVICE_URL;
+  });
+
+  it("swallows list failures so project delete can still proceed", async () => {
+    global.fetch = jest.fn().mockRejectedValue(new Error("ECONNREFUSED"));
+
+    await expect(destroyAllRemoteEnvironmentsForProject("project-1")).resolves.toBeUndefined();
+  });
+
+  it("continues when an individual environment destroy fails", async () => {
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("/api/environments?")) {
+        return {
+          ok: true,
+          json: async () => [
+            { id: "e1", projectId: "p", status: "STOPPED", port: null, containerId: null },
+            { id: "e2", projectId: "p", status: "STOPPED", port: null, containerId: null },
+          ],
+        } as Response;
+      }
+      return { ok: false, status: 500, text: async () => "boom" } as Response;
+    }) as unknown as typeof fetch;
+
+    await expect(destroyAllRemoteEnvironmentsForProject("project-1")).resolves.toBeUndefined();
+    expect(global.fetch).toHaveBeenCalledTimes(3);
   });
 });

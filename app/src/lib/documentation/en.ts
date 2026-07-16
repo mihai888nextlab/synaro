@@ -32,6 +32,7 @@ export const DOC_NAV: DocNavGroup[] = [
       { slug: "public-api-projects", label: "Projects & environments" },
       { slug: "public-api-tasks", label: "AI tasks" },
       { slug: "public-api-agents", label: "Agents" },
+      { slug: "public-api-sdk", label: "TypeScript SDK" },
     ],
   },
   {
@@ -147,7 +148,7 @@ export const DOC_PAGES: Record<string, DocPage> = {
       },
       {
         type: "p",
-        text: "For scripts and CI, go to Settings → API keys, create a key, and call /api/v1 with Authorization: Bearer <key>. Start with GET /api/v1/me, then see the Public API section in Documentation for projects, tasks, and agents.",
+        text: "For scripts and CI, go to Settings → API keys, create a key, and call /api/v1 with Authorization: Bearer <key>. Start with GET /api/v1/me. Prefer the typed TypeScript SDK (@synaro/sdk) — see /documentation/public-api-sdk — or the raw HTTP pages under Public API for projects, tasks, and agents.",
       },
     ],
   },
@@ -443,6 +444,12 @@ export const DOC_PAGES: Record<string, DocPage> = {
       },
       {
         type: "callout",
+        variant: "tip",
+        title: "Official SDK",
+        text: "Prefer the TypeScript package @synaro/sdk for typed helpers (deploy wait, task/run polling, memory, cancel, CLI). Full guide: /documentation/public-api-sdk. OpenAPI lives at packages/sdk/openapi/v1.yaml in the repository.",
+      },
+      {
+        type: "callout",
         variant: "info",
         title: "Not the dashboard session API",
         text: "Routes like /api/projects and /api/agents require a browser NextAuth session. The public API uses API keys instead and is the supported surface for automation. Internal microservices are never exposed directly.",
@@ -494,7 +501,8 @@ export const DOC_PAGES: Record<string, DocPage> = {
       {
         type: "ul",
         items: [
-          "JSON field names use snake_case in both requests and responses",
+          "JSON field names use snake_case for projects, tasks, deploy, and most responses",
+          "Agent create/update bodies prefer camelCase (systemPrompt, toolMode, maxSteps, mcpServers); snake_case aliases are accepted and normalized",
           "Project identifiers in URLs are UUIDs (project_id), not slugs",
           "Errors return JSON with an error field; many responses also include detail",
           "Collaborators with project access can use the same endpoints as the owner",
@@ -515,6 +523,7 @@ export const DOC_PAGES: Record<string, DocPage> = {
           ["Projects", "/api/v1/projects…", "Projects & environments"],
           ["Project AI tasks", "/api/v1/projects/:id/tasks, /api/v1/tasks/:id", "AI tasks"],
           ["Standalone agents", "/api/v1/agents…, /api/v1/runs/:id", "Agents"],
+          ["TypeScript SDK", "@synaro/sdk + synaro CLI", "TypeScript SDK"],
         ],
       },
       {
@@ -569,6 +578,12 @@ export const DOC_PAGES: Record<string, DocPage> = {
       {
         type: "p",
         text: "Projects are the top-level unit in Synaro. Each has a UUID (project_id), a URL slug for the dashboard, and an isolated Docker workspace. These endpoints mirror what you can do from the Projects page and workspace toolbar.",
+      },
+      {
+        type: "callout",
+        variant: "tip",
+        title: "Prefer the SDK",
+        text: "For typed deploy helpers (waitUntilReady, ensureRunning, withPreview), use @synaro/sdk — see /documentation/public-api-sdk.",
       },
       {
         type: "h2",
@@ -749,6 +764,12 @@ export const DOC_PAGES: Record<string, DocPage> = {
       },
       {
         type: "callout",
+        variant: "tip",
+        title: "Prefer the SDK",
+        text: "Use synaro.tasks.run or tasks.watch from @synaro/sdk instead of hand-rolled polling — see /documentation/public-api-sdk.",
+      },
+      {
+        type: "callout",
         variant: "info",
         title: "Not standalone agents",
         text: "These endpoints modify a project repository. For web-search and HTTP-tool agents without a project, use the Agents API pages instead.",
@@ -893,7 +914,7 @@ export const DOC_PAGES: Record<string, DocPage> = {
       },
       {
         type: "p",
-        text: "Creates an agent. Send the same JSON fields you would use from the dashboard or session API (name, system_prompt, tools, schedule, etc.). The user_id is set automatically from your API key—you must not rely on passing another user's id.",
+        text: "Creates an agent. Prefer camelCase fields matching the dashboard/session API (name, systemPrompt, toolMode, tools, schedule, mcpServers, …). Snake_case aliases such as system_prompt are accepted. The userId is set automatically from your API key—do not rely on passing another user's id. Persisted MCP credentials in the body are rejected.",
       },
       {
         type: "code",
@@ -903,7 +924,8 @@ export const DOC_PAGES: Record<string, DocPage> = {
   -H "Content-Type: application/json" \\
   -d '{
     "name": "Research bot",
-    "system_prompt": "Summarize top news about AI infrastructure.",
+    "systemPrompt": "Summarize top news about AI infrastructure.",
+    "toolMode": "auto",
     "tools": ["web_search"]
   }' \\
   https://YOUR_HOST/api/v1/agents`,
@@ -943,7 +965,7 @@ export const DOC_PAGES: Record<string, DocPage> = {
       },
       {
         type: "p",
-        text: "Lists past runs for the agent (newest first).",
+        text: "Lists past runs for the agent (newest first). Optional query params: limit (default 20, max 100), offset.",
       },
       {
         type: "h3",
@@ -955,6 +977,34 @@ export const DOC_PAGES: Record<string, DocPage> = {
       },
       {
         type: "h2",
+        text: "Cancel, credentials, and run feeds",
+      },
+      {
+        type: "table",
+        headers: ["Endpoint", "Method", "Description"],
+        rows: [
+          ["/api/v1/runs/:runId/cancel", "POST", "Cancel an active run (PENDING, RUNNING, NEEDS_INPUT)"],
+          ["/api/v1/runs/:runId/credentials", "POST", "Submit mcp_auth / mcpAuth and resume a NEEDS_INPUT run"],
+          ["/api/v1/runs/active", "GET", "Active runs for the API key user"],
+          ["/api/v1/runs/recent", "GET", "Recent runs (optional limit)"],
+        ],
+      },
+      {
+        type: "h2",
+        text: "Agent memory",
+      },
+      {
+        type: "table",
+        headers: ["Endpoint", "Method", "Description"],
+        rows: [
+          ["/api/v1/agents/:agentId/memory", "GET", "List memory entries"],
+          ["/api/v1/agents/:agentId/memory", "DELETE", "Clear all memory"],
+          ["/api/v1/agents/:agentId/memory/:key", "PUT", "Upsert entry ({ content })"],
+          ["/api/v1/agents/:agentId/memory/:key", "DELETE", "Delete one entry"],
+        ],
+      },
+      {
+        type: "h2",
         text: "Run statuses",
       },
       {
@@ -963,14 +1013,350 @@ export const DOC_PAGES: Record<string, DocPage> = {
         rows: [
           ["PENDING", "Queued"],
           ["RUNNING", "ReAct loop in progress"],
+          ["NEEDS_INPUT", "Paused for MCP credentials"],
           ["DONE", "Finished; output available"],
           ["FAILED", "Error or max steps without finish"],
+          ["CANCELLED", "Stopped by user"],
         ],
       },
       {
         type: "callout",
         variant: "info",
-        text: "Scheduled agents require agent-runner with valid KIMI_API_KEY and BRAVE_SEARCH_API_KEY (when web_search is enabled). Cron registration happens at runner startup—restart the runner after changing schedules.",
+        text: "Scheduled agents require agent-runner with valid KIMI_API_KEY and BRAVE_SEARCH_API_KEY (when web_search is enabled). Cron registration happens at runner startup—restart the runner after changing schedules. Prefer @synaro/sdk for poll helpers — see /documentation/public-api-sdk.",
+      },
+    ],
+  },
+  "public-api-sdk": {
+    slug: "public-api-sdk",
+    title: "Public API — TypeScript SDK",
+    description:
+      "Official @synaro/sdk client for /api/v1: install, typed resources, watch iterators, errors, and the synaro CLI.",
+    blocks: [
+      {
+        type: "p",
+        text: "The official TypeScript/JavaScript SDK wraps Synaro’s public API (/api/v1). It handles Bearer authentication, snake_case/camelCase conversion, rate-limit retries, long-running helpers (deploy, task run, agent run), async watch iterators, and a thin CLI. Use it from Node.js 18+, scripts, CI, and server-side apps.",
+      },
+      {
+        type: "callout",
+        variant: "info",
+        title: "API keys",
+        text: "Mint keys in Settings → API keys. The secret (sk_live_…) is shown once. Pass it as apiKey to the client or set SYNARO_API_KEY for the CLI. There is no public endpoint to create keys.",
+      },
+      {
+        type: "h2",
+        text: "Install",
+      },
+      {
+        type: "code",
+        title: "npm",
+        code: `npm install @synaro/sdk
+# or: pnpm add @synaro/sdk / yarn add @synaro/sdk`,
+      },
+      {
+        type: "p",
+        text: "In this monorepo the package lives at packages/sdk. Build with npm run build inside that folder; the CLI binary is dist/cli.js.",
+      },
+      {
+        type: "h2",
+        text: "Create a client",
+      },
+      {
+        type: "code",
+        title: "Basic client",
+        code: `import { Synaro } from "@synaro/sdk";
+
+const synaro = new Synaro({
+  apiKey: process.env.SYNARO_API_KEY!,
+  // baseUrl: "https://synaro.tech",     // production (default)
+  // baseUrl: "http://localhost:3000",   // local app
+  timeoutMs: 30_000,
+  retryOnRateLimit: true,
+});
+
+const me = await synaro.me();
+console.log(me.userId, me.email);`,
+      },
+      {
+        type: "table",
+        headers: ["Option", "Default", "Description"],
+        rows: [
+          ["apiKey", "(required)", "Dashboard API key (sk_live_…)"],
+          ["baseUrl", "https://synaro.tech", "Origin only — no /api/v1 suffix"],
+          ["timeoutMs", "30000", "Default CRUD timeout in milliseconds"],
+          ["retryOnRateLimit", "true", "Retry once on HTTP 429 using Retry-After"],
+          ["onRequest / onResponse", "—", "Optional debug hooks"],
+        ],
+      },
+      {
+        type: "h2",
+        text: "Quickstart: project → deploy → AI task",
+      },
+      {
+        type: "code",
+        title: "End-to-end script",
+        code: `import { Synaro } from "@synaro/sdk";
+
+const synaro = new Synaro({ apiKey: process.env.SYNARO_API_KEY! });
+
+const project = await synaro.projects.create({
+  name: "demo-api",
+  description: "Created via @synaro/sdk",
+});
+console.log("project", project.projectId, project.environmentStatus);
+
+const deploy = await synaro.projects.deploy(project.projectId, {
+  waitUntilReady: true,
+  timeoutSeconds: 300,
+});
+console.log("preview", deploy.previewUrl);
+
+const task = await synaro.tasks.run(
+  project.projectId,
+  "Add a GET /health route that returns { ok: true }",
+);
+console.log(task.summary);
+console.log(task.git?.htmlUrl);`,
+      },
+      {
+        type: "h2",
+        text: "Projects",
+      },
+      {
+        type: "p",
+        text: "Manage workspaces and environments. Responses use camelCase (projectId, environmentStatus, …).",
+      },
+      {
+        type: "table",
+        headers: ["Method", "Maps to", "Notes"],
+        rows: [
+          ["projects.list()", "GET /api/v1/projects", "Projects visible to the key’s user"],
+          ["projects.create(input)", "POST /api/v1/projects", "name, description, repositoryUrl, dockerImage"],
+          ["projects.get(id)", "GET /api/v1/projects/:id", "Single project"],
+          ["projects.delete(id)", "DELETE …", "204; destroys remote environments"],
+          ["projects.start / stop(id)", "POST …/environment/start|stop", "409 if already provisioning on start"],
+          ["projects.deploy(id, opts?)", "POST …/deploy", "waitUntilReady, timeoutSeconds"],
+          ["projects.logs(id, opts?)", "GET …/logs", "source: runtime | task"],
+          ["projects.ensureRunning(id)", "composed", "Start + poll status until run-ready"],
+          ["projects.withPreview(id)", "composed", "Deploy then return project + previewUrl"],
+        ],
+      },
+      {
+        type: "code",
+        title: "Ensure running and fetch logs",
+        code: `await synaro.projects.ensureRunning(projectId, {
+  timeoutMs: 180_000,
+  pollIntervalMs: 2_000,
+});
+
+const logs = await synaro.projects.logs(projectId, {
+  source: "runtime",
+  lines: 100,
+});
+console.log(logs.lines.join("\\n"));`,
+      },
+      {
+        type: "h2",
+        text: "AI tasks",
+      },
+      {
+        type: "p",
+        text: "Project-scoped AI work (generate or answer). tasks.run creates a task and waits; tasks.watch polls with wait=false and yields each snapshot.",
+      },
+      {
+        type: "code",
+        title: "Create, watch progress, or one-shot run",
+        code: `// One-shot: create + server-side wait
+const result = await synaro.tasks.run(projectId, "Refactor auth middleware", {
+  mode: "generate",
+  timeoutSeconds: 300,
+});
+
+// Or create then watch client-side
+const created = await synaro.tasks.create(projectId, {
+  prompt: "Explain the billing module",
+  mode: "answer",
+});
+
+for await (const snap of synaro.tasks.watch(created.taskId, {
+  pollIntervalMs: 2_000,
+  timeoutMs: 300_000,
+})) {
+  console.log(snap.status, snap.progress ?? "");
+  if (snap.status === "DONE") {
+    console.log(snap.summary);
+  }
+}`,
+      },
+      {
+        type: "h2",
+        text: "Agents & runs",
+      },
+      {
+        type: "p",
+        text: "Standalone agents do not need a project container. Every agent DTO exposes a canonical agentId (mapped from wire id). Every run exposes runId the same way.",
+      },
+      {
+        type: "code",
+        title: "Create agent, run, and watch status",
+        code: `const agent = await synaro.agents.create({
+  name: "Nightly summary",
+  systemPrompt: "Summarize recent repo changes in markdown.",
+  toolMode: "auto",
+  tools: ["web_search"],
+  schedule: null,
+  enabled: true,
+});
+
+console.log(agent.agentId); // always set
+
+const run = await synaro.agents.run(
+  agent.agentId,
+  "Summarize what changed yesterday",
+  { pollIntervalMs: 2_000, timeoutMs: 300_000 },
+);
+console.log(run.runId, run.status, run.output);
+
+// Or trigger + watch yourself
+const { runId } = await synaro.agents.trigger(agent.agentId, {
+  input: "Ping",
+  trigger: "manual",
+});
+
+for await (const snap of synaro.runs.watch(runId)) {
+  console.log(snap.status);
+  if (snap.status === "NEEDS_INPUT") {
+    // Submit MCP credentials then continue waiting
+    await synaro.runs.submitCredentials(snap.runId, {
+      github: { Authorization: "Bearer ghp_…" },
+    });
+  }
+}`,
+      },
+      {
+        type: "table",
+        headers: ["Method", "Description"],
+        rows: [
+          ["agents.list / get / create / update / delete", "CRUD; writes use camelCase (systemPrompt, toolMode, …)"],
+          ["agents.trigger(id, { input? })", "Returns { runId }; HTTP 202"],
+          ["agents.run(id, input?, opts?)", "Trigger + wait until DONE / FAILED / CANCELLED"],
+          ["agents.listRuns(id, { limit?, offset? })", "Paginated run history"],
+          ["agents.memory(id).list|upsert|delete|clear", "Agent memory CRUD"],
+          ["runs.get / wait / watch / cancel", "Inspect, poll, or cancel a run"],
+          ["runs.active() / recent({ limit? })", "User-scoped run feeds"],
+          ["runs.submitCredentials(runId, mcpAuth)", "Resume NEEDS_INPUT runs"],
+        ],
+      },
+      {
+        type: "h2",
+        text: "Errors",
+      },
+      {
+        type: "p",
+        text: "HTTP failures become typed errors. Preserve status and body.error / body.detail for logging.",
+      },
+      {
+        type: "code",
+        title: "Typed error handling",
+        code: `import {
+  Synaro,
+  AuthError,
+  NotFoundError,
+  ConflictError,
+  RateLimitError,
+  NeedsInputError,
+  SynaroError,
+} from "@synaro/sdk";
+
+try {
+  await synaro.agents.run(agentId, "hello");
+} catch (err) {
+  if (err instanceof AuthError) {
+    console.error("Invalid API key");
+  } else if (err instanceof NeedsInputError) {
+    console.error("Paused for credentials", err.runId);
+  } else if (err instanceof RateLimitError) {
+    console.error("Rate limited; retry after", err.retryAfterSec, "s");
+  } else if (err instanceof NotFoundError) {
+    console.error("Missing resource");
+  } else if (err instanceof ConflictError) {
+    console.error("Conflict", err.message);
+  } else if (err instanceof SynaroError) {
+    console.error(err.status, err.body);
+  } else {
+    throw err;
+  }
+}`,
+      },
+      {
+        type: "table",
+        headers: ["Class", "Typical status", "When"],
+        rows: [
+          ["AuthError", "401", "Missing or invalid API key"],
+          ["NotFoundError", "404", "Resource not visible to this user"],
+          ["ConflictError", "409", "e.g. env already provisioning"],
+          ["RateLimitError", "429", "Per-key fixed window exceeded"],
+          ["NeedsInputError", "409 (logical)", "Agent run status NEEDS_INPUT"],
+          ["SynaroError", "4xx/5xx", "Base class; includes 502 upstream failures"],
+        ],
+      },
+      {
+        type: "h2",
+        text: "CLI",
+      },
+      {
+        type: "p",
+        text: "The package ships a synaro binary (npx synaro … after publish, or node packages/sdk/dist/cli.js locally). Auth via SYNARO_API_KEY; optional SYNARO_BASE_URL.",
+      },
+      {
+        type: "code",
+        title: "Common commands",
+        code: `export SYNARO_API_KEY=sk_live_…
+# export SYNARO_BASE_URL=http://localhost:3000
+
+npx synaro me
+npx synaro projects list
+npx synaro projects deploy <projectId>
+npx synaro projects deploy <projectId> --no-wait
+npx synaro agents list
+npx synaro agents run <agentId> "Summarize yesterday"
+npx synaro tasks run <projectId> Add a health check route
+npx synaro runs wait <runId>
+npx synaro runs cancel <runId>
+npx synaro --help`,
+      },
+      {
+        type: "callout",
+        variant: "tip",
+        title: "CI tip",
+        text: "Store SYNARO_API_KEY as a secret. Prefer tasks.run / agents.run / projects.deploy with explicit timeouts so pipelines fail fast instead of hanging.",
+      },
+      {
+        type: "h2",
+        text: "Conventions",
+      },
+      {
+        type: "ul",
+        items: [
+          "TypeScript public API is camelCase; the SDK converts wire snake_case for you",
+          "Agent create/update bodies are sent camelCase (systemPrompt, toolMode, mcpServers)",
+          "Agent and run objects always include agentId / runId (normalized from id when needed)",
+          "Non-idempotent: create, trigger, deploy, tasks.create — do not blindly retry without checking state",
+          "Default rate limit is about 120 requests per 60 seconds per API key",
+          "Raw HTTP contract: see packages/sdk/openapi/v1.yaml and the other Public API doc pages",
+        ],
+      },
+      {
+        type: "h2",
+        text: "Related pages",
+      },
+      {
+        type: "ul",
+        items: [
+          "Overview & authentication — /documentation/public-api",
+          "Projects & environments — /documentation/public-api-projects",
+          "AI tasks — /documentation/public-api-tasks",
+          "Agents — /documentation/public-api-agents",
+        ],
       },
     ],
   },

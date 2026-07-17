@@ -1,4 +1,7 @@
-import type { ReactNode } from "react";
+"use client";
+
+import type { ReactNode, KeyboardEvent } from "react";
+import { useRouter } from "next/router";
 
 import { useTranslation } from "@/components/ui/locale-provider";
 import { cn } from "@/lib/utils";
@@ -14,6 +17,8 @@ export type DashboardLogRow = {
   timeTitle?: string;
   /** ISO-8601 instant for `<time dateTime>`. */
   occurredAt?: string;
+  /** Deep link to the related project workspace, agent, or agent run. */
+  href?: string | null;
 };
 
 export const DASHBOARD_PLACEHOLDER_LOGS: DashboardLogRow[] = [
@@ -109,6 +114,25 @@ const LOG_PAGE_EXTRA_ROWS: DashboardLogRow[] = [
 /** Extended sample used on `/logs` (includes dashboard rows plus more history). */
 export const LOG_PAGE_PLACEHOLDER_LOGS: DashboardLogRow[] = [...DASHBOARD_PLACEHOLDER_LOGS, ...LOG_PAGE_EXTRA_ROWS];
 
+function useLogNavigation(href: string | null | undefined) {
+  const router = useRouter();
+
+  const navigate = () => {
+    if (!href) return;
+    void router.push(href);
+  };
+
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (!href) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      navigate();
+    }
+  };
+
+  return { navigate, onKeyDown, interactive: Boolean(href) };
+}
+
 function LogRowCard({
   row,
   frameless,
@@ -116,14 +140,31 @@ function LogRowCard({
   row: DashboardLogRow;
   frameless: boolean;
 }) {
+  const { t } = useTranslation();
+  const { navigate, onKeyDown, interactive } = useLogNavigation(row.href);
+
   return (
     <article
+      role={interactive ? "link" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={interactive ? navigate : undefined}
+      onKeyDown={interactive ? onKeyDown : undefined}
+      aria-label={interactive ? t("logs.openRelated", { action: row.action }) : undefined}
       className={cn(
         "border-b border-border/50 transition-colors last:border-b-0 hover:bg-muted/25 dark:hover:bg-muted/10",
         frameless ? "px-3 py-3.5 sm:px-4" : "px-4 py-3.5 sm:px-5",
+        interactive &&
+          "cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring/70",
       )}
     >
-      <p className="text-sm font-medium leading-snug text-foreground">{row.action}</p>
+      <p
+        className={cn(
+          "text-sm font-medium leading-snug text-foreground",
+          interactive && "underline-offset-2 group-hover:underline",
+        )}
+      >
+        {row.action}
+      </p>
       <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <span className="min-w-0 truncate text-xs text-muted-foreground">{row.project}</span>
         <StatusPill status={row.status} />
@@ -136,6 +177,62 @@ function LogRowCard({
         </time>
       </div>
     </article>
+  );
+}
+
+function LogTableRow({
+  row,
+  frameless,
+}: {
+  row: DashboardLogRow;
+  frameless: boolean;
+}) {
+  const { t } = useTranslation();
+  const { navigate, onKeyDown, interactive } = useLogNavigation(row.href);
+
+  return (
+    <tr
+      role={interactive ? "link" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={interactive ? navigate : undefined}
+      onKeyDown={interactive ? onKeyDown : undefined}
+      aria-label={interactive ? t("logs.openRelated", { action: row.action }) : undefined}
+      className={cn(
+        "border-b border-border/50 transition-colors last:border-b-0 hover:bg-muted/25 dark:hover:bg-muted/10",
+        interactive &&
+          "cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring/70",
+      )}
+    >
+      <td
+        className={cn(
+          "max-w-md py-3.5 font-medium text-foreground",
+          frameless ? "pl-0 pr-3 sm:pr-4" : "px-5 sm:px-6",
+          interactive && "underline-offset-2 hover:underline",
+        )}
+      >
+        {row.action}
+      </td>
+      <td
+        className={cn(
+          "whitespace-nowrap py-3.5 text-muted-foreground",
+          frameless ? "px-3 sm:px-4" : "px-5 sm:px-6",
+        )}
+      >
+        {row.project}
+      </td>
+      <td className={cn("py-3.5", frameless ? "px-3 sm:px-4" : "px-5 sm:px-6")}>
+        <StatusPill status={row.status} />
+      </td>
+      <td
+        className={cn(
+          "whitespace-nowrap py-3.5 text-right tabular-nums text-muted-foreground",
+          frameless ? "pl-3 pr-0 sm:pl-4" : "px-5 sm:px-6",
+        )}
+        title={row.timeTitle}
+      >
+        <time dateTime={row.occurredAt}>{row.time}</time>
+      </td>
+    </tr>
   );
 }
 
@@ -257,7 +354,7 @@ export function DashboardLogsTable({
                   frameless ? "pl-0 pr-3 sm:pr-4" : "px-5 sm:px-6",
                 )}
               >
-                Action
+                {t("logs.columnAction")}
               </th>
               <th
                 className={cn(
@@ -265,7 +362,7 @@ export function DashboardLogsTable({
                   frameless ? "px-3 sm:px-4" : "px-5 sm:px-6",
                 )}
               >
-                Project
+                {t("logs.columnProject")}
               </th>
               <th
                 className={cn(
@@ -273,7 +370,7 @@ export function DashboardLogsTable({
                   frameless ? "px-3 sm:px-4" : "px-5 sm:px-6",
                 )}
               >
-                Status
+                {t("logs.columnStatus")}
               </th>
               <th
                 className={cn(
@@ -281,45 +378,13 @@ export function DashboardLogsTable({
                   frameless ? "pl-3 pr-0 sm:pl-4" : "px-5 sm:px-6",
                 )}
               >
-                Time
+                {t("logs.columnTime")}
               </th>
             </tr>
           </thead>
           <tbody>
             {logs.map((row) => (
-              <tr
-                key={row.id}
-                className="border-b border-border/50 transition-colors last:border-b-0 hover:bg-muted/25 dark:hover:bg-muted/10"
-              >
-                <td
-                  className={cn(
-                    "max-w-md py-3.5 font-medium text-foreground",
-                    frameless ? "pl-0 pr-3 sm:pr-4" : "px-5 sm:px-6",
-                  )}
-                >
-                  {row.action}
-                </td>
-                <td
-                  className={cn(
-                    "whitespace-nowrap py-3.5 text-muted-foreground",
-                    frameless ? "px-3 sm:px-4" : "px-5 sm:px-6",
-                  )}
-                >
-                  {row.project}
-                </td>
-                <td className={cn("py-3.5", frameless ? "px-3 sm:px-4" : "px-5 sm:px-6")}>
-                  <StatusPill status={row.status} />
-                </td>
-                <td
-                  className={cn(
-                    "whitespace-nowrap py-3.5 text-right tabular-nums text-muted-foreground",
-                    frameless ? "pl-3 pr-0 sm:pl-4" : "px-5 sm:px-6",
-                  )}
-                  title={row.timeTitle}
-                >
-                  <time dateTime={row.occurredAt}>{row.time}</time>
-                </td>
-              </tr>
+              <LogTableRow key={row.id} row={row} frameless={frameless} />
             ))}
           </tbody>
         </table>

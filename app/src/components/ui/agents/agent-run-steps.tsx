@@ -4,14 +4,23 @@ import { Loader2 } from "lucide-react";
 
 import { useTranslation } from "@/components/ui/locale-provider";
 import type { ReActStep } from "@/lib/agents/react-step";
+import { isBulkyToolObservation } from "@/lib/agents/run-preview";
 import { cn } from "@/lib/utils";
 
-const OBSERVATION_PREVIEW_LEN = 160;
+const OBSERVATION_PREVIEW_LEN = 120;
 
-function observationPreview(observation: string): string {
+function observationPreview(tool: string, observation: string): string {
   const trimmed = observation.trim();
-  if (trimmed.length <= OBSERVATION_PREVIEW_LEN) return trimmed;
-  return `${trimmed.slice(0, OBSERVATION_PREVIEW_LEN)}…`;
+  if (!trimmed) return "";
+  if (isBulkyToolObservation(trimmed)) {
+    const kb = Math.max(1, Math.round(trimmed.length / 1024));
+    if (tool === "http_get" || tool === "http_post") return `Fetched page (~${kb} KB)`;
+    return `Large result (~${kb} KB)`;
+  }
+  // Collapse whitespace so HTML/JSON dumps don't blow the layout.
+  const flat = trimmed.replace(/\s+/g, " ");
+  if (flat.length <= OBSERVATION_PREVIEW_LEN) return flat;
+  return `${flat.slice(0, OBSERVATION_PREVIEW_LEN - 1).trimEnd()}…`;
 }
 
 export function AgentRunSteps({
@@ -43,9 +52,10 @@ export function AgentRunSteps({
   return (
     <ol className="space-y-0">
       {steps.map((step, index) => {
-        const isLatest = isLive && index === latestIndex;
+        const isLatest = Boolean(isLive && index === latestIndex);
         const isDone = !isLatest;
         const hasNext = index < steps.length - 1;
+        const preview = observationPreview(step.tool, step.observation);
 
         return (
           <li key={`${step.step}-${index}`} className="relative flex gap-3 pb-5 last:pb-0">
@@ -79,14 +89,14 @@ export function AgentRunSteps({
                   {step.tool}
                 </code>
               </div>
-              {step.observation.trim() ? (
+              {preview ? (
                 <p
                   className={cn(
-                    "mt-2 text-sm leading-relaxed",
+                    "mt-2 max-w-full overflow-hidden break-words text-sm leading-relaxed [overflow-wrap:anywhere]",
                     isLatest ? "text-foreground" : "text-muted-foreground",
                   )}
                 >
-                  {observationPreview(step.observation)}
+                  {preview}
                 </p>
               ) : null}
             </div>

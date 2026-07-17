@@ -43,6 +43,10 @@ function parseInline(md: string): Node[] {
         i = end + 1;
         continue;
       }
+      // Unmatched backtick — emit literally and advance (avoids infinite loop).
+      pushText("`");
+      i += 1;
+      continue;
     }
 
     // strong: **...**
@@ -54,6 +58,9 @@ function parseInline(md: string): Node[] {
         i = end + 2;
         continue;
       }
+      pushText("**");
+      i += 2;
+      continue;
     }
 
     // emphasis: *...*
@@ -65,6 +72,9 @@ function parseInline(md: string): Node[] {
         i = end + 1;
         continue;
       }
+      pushText("*");
+      i += 1;
+      continue;
     }
 
     // link: [text](href)
@@ -79,9 +89,12 @@ function parseInline(md: string): Node[] {
         i = closeParen + 1;
         continue;
       }
+      pushText("[");
+      i += 1;
+      continue;
     }
 
-    // plain text chunk
+    // plain text chunk until the next special character
     const nextSpecials = [
       md.indexOf("`", i),
       md.indexOf("**", i),
@@ -92,6 +105,12 @@ function parseInline(md: string): Node[] {
     if (next === -1) {
       pushText(md.slice(i));
       break;
+    }
+    // Guard: never stall (should not happen after unmatched handlers above).
+    if (next <= i) {
+      pushText(md[i]!);
+      i += 1;
+      continue;
     }
     pushText(md.slice(i, next));
     i = next;
@@ -276,7 +295,10 @@ function renderMarkdownTable(
               className="border-b border-border/40 last:border-0 even:bg-muted/20"
             >
               {Array.from({ length: colCount }, (_, ci) => (
-                <td key={ci} className="px-3 py-2 text-muted-foreground align-top">
+                <td
+                  key={ci}
+                  className="max-w-[24rem] px-3 py-2 align-top break-words text-muted-foreground [overflow-wrap:anywhere]"
+                >
                   {renderNodes(
                     parseInline(row[ci] ?? ""),
                     `${keyPrefix}-td-${ri}-${ci}`,
@@ -364,12 +386,13 @@ function buildMarkdownBlocks(text: string, onOpenFile?: (path: string) => void):
       continue;
     }
 
-    const headingMatch = line.match(/^(#{1,3})\s+(.*)$/);
+    const headingMatch = line.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
     if (headingMatch) {
       flushList();
       const level = headingMatch[1]!.length;
       const content = headingMatch[2] ?? "";
-      const Tag = level === 1 ? "h2" : level === 2 ? "h3" : "h4";
+      const Tag =
+        level === 1 ? "h2" : level === 2 ? "h3" : level === 3 ? "h4" : "h5";
       blocks.push(
         React.createElement(
           Tag,
@@ -378,10 +401,24 @@ function buildMarkdownBlocks(text: string, onOpenFile?: (path: string) => void):
             className:
               level === 1
                 ? "mt-3 text-base font-semibold tracking-tight text-foreground"
-                : "mt-3 text-sm font-semibold text-foreground",
+                : level === 2
+                  ? "mt-3 text-sm font-semibold text-foreground"
+                  : "mt-2.5 text-sm font-medium text-foreground",
           },
           renderNodes(parseInline(content), `h-${blocks.length}`, onOpenFile),
         ),
+      );
+      continue;
+    }
+
+    // Thematic break: --- / *** / ___
+    if (/^ {0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+      flushList();
+      blocks.push(
+        <hr
+          key={`hr-${blocks.length}`}
+          className="my-4 border-0 border-t border-border/60 dark:border-border/45"
+        />,
       );
       continue;
     }

@@ -11,10 +11,9 @@ import { X } from "lucide-react";
 
 import { useTranslation } from "@/components/ui/locale-provider";
 import { DashboardWidgetRenderer } from "@/components/ui/dashboard/dashboard-widget-renderer";
+import { DashboardWidgetSizeToolbar } from "@/components/ui/dashboard/dashboard-widget-size-toolbar";
 import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
-import {
-  mergeLayoutPositions,
-} from "@/hooks/use-measured-dashboard-layout";
+import { mergeLayoutPositions } from "@/hooks/use-measured-dashboard-layout";
 import { DASHBOARD_GRID_MARGIN } from "@/lib/dashboard/grid-metrics";
 import {
   createWidgetId,
@@ -31,9 +30,11 @@ import {
   WIDGET_DRAG_MIME,
 } from "@/lib/dashboard/widget-drag";
 import { WIDGET_REGISTRY_BY_TYPE } from "@/lib/dashboard/widget-registry-meta";
+import { clampWidgetSize, getWidgetSizeConstraints } from "@/lib/dashboard/widget-size-utils";
 import { cn } from "@/lib/utils";
 
 import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
 
 const DROPPING_ITEM_ID = "__dropping-elem__";
 
@@ -47,18 +48,21 @@ type DashboardGridProps = {
 };
 
 function toGridLayout(widgets: DashboardWidgetInstance[]): Layout {
-  return widgets.map((widget) => ({
-    i: widget.id,
-    x: widget.x,
-    y: widget.y,
-    w: widget.w,
-    h: widget.h,
-    minW: widget.w,
-    maxW: widget.w,
-    minH: widget.h,
-    maxH: widget.h,
-    static: false,
-  }));
+  return widgets.map((widget) => {
+    const constraints = getWidgetSizeConstraints(widget.type);
+    return {
+      i: widget.id,
+      x: widget.x,
+      y: widget.y,
+      w: widget.w,
+      h: widget.h,
+      minW: constraints.minW,
+      maxW: constraints.maxW,
+      minH: constraints.minH,
+      maxH: constraints.maxH,
+      static: false,
+    };
+  });
 }
 
 function mergeGridLayout(
@@ -69,7 +73,14 @@ function mergeGridLayout(
   return widgets.map((widget) => {
     const item = byId.get(widget.id);
     if (!item) return widget;
-    return { ...widget, x: item.x, y: item.y, w: item.w, h: item.h };
+    const clamped = clampWidgetSize(widget.type, item.w, item.h, item.x);
+    return {
+      ...widget,
+      x: clamped.x,
+      y: item.y,
+      w: clamped.w,
+      h: clamped.h,
+    };
   });
 }
 
@@ -84,7 +95,8 @@ export function DashboardGrid({
   const { t } = useTranslation();
   const { width, containerRef, mounted } = useContainerWidth();
   const [dragging, setDragging] = useState(false);
-  const { onDrag } = useDragAutoScroll(editMode && dragging);
+  const [resizing, setResizing] = useState(false);
+  const { onDrag } = useDragAutoScroll(editMode && (dragging || resizing));
 
   const gridLayout = useMemo(() => toGridLayout(layout.widgets), [layout.widgets]);
 
@@ -95,12 +107,40 @@ export function DashboardGrid({
     [layout, onLayoutChange],
   );
 
+  const commitGridLayout = useCallback(
+    (next: Layout) => {
+      const merged = mergeGridLayout(layout.widgets, next);
+      const withPositions = mergeLayoutPositions(layout.widgets, merged);
+      publishLayout(withPositions);
+    },
+    [layout.widgets, publishLayout],
+  );
+
   const handleDragStop = useCallback(
     (next: Layout) => {
       setDragging(false);
-      const dragged = mergeGridLayout(layout.widgets, next);
-      const withPositions = mergeLayoutPositions(layout.widgets, dragged);
-      publishLayout(withPositions);
+      commitGridLayout(next);
+    },
+    [commitGridLayout],
+  );
+
+  const handleResizeStop = useCallback(
+    (next: Layout) => {
+      setResizing(false);
+      commitGridLayout(next);
+    },
+    [commitGridLayout],
+  );
+
+  const applyPresetSize = useCallback(
+    (widgetId: string, w: number, h: number) => {
+      publishLayout(
+        layout.widgets.map((widget) => {
+          if (widget.id !== widgetId) return widget;
+          const clamped = clampWidgetSize(widget.type, w, h, widget.x);
+          return { ...widget, x: clamped.x, w: clamped.w, h: clamped.h };
+        }),
+      );
     },
     [layout.widgets, publishLayout],
   );
@@ -151,13 +191,14 @@ export function DashboardGrid({
       const meta = WIDGET_REGISTRY_BY_TYPE[payload.type];
       if (!meta || countWidgetInstances(layout, payload.type) >= meta.maxInstances) return;
 
+      const clamped = clampWidgetSize(payload.type, item.w, item.h, item.x);
       const newWidget: DashboardWidgetInstance = {
         id: createWidgetId(),
         type: payload.type,
-        x: item.x,
+        x: clamped.x,
         y: item.y,
-        w: item.w,
-        h: item.h,
+        w: clamped.w,
+        h: clamped.h,
         config: payload.config,
       };
 
@@ -203,11 +244,14 @@ export function DashboardGrid({
             cancel: ".dashboard-widget-no-drag",
           }}
           dropConfig={{ enabled: editMode }}
-          resizeConfig={{ enabled: false }}
+          resizeConfig={{ enabled: editMode }}
           compactor={verticalCompactor}
           onDragStart={() => setDragging(true)}
           onDrag={onDrag}
           onDragStop={handleDragStop}
+          onResizeStart={() => setResizing(true)}
+          onResize={onDrag}
+          onResizeStop={handleResizeStop}
           onDropDragOver={handleDropDragOver}
           onDrop={handleDrop}
         >
@@ -220,18 +264,21 @@ export function DashboardGrid({
               )}
             >
               {editMode ? (
-                <button
-                  type="button"
-                  onClick={() => removeWidget(widget.id)}
-                  className="dashboard-widget-no-drag absolute right-3 top-3 z-20 inline-flex size-7 items-center justify-center rounded-md border border-border/60 bg-background/95 text-muted-foreground shadow-sm backdrop-blur-sm hover:bg-destructive/10 hover:text-destructive"
-                  aria-label={t("dashboard.removeWidget")}
-                >
-                  <X className="size-4" />
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => removeWidget(widget.id)}
+                    className="dashboard-widget-no-drag absolute right-3 top-3 z-20 inline-flex size-7 items-center justify-center rounded-md border border-border/60 bg-background/95 text-muted-foreground shadow-sm backdrop-blur-sm hover:bg-destructive/10 hover:text-destructive"
+                    aria-label={t("dashboard.removeWidget")}
+                  >
+                    <X className="size-4" />
+                  </button>
+                  <DashboardWidgetSizeToolbar widget={widget} onResize={applyPresetSize} />
+                </>
               ) : null}
               <div
                 className={cn(
-                  "dashboard-grid-item__content h-full overflow-visible",
+                  "dashboard-grid-item__content h-full min-h-0 overflow-hidden",
                   editMode && "pointer-events-none select-none",
                 )}
                 {...(editMode ? { inert: true } : {})}

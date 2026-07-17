@@ -19,7 +19,8 @@ import {
 
 const PRIVATE_ROUTE_PREFIXES = ["/dashboard", "/settings", "/logs", "/projects", "/agents"];
 
-function isPrivateAppRoute(pathname: string): boolean {
+/** Authenticated app shell routes (dashboard, projects, agents, logs, settings). */
+export function isPrivateAppRoute(pathname: string): boolean {
   if (pathname === "/projects/invite/[token]") return false;
   if (pathname === "/p/[projectSlug]") return false;
   if (pathname === "/a/[agentId]") return false;

@@ -25,9 +25,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!agentId) return res.status(400).json({ error: "Missing agentId" });
 
   try {
-    const upstream = await fetch(`${agentServiceUrl()}/api/agents/${agentId}/runs`, {
-      headers: agentHeaders(),
+    const limitRaw = typeof req.query.limit === "string" ? req.query.limit : "20";
+    const compact = req.query.compact === "1" || req.query.compact === "true";
+    const params = new URLSearchParams({
+      limit: limitRaw,
+      ...(compact ? { compact: "1" } : {}),
     });
+    const upstream = await fetch(
+      `${agentServiceUrl()}/api/agents/${agentId}/runs?${params.toString()}`,
+      { headers: agentHeaders() },
+    );
     const data = (await upstream.json()) as unknown;
     return res.status(upstream.status).json(data);
   } catch {

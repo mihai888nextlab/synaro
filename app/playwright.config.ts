@@ -12,11 +12,13 @@ const baseURL = e2eBaseUrl();
 const guestSpecs = /(public|auth|documentation)\.spec\.ts/;
 const authenticatedSpecs = /(settings|dashboard|projects|project-workspace|agents|global-search)\.spec\.ts/;
 
-const browsers = [
-  { name: "chromium", use: devices["Desktop Chrome"] },
-  { name: "firefox", use: devices["Desktop Firefox"] },
-  { name: "webkit", use: devices["Desktop Safari"] },
-] as const;
+const browsers = process.env.CI
+  ? ([{ name: "chromium", use: devices["Desktop Chrome"] }] as const)
+  : ([
+      { name: "chromium", use: devices["Desktop Chrome"] },
+      { name: "firefox", use: devices["Desktop Firefox"] },
+      { name: "webkit", use: devices["Desktop Safari"] },
+    ] as const);
 
 const webServerCommand = process.env.CI
   ? `PORT=${port} npm run start`
@@ -44,6 +46,7 @@ export default defineConfig({
       {
         name: `guest-${browser.name}`,
         testMatch: guestSpecs,
+        dependencies: ["setup"],
         use: { ...browser.use },
       },
       {

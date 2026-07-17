@@ -46,6 +46,31 @@ jobs:
       - name: Jest (unit & API route tests)
         run: npm run test:ci
 
+  sdk-test:
+    name: SDK — build & Vitest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: packages/sdk
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/sdk/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck & test
+        run: npm test && npm run build
+
   app-e2e:
     name: App — Playwright E2E
     runs-on: ubuntu-latest

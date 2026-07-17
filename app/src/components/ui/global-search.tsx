@@ -7,10 +7,13 @@ import {
   CircleHelp,
   Command as CommandIcon,
   Folder,
+  FolderPlus,
+  History,
   KeyRound,
   LayoutDashboard,
-  SearchIcon,
+  Plus,
   ScrollText,
+  SearchIcon,
   Settings,
   Sparkles,
   UserRound,
@@ -20,6 +23,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useSearchIndex } from "@/hooks/use-search-index";
 import { useTranslation } from "@/components/ui/locale-provider";
+import { formatLogTimestamp } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
 
 type SearchEntryDef = {
@@ -30,7 +34,7 @@ type SearchEntryDef = {
   groupOrder: number;
   icon: React.ComponentType<{ className?: string }>;
   href?: string;
-  keywords?: string[];
+  keywordsKey?: string;
 };
 
 type ResolvedSearchEntry = {
@@ -45,110 +49,200 @@ type ResolvedSearchEntry = {
   ariaLabel?: string;
 };
 
-const baseEntryDefs: SearchEntryDef[] = [
+const GROUP_ORDER = {
+  navigation: 0,
+  quickActions: 1,
+  projects: 2,
+  agents: 3,
+  activityLogs: 4,
+  agentRuns: 5,
+} as const;
+
+const navigationEntryDefs: SearchEntryDef[] = [
   {
     id: "dashboard",
     titleKey: "search.dashboardTitle",
     descriptionKey: "search.dashboardDescription",
     groupKey: "search.groupNavigation",
-    groupOrder: 0,
+    groupOrder: GROUP_ORDER.navigation,
     href: "/dashboard",
     icon: LayoutDashboard,
-    keywords: ["home", "overview"],
+    keywordsKey: "search.keywords.dashboard",
   },
   {
     id: "projects",
     titleKey: "search.projectsTitle",
     descriptionKey: "search.projectsDescription",
     groupKey: "search.groupNavigation",
-    groupOrder: 0,
+    groupOrder: GROUP_ORDER.navigation,
     href: "/projects",
     icon: Folder,
-    keywords: ["repos", "files"],
+    keywordsKey: "search.keywords.projects",
   },
   {
     id: "logs",
     titleKey: "search.logsTitle",
     descriptionKey: "search.logsDescription",
     groupKey: "search.groupNavigation",
-    groupOrder: 0,
+    groupOrder: GROUP_ORDER.navigation,
     href: "/logs",
     icon: ScrollText,
-    keywords: ["events", "history"],
+    keywordsKey: "search.keywords.logs",
   },
   {
     id: "settings",
     titleKey: "search.settingsTitle",
     descriptionKey: "search.settingsDescription",
     groupKey: "search.groupNavigation",
-    groupOrder: 0,
+    groupOrder: GROUP_ORDER.navigation,
     href: "/settings",
     icon: Settings,
-    keywords: ["config", "preferences"],
+    keywordsKey: "search.keywords.settings",
   },
   {
     id: "profile",
     titleKey: "search.profileTitle",
     descriptionKey: "search.profileDescription",
     groupKey: "search.groupNavigation",
-    groupOrder: 0,
+    groupOrder: GROUP_ORDER.navigation,
     href: "/settings/profile",
     icon: UserRound,
-    keywords: ["account", "user"],
+    keywordsKey: "search.keywords.profile",
   },
   {
     id: "preferences",
     titleKey: "search.preferencesTitle",
     descriptionKey: "search.preferencesDescription",
     groupKey: "search.groupNavigation",
-    groupOrder: 0,
+    groupOrder: GROUP_ORDER.navigation,
     href: "/settings/preferences",
     icon: Sparkles,
-    keywords: ["theme", "appearance"],
+    keywordsKey: "search.keywords.preferences",
   },
   {
     id: "workspace-settings",
     titleKey: "search.workspaceSettingsTitle",
     descriptionKey: "search.workspaceSettingsDescription",
     groupKey: "search.groupNavigation",
-    groupOrder: 0,
+    groupOrder: GROUP_ORDER.navigation,
     href: "/settings/workspace",
     icon: Settings,
-    keywords: ["idle", "defaults", "dashboard"],
+    keywordsKey: "search.keywords.workspaceSettings",
   },
   {
     id: "security-settings",
     titleKey: "search.securitySettingsTitle",
     descriptionKey: "search.securitySettingsDescription",
     groupKey: "search.groupNavigation",
-    groupOrder: 0,
+    groupOrder: GROUP_ORDER.navigation,
     href: "/settings/security",
     icon: Settings,
-    keywords: ["password", "sessions", "delete"],
+    keywordsKey: "search.keywords.securitySettings",
   },
   {
     id: "api-keys",
     titleKey: "search.apiKeysTitle",
     descriptionKey: "search.apiKeysDescription",
     groupKey: "search.groupNavigation",
-    groupOrder: 0,
+    groupOrder: GROUP_ORDER.navigation,
     href: "/settings/api-keys",
     icon: KeyRound,
-    keywords: ["token", "bearer", "developer", "v1"],
+    keywordsKey: "search.keywords.apiKeys",
+  },
+];
+
+const quickActionEntryDefs: SearchEntryDef[] = [
+  {
+    id: "action-create-project",
+    titleKey: "search.createProjectTitle",
+    descriptionKey: "search.createProjectDescription",
+    groupKey: "search.groupQuickActions",
+    groupOrder: GROUP_ORDER.quickActions,
+    href: "/projects?create=1",
+    icon: FolderPlus,
+    keywordsKey: "search.keywords.createProject",
+  },
+  {
+    id: "action-new-agent",
+    titleKey: "search.newAgentTitle",
+    descriptionKey: "search.newAgentDescription",
+    groupKey: "search.groupQuickActions",
+    groupOrder: GROUP_ORDER.quickActions,
+    href: "/agents?create=1",
+    icon: Plus,
+    keywordsKey: "search.keywords.newAgent",
+  },
+  {
+    id: "action-open-api-keys",
+    titleKey: "search.openApiKeysActionTitle",
+    descriptionKey: "search.openApiKeysActionDescription",
+    groupKey: "search.groupQuickActions",
+    groupOrder: GROUP_ORDER.quickActions,
+    href: "/settings/api-keys",
+    icon: KeyRound,
+    keywordsKey: "search.keywords.openApiKeys",
   },
   {
     id: "help",
     titleKey: "search.helpCenterTitle",
     descriptionKey: "search.helpCenterDescription",
     groupKey: "search.groupQuickActions",
-    groupOrder: 3,
+    groupOrder: GROUP_ORDER.quickActions,
     icon: CircleHelp,
-    keywords: ["support", "docs"],
+    keywordsKey: "search.keywords.help",
   },
 ];
 
+const staticEntryDefs = [...navigationEntryDefs, ...quickActionEntryDefs];
+
+function parseKeywords(value: string): string[] {
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
 function entrySearchValue(entry: ResolvedSearchEntry): string {
   return [entry.title, entry.description, entry.group, ...(entry.keywords ?? [])].join(" ");
+}
+
+function runStatusLabel(status: string, t: (key: string) => string): string {
+  const key = `search.runStatus${status}`;
+  const translated = t(key);
+  return translated !== key ? translated : status;
+}
+
+function formatSearchTimestamp(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return formatLogTimestamp(date);
+}
+
+function shortRunId(runId: string): string {
+  const trimmed = runId.trim();
+  if (trimmed.length <= 8) return trimmed;
+  return trimmed.slice(-8);
+}
+
+function resolveStaticEntries(
+  defs: SearchEntryDef[],
+  t: (key: string, options?: Record<string, string | number>) => string,
+): ResolvedSearchEntry[] {
+  return defs.map((def) => {
+    const title = t(def.titleKey);
+    return {
+      id: def.id,
+      title,
+      description: t(def.descriptionKey),
+      group: t(def.groupKey),
+      groupOrder: def.groupOrder,
+      icon: def.icon,
+      href: def.href,
+      keywords: def.keywordsKey ? parseKeywords(t(def.keywordsKey)) : undefined,
+      ariaLabel: t("search.goTo", { title }),
+    };
+  });
 }
 
 export function GlobalSearch() {
@@ -159,50 +253,118 @@ export function GlobalSearch() {
   const [query, setQuery] = React.useState("");
 
   const entries = React.useMemo((): ResolvedSearchEntry[] => {
-    const staticEntries: ResolvedSearchEntry[] = baseEntryDefs.map((def) => {
-      const title = t(def.titleKey);
-      return {
-        id: def.id,
-        title,
-        description: t(def.descriptionKey),
-        group: t(def.groupKey),
-        groupOrder: def.groupOrder,
-        icon: def.icon,
-        href: def.href,
-        keywords: def.keywords,
-        ariaLabel: t("search.goTo", { title }),
-      };
-    });
+    const staticEntries = resolveStaticEntries(staticEntryDefs, t);
 
     if (!searchIndex) {
       return staticEntries;
     }
 
-    const projectEntries: ResolvedSearchEntry[] = searchIndex.projects.map((project) => ({
-      id: `project-${project.id}`,
-      title: project.name,
-      description: project.description || t("search.projectFallbackDescription"),
-      group: t("search.groupProjects"),
-      groupOrder: 1,
-      icon: Folder,
-      href: `/projects/${encodeURIComponent(project.slug)}`,
-      keywords: [project.slug, project.id],
-      ariaLabel: t("search.openProject", { name: project.name }),
-    }));
+    // If projects/agents fail to load from upstream but we *do* have activity logs / runs,
+    // synthesize minimal entries so search results still feel complete.
+    const projectBySlug = new Map<string, { name: string }>();
+    for (const p of searchIndex.projects) {
+      projectBySlug.set(p.slug, { name: p.name });
+    }
+    for (const log of searchIndex.activityLogs) {
+      const href = log.href ?? "";
+      const m = href.match(/^\/projects\/([^/?#]+)/);
+      if (!m) continue;
+      const slugEnc = m[1];
+      try {
+        const slug = decodeURIComponent(slugEnc);
+        if (!slug) continue;
+        // For project-backed activity rows, `entityName` is the project name.
+        if (!projectBySlug.has(slug)) projectBySlug.set(slug, { name: log.entityName });
+      } catch {
+        // ignore malformed encoded hrefs
+      }
+    }
 
-    const agentEntries: ResolvedSearchEntry[] = searchIndex.agents.map((agent) => ({
-      id: `agent-${agent.id}`,
-      title: agent.name,
-      description: agent.description || t("search.agentFallbackDescription"),
-      group: t("search.groupAgents"),
-      groupOrder: 2,
-      icon: Bot,
-      href: `/agents?highlight=${encodeURIComponent(agent.id)}`,
-      keywords: [agent.id],
-      ariaLabel: t("search.openAgent", { name: agent.name }),
-    }));
+    const projectEntries: ResolvedSearchEntry[] = Array.from(projectBySlug.entries()).map(
+      ([slug, { name }]) => ({
+        id: `project-${slug}`,
+        title: name,
+        description: t("search.projectFallbackDescription"),
+        group: t("search.groupProjects"),
+        groupOrder: GROUP_ORDER.projects,
+        icon: Folder,
+        href: `/projects/${encodeURIComponent(slug)}`,
+        keywords: [slug],
+        ariaLabel: t("search.openProject", { name }),
+      }),
+    );
 
-    return [...staticEntries, ...projectEntries, ...agentEntries];
+    const agentById = new Map<string, { name: string; description?: string }>();
+    for (const a of searchIndex.agents) {
+      agentById.set(a.id, { name: a.name, description: a.description });
+    }
+    for (const run of searchIndex.agentRuns) {
+      if (!run.agentId) continue;
+      if (!agentById.has(run.agentId)) agentById.set(run.agentId, { name: run.agentName });
+    }
+
+    const agentEntries: ResolvedSearchEntry[] = Array.from(agentById.entries()).map(
+      ([agentId, { name, description }]) => ({
+        id: `agent-${agentId}`,
+        title: name,
+        description: description || t("search.agentFallbackDescription"),
+        group: t("search.groupAgents"),
+        groupOrder: GROUP_ORDER.agents,
+        icon: Bot,
+        href: `/agents?highlight=${encodeURIComponent(agentId)}`,
+        keywords: [agentId],
+        ariaLabel: t("search.openAgent", { name }),
+      }),
+    );
+
+    const activityLogEntries: ResolvedSearchEntry[] = searchIndex.activityLogs
+      .filter((log) => log.href)
+      .map((log) => {
+        const statusLabel = runStatusLabel(log.status, t);
+        const timeLabel = formatSearchTimestamp(log.occurredAt);
+        const description = timeLabel
+          ? `${log.entityName} · ${statusLabel} · ${timeLabel}`
+          : `${log.entityName} · ${statusLabel}`;
+        return {
+          id: `activity-${log.id}`,
+          title: log.action,
+          description,
+          group: t("search.groupActivityLogs"),
+          groupOrder: GROUP_ORDER.activityLogs,
+          icon: ScrollText,
+          href: log.href ?? undefined,
+          keywords: [log.entityName, log.status, statusLabel, timeLabel ?? ""].filter(Boolean),
+          ariaLabel: t("search.openActivityLog", { action: log.action }),
+        };
+      });
+
+    const agentRunEntries: ResolvedSearchEntry[] = searchIndex.agentRuns.map((run) => {
+      const statusLabel = runStatusLabel(run.status, t);
+      const timeLabel = formatSearchTimestamp(run.createdAt);
+      const runSuffix = shortRunId(run.id);
+      const description = timeLabel
+        ? t("search.agentRunDescription", { status: statusLabel, time: timeLabel, id: runSuffix })
+        : t("search.agentRunDescriptionNoTime", { status: statusLabel, id: runSuffix });
+      return {
+        id: `run-${run.id}`,
+        title: run.agentName,
+        description,
+        group: t("search.groupAgentRuns"),
+        groupOrder: GROUP_ORDER.agentRuns,
+        icon: History,
+        href: `/agents/${encodeURIComponent(run.agentId)}/runs/${encodeURIComponent(run.id)}`,
+        keywords: [run.agentName, run.status, statusLabel, timeLabel ?? "", run.id, run.agentId, runSuffix],
+        ariaLabel: t("search.openAgentRun", { name: run.agentName }),
+      };
+    });
+
+    return [
+      ...staticEntries,
+      ...projectEntries,
+      ...agentEntries,
+      ...activityLogEntries,
+      ...agentRunEntries,
+    ];
   }, [searchIndex, t]);
 
   React.useEffect(() => {

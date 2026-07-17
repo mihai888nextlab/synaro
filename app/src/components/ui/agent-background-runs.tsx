@@ -172,7 +172,21 @@ export function AgentBackgroundRunsProvider({ children }: { children: React.Reac
           statusByRunIdRef.current.set(run.id, snapshot);
         }
 
-        setActiveRuns(runs.filter((r) => isActiveStatus(r.status)));
+        const nextActive = runs.filter((r) => isActiveStatus(r.status));
+        setActiveRuns((prev) => {
+          if (
+            prev.length === nextActive.length &&
+            prev.every(
+              (run, i) =>
+                run.id === nextActive[i]?.id &&
+                run.status === nextActive[i]?.status &&
+                run.agentId === nextActive[i]?.agentId,
+            )
+          ) {
+            return prev;
+          }
+          return nextActive;
+        });
       } catch {
         // ignore transient errors
       }
@@ -220,17 +234,17 @@ export function AgentSpeechStopButton({ className }: { className?: string }) {
       type="button"
       onClick={stop}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full",
-        "border border-border/35 bg-muted/15 px-2 py-0.5",
-        "text-[11px] leading-none text-muted-foreground",
-        "transition-colors hover:border-border/55 hover:bg-muted/35 hover:text-foreground",
+        "inline-flex h-7 max-w-[10rem] items-center gap-1.5 rounded-full",
+        "border border-border/40 bg-muted/20 px-2.5",
+        "text-xs leading-none text-muted-foreground",
+        "transition-colors hover:border-border/60 hover:bg-muted/40 hover:text-foreground",
         className,
       )}
       aria-label={t("agents.speakingAria")}
       title={t("agents.stopSpeaking")}
     >
-      <VolumeX className="size-3 shrink-0" aria-hidden />
-      <span className="truncate">{t("agents.stopSpeaking")}</span>
+      <VolumeX className="size-3.5 shrink-0" aria-hidden />
+      <span className="truncate font-medium tracking-tight">{t("agents.stopSpeaking")}</span>
     </button>
   );
 }
@@ -275,29 +289,30 @@ export function AgentActiveRunsPill({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "inline-flex max-w-[12rem] items-center gap-0.5 rounded-full",
-        "border border-border/35 bg-muted/15",
-        "text-[11px] leading-none text-muted-foreground",
+        "group inline-flex h-7 max-w-[12rem] items-center gap-0.5 rounded-full",
+        "border border-border/40 bg-muted/20 pl-2.5",
+        "text-xs leading-none text-muted-foreground",
+        "transition-colors hover:border-border/60 hover:bg-muted/40",
+        singleRun ? "pr-1" : "pr-2.5",
         className,
       )}
     >
       <Link
         href={href}
         className={cn(
-          "group inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-full py-0.5 pl-2",
-          singleRun ? "pr-0.5" : "pr-2",
+          "inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-full",
           "transition-colors hover:text-foreground",
         )}
         title={title}
         aria-label={title}
       >
-        <span className="relative flex size-1.5 shrink-0" aria-hidden>
+        <span className="relative flex size-2 shrink-0" aria-hidden>
           <span className="absolute inline-flex size-full animate-ping rounded-full bg-sky-400/40 opacity-60" />
-          <span className="relative inline-flex size-1.5 rounded-full bg-sky-400/90" />
+          <span className="relative inline-flex size-2 rounded-full bg-sky-400/90" />
         </span>
-        <span className="min-w-0 truncate">{label}</span>
+        <span className="min-w-0 truncate font-medium tracking-tight">{label}</span>
         <ChevronRight
-          className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-50"
+          className="size-3.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-50"
           aria-hidden
         />
       </Link>
@@ -306,14 +321,14 @@ export function AgentActiveRunsPill({ className }: { className?: string }) {
           type="button"
           onClick={() => void cancelRun(singleRun.id)}
           disabled={cancellingId === singleRun.id}
-          className="mr-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
           aria-label={t("agents.cancelRun")}
           title={t("agents.cancelRun")}
         >
           {cancellingId === singleRun.id ? (
             <span className="size-2.5 animate-spin rounded-full border border-current border-t-transparent" />
           ) : (
-            <StopCircle className="size-3" aria-hidden />
+            <StopCircle className="size-3.5" aria-hidden />
           )}
         </button>
       ) : null}

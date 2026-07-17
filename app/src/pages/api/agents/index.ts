@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
+
+import { recordAgentActivityLog } from "@/lib/activity-log";
 import { authOptions } from "@/lib/next-auth-options";
 
 function agentServiceUrl(): string {
@@ -37,7 +39,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         headers: agentHeaders(),
         body: JSON.stringify({ ...body, userId: session.user.id }),
       });
-      const data = (await upstream.json()) as unknown;
+      const data = (await upstream.json()) as { name?: string; id?: string } | unknown;
+      if (upstream.ok && data && typeof data === "object" && "name" in data) {
+        const name = typeof data.name === "string" ? data.name : "Agent";
+        const agentId =
+          "id" in data && typeof data.id === "string" && data.id.trim() ? data.id : undefined;
+        void recordAgentActivityLog({
+          userId: session.user.id,
+          agentName: name,
+          kind: "created",
+          agentId,
+        }).catch(() => undefined);
+      }
       return res.status(upstream.status).json(data);
     } catch {
       return res.status(502).json({ error: "Could not reach agent service" });

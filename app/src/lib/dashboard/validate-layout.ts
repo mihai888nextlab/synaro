@@ -7,10 +7,13 @@ import {
   isWidgetType,
 } from "@/lib/dashboard/layout-schema";
 import { WIDGET_REGISTRY_BY_TYPE } from "@/lib/dashboard/widget-registry-meta";
+import { clampWidgetSize, isWidgetSizeValid } from "@/lib/dashboard/widget-size-utils";
 
 export type LayoutValidationContext = {
   projectIds: Set<string>;
   agentIds: Set<string>;
+  /** When true, skip agent ownership checks (agent-service unreachable). */
+  skipAgentOwnershipCheck?: boolean;
 };
 
 export type LayoutValidationResult =
@@ -50,9 +53,17 @@ function sizeAllowed(
   w: number,
   h: number,
 ): boolean {
-  const meta = WIDGET_REGISTRY_BY_TYPE[type];
-  if (!meta) return false;
-  return meta.allowedSizes.some((size) => size.w === w && size.h === h);
+  return isWidgetSizeValid(type, w, h);
+}
+
+function normalizeWidgetGeometry(widget: DashboardWidgetInstance): DashboardWidgetInstance {
+  const clamped = clampWidgetSize(widget.type, widget.w, widget.h, widget.x);
+  return {
+    ...widget,
+    x: clamped.x,
+    w: clamped.w,
+    h: clamped.h,
+  };
 }
 
 function validateWidgetConfig(
@@ -89,8 +100,26 @@ function validateWidgetConfig(
 
   if (widget.type === "agent_shortcut") {
     const agentId = (widget.config as { agentId?: string } | undefined)?.agentId;
-    if (!agentId || !ctx.agentIds.has(agentId)) {
+    if (!agentId) return "agent_shortcut requires a valid agent";
+    if (!ctx.skipAgentOwnershipCheck && !ctx.agentIds.has(agentId)) {
       return "agent_shortcut requires a valid agent";
+    }
+    return null;
+  }
+
+  if (widget.type === "agent_last_run") {
+    const agentId = (widget.config as { agentId?: string } | undefined)?.agentId;
+    if (!agentId) return "agent_last_run requires a valid agent";
+    if (!ctx.skipAgentOwnershipCheck && !ctx.agentIds.has(agentId)) {
+      return "agent_last_run requires a valid agent";
+    }
+    return null;
+  }
+
+  if (widget.type === "kpi_cluster") {
+    const layout = (widget.config as { layout?: string } | undefined)?.layout;
+    if (layout && !["row", "grid", "column"].includes(layout)) {
+      return "kpi_cluster layout must be row, grid, or column";
     }
     return null;
   }
@@ -160,7 +189,7 @@ export function validateDashboardLayout(
     }
   }
 
-  return { ok: true, layout };
+  return { ok: true, layout: { ...layout, widgets: layout.widgets.map(normalizeWidgetGeometry) } };
 }
 
 export function resolveDashboardLayout(stored: unknown): DashboardLayout {

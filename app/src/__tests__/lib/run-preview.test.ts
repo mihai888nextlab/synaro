@@ -65,6 +65,40 @@ describe("run-preview", () => {
       expect(preview).toEqual({ kind: "output", text: "Synaro is great." });
     });
 
+    it("preserves markdown and allows longer text in expanded variant", () => {
+      const markdown = "# Title\n\n**Bold** paragraph with `code`.";
+      const preview = getRunCardPreview(
+        makeRun({ status: "DONE", output: markdown }),
+        labels,
+        { variant: "expanded" },
+      );
+      expect(preview).toEqual({ kind: "output", text: markdown });
+    });
+
+    it("preserves markdown in embedded variant", () => {
+      const markdown = "## Summary\n\n- First item\n- **Second** item";
+      const preview = getRunCardPreview(
+        makeRun({ status: "DONE", output: markdown }),
+        labels,
+        { variant: "embedded" },
+      );
+      expect(preview).toEqual({ kind: "output", text: markdown });
+    });
+
+    it("truncates expanded previews at 4000 characters", () => {
+      const long = "word ".repeat(900).trim();
+      const preview = getRunCardPreview(
+        makeRun({ status: "DONE", output: long }),
+        labels,
+        { variant: "expanded" },
+      );
+      expect(preview.kind).toBe("output");
+      if (preview.kind === "output") {
+        expect(preview.text.length).toBe(4000);
+        expect(preview.text.endsWith("…")).toBe(true);
+      }
+    });
+
     it("returns error snippet for FAILED runs from output", () => {
       const preview = getRunCardPreview(
         makeRun({
@@ -97,8 +131,32 @@ describe("run-preview", () => {
       );
       expect(preview).toEqual({
         kind: "activity",
-        text: "Found several results about Synaro.",
+        text: "web_search · Found several results about Synaro.",
       });
+    });
+
+    it("summarizes bulky HTML http_get observations instead of rendering them", () => {
+      const html = `HTTP 200 OK\n\n<!doctype html><html><head><title>x</title></head><body>${"a".repeat(12_000)}</body></html>`;
+      const preview = getRunCardPreview(
+        makeRun({
+          status: "RUNNING",
+          steps: [
+            {
+              step: 1,
+              tool: "http_get",
+              args: { url: "https://example.com" },
+              observation: html,
+            },
+          ],
+        }),
+        labels,
+        { variant: "embedded" },
+      );
+      expect(preview.kind).toBe("activity");
+      if (preview.kind === "activity") {
+        expect(preview.text).toMatch(/^http_get · ~\d+ KB$/);
+        expect(preview.text).not.toContain("<!doctype");
+      }
     });
 
     it("falls back to input then running label for active runs", () => {
@@ -140,6 +198,30 @@ describe("run-preview", () => {
 
       const withoutOutput = getRunCardPreview(makeRun({ status: "CANCELLED" }), labels);
       expect(withoutOutput).toEqual({ kind: "cancelled", text: "Cancelled" });
+    });
+
+    it("treats finish observation as output when status is still running", () => {
+      const preview = getRunCardPreview(
+        makeRun({
+          status: "RUNNING",
+          output: null,
+          steps: [
+            { step: 0, tool: "http_get", args: {}, observation: "HTTP 200 OK {...}" },
+            {
+              step: 1,
+              tool: "finish",
+              args: { answer: "## S&P 500\n\nCurrent price **7572**" },
+              observation: "## S&P 500\n\nCurrent price **7572**",
+            },
+          ],
+        }),
+        labels,
+        { variant: "expanded" },
+      );
+      expect(preview.kind).toBe("output");
+      if (preview.kind === "output") {
+        expect(preview.text).toContain("S&P 500");
+      }
     });
   });
 });

@@ -6,11 +6,12 @@ import {
   ActivityFeedCompactWidget,
   ActivityLogWidget,
 } from "@/components/ui/dashboard/widgets/activity-widgets";
-import { KpiStripWidget, SingleKpiWidget } from "@/components/ui/dashboard/widgets/kpi-widgets";
+import { KpiStripWidget, SingleKpiWidget, KpiClusterWidget } from "@/components/ui/dashboard/widgets/kpi-widgets";
 import {
   AgentsShowcaseWidget,
   ProjectsShowcaseWidget,
 } from "@/components/ui/dashboard/widgets/showcase-widgets";
+import { AgentLastRunWidget } from "@/components/ui/dashboard/widgets/agent-widgets";
 import {
   AgentShortcutWidget,
   ApiKeysSummaryWidget,
@@ -22,6 +23,7 @@ import type { WidgetType } from "@/lib/dashboard/layout-schema";
 
 const WIDGET_COMPONENTS: Record<WidgetType, ComponentType<DashboardWidgetRenderProps>> = {
   kpi_strip: KpiStripWidget,
+  kpi_cluster: KpiClusterWidget,
   single_kpi: SingleKpiWidget,
   projects_showcase: ProjectsShowcaseWidget,
   agents_showcase: AgentsShowcaseWidget,
@@ -30,6 +32,7 @@ const WIDGET_COMPONENTS: Record<WidgetType, ComponentType<DashboardWidgetRenderP
   page_shortcut: PageShortcutWidget,
   project_shortcut: ProjectShortcutWidget,
   agent_shortcut: AgentShortcutWidget,
+  agent_last_run: AgentLastRunWidget,
   api_keys_summary: ApiKeysSummaryWidget,
 };
 

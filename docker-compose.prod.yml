@@ -208,6 +208,8 @@ services:
       LOG_LEVEL: info
       ALLOWED_ORIGINS: https://${SYNARO_DOMAIN}
       AGENT_RUNNER_URL: http://agent-runner:3006
+      AGENT_SERVICE_KEY: ${AGENT_SERVICE_KEY}
+      APP_INTERNAL_URL: http://app:3000
     networks:
       - synaro-internal
     depends_on:
@@ -230,6 +232,8 @@ services:
       LOG_LEVEL: info
       KIMI_API_KEY: ${KIMI_API_KEY}
       AGENT_SERVICE_URL: http://agent-service:3005
+      AGENT_SERVICE_KEY: ${AGENT_SERVICE_KEY}
+      AGENT_CRON_TIMEZONE: ${AGENT_CRON_TIMEZONE:-Europe/Bucharest}
     networks:
       - synaro-internal
     depends_on:
@@ -258,6 +262,7 @@ services:
       NEXT_PUBLIC_PROJECT_SERVICE_URL: http://project-service:3001
       NEXT_PUBLIC_AI_SERVICE_URL: http://ai-orchestration-service:3003
       NEXT_PUBLIC_AGENT_SERVICE_URL: http://agent-service:3005
+      NEXT_PUBLIC_AGENT_CRON_TIMEZONE: ${AGENT_CRON_TIMEZONE:-Europe/Bucharest}
       NODE_ENV: production
     labels:
       - "traefik.enable=true"

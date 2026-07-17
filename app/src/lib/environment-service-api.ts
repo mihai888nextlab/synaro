@@ -289,7 +289,13 @@ export async function remoteDestroyEnvironment(envId: string): Promise<void> {
 
 /** Best-effort: remove every environment row for a project (Docker containers + DB rows in env service). */
 export async function destroyAllRemoteEnvironmentsForProject(projectId: string): Promise<void> {
-  const rows = await fetchEnvironmentsForProject(projectId);
+  let rows: RemoteEnvironment[] = [];
+  try {
+    rows = await fetchEnvironmentsForProject(projectId);
+  } catch {
+    /* listing failed — still allow the app project row to be deleted */
+    return;
+  }
   for (const row of rows) {
     try {
       await remoteDestroyEnvironment(row.id);

@@ -3,17 +3,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/router";
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2, Play, RefreshCw, X } from "lucide-react";
+import { Loader2, RefreshCw, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/components/ui/locale-provider";
 import { invalidateSearchIndex, prefetchSearchIndex } from "@/hooks/use-search-index";
-import { useAgentBackgroundRuns } from "@/components/ui/agent-background-runs";
-import {
-  AgentRunComposer,
-  buildAgentRunInput,
-} from "@/components/ui/agent-run-composer";
-import { markVoiceTriggeredRun } from "@/lib/speech/voice-triggered-runs";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +18,7 @@ import { AgentCard } from "@/components/ui/agents/agent-card";
 import { AgentEditDialog } from "@/components/ui/agents/agent-edit-dialog";
 import { AgentFormFields } from "@/components/ui/agents/agent-form-fields";
 import { AgentRunCard } from "@/components/ui/agents/agent-run-card";
+import { AgentTriggerDialog } from "@/components/ui/agents/agent-trigger-dialog";
 import {
   buildAgentCreateBody,
   DEFAULT_AGENT_FORM_VALUES,
@@ -69,16 +64,12 @@ export function AgentsPageClient() {
   const [triggering, setTriggering] = useState<string | null>(null);
   const [triggerOpen, setTriggerOpen] = useState(false);
   const [triggerTarget, setTriggerTarget] = useState<Agent | null>(null);
-  const [triggerInput, setTriggerInput] = useState("");
-  const [triggerAttachments, setTriggerAttachments] = useState<File[]>([]);
   const [runsOpen, setRunsOpen] = useState(false);
   const [runsAgent, setRunsAgent] = useState<Agent | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [runsLoading, setRunsLoading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const highlightHandledRef = useRef<string | null>(null);
-  const voiceInitiatedRef = useRef(false);
-  const { refreshSoon: refreshAgentRunsSoon } = useAgentBackgroundRuns();
 
   const fetchAgents = useCallback(async () => {
     try {
@@ -131,6 +122,14 @@ export function AgentsPageClient() {
     const timer = window.setTimeout(() => setHighlightedAgentId(null), 2500);
     return () => window.clearTimeout(timer);
   }, [agents, loading, router, router.query.highlight]);
+
+  useEffect(() => {
+    const raw = router.query.create;
+    const shouldOpen = raw === "1" || raw === "true";
+    if (!shouldOpen || loading) return;
+    setCreateOpen(true);
+    void router.replace("/agents", undefined, { shallow: true });
+  }, [loading, router, router.query.create]);
 
   const fetchRuns = useCallback(async (agentId: string) => {
     setRunsLoading(true);
@@ -198,39 +197,7 @@ export function AgentsPageClient() {
     const agent = typeof agentOrId === "string" ? agents.find((a) => a.id === agentOrId) : agentOrId;
     if (!agent || !agent.enabled) return;
     setTriggerTarget(agent);
-    setTriggerInput("");
-    setTriggerAttachments([]);
-    voiceInitiatedRef.current = false;
     setTriggerOpen(true);
-  };
-
-  const handleTrigger = async (options?: { fromVoice?: boolean; input?: string }) => {
-    if (!triggerTarget) return;
-    const voiceInitiated = options?.fromVoice || voiceInitiatedRef.current;
-    setTriggering(triggerTarget.id);
-    setTriggerOpen(false);
-    try {
-      const inputText = options?.input ?? triggerInput;
-      const input = await buildAgentRunInput(inputText, triggerAttachments);
-      const res = await fetch(`/api/agents/${triggerTarget.id}/trigger`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input }),
-      });
-      if (res.ok) {
-        const data = (await res.json()) as { runId?: string };
-        if (voiceInitiated && data.runId) {
-          markVoiceTriggeredRun(data.runId);
-        }
-      }
-      refreshAgentRunsSoon();
-      if (runsAgent?.id === triggerTarget.id) await fetchRuns(triggerTarget.id);
-    } finally {
-      setTriggering(null);
-      setTriggerAttachments([]);
-      setTriggerInput("");
-      voiceInitiatedRef.current = false;
-    }
   };
 
   const handleDelete = async (agentId: string) => {
@@ -386,53 +353,17 @@ export function AgentsPageClient() {
         onSaved={refreshAgentsAndSearch}
       />
 
-      <Dialog open={triggerOpen} onOpenChange={setTriggerOpen}>
-        <DialogContent className="max-w-md rounded-2xl border border-border/70 bg-card p-0 shadow-2xl">
-          <div className="border-b border-border/70 px-6 py-4">
-            <DialogTitle className="text-base font-semibold text-foreground">
-              {t("agents.runAgentTitle", { name: triggerTarget?.name ?? "" })}
-            </DialogTitle>
-          </div>
-          <div className="flex flex-col gap-4 px-6 py-5">
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-muted-foreground">
-                {t("agents.input")}{" "}
-                <span className="text-muted-foreground/50">{t("agents.optional")}</span>
-              </label>
-              <AgentRunComposer
-                value={triggerInput}
-                onChange={setTriggerInput}
-                attachments={triggerAttachments}
-                onAttachmentsChange={setTriggerAttachments}
-                placeholder={t("agents.inputPlaceholder")}
-                voiceInitiatedRef={voiceInitiatedRef}
-                onVoiceUtteranceEnd={(text) => {
-                  if (text.trim()) void handleTrigger({ fromVoice: true, input: text });
-                }}
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <DialogClose asChild>
-                <button
-                  type="button"
-                  className="rounded-xl border border-border/70 px-4 py-2 text-sm text-muted-foreground transition hover:bg-muted"
-                >
-                  {t("common.cancel")}
-                </button>
-              </DialogClose>
-              <button
-                type="button"
-                onClick={() => void handleTrigger()}
-                disabled={Boolean(triggering)}
-                className="flex items-center gap-2 rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background transition hover:opacity-90 disabled:opacity-50"
-              >
-                {triggering ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
-                {t("agents.runAgent")}
-              </button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <AgentTriggerDialog
+        agent={triggerTarget}
+        open={triggerOpen}
+        onOpenChange={setTriggerOpen}
+        onBusyChange={(busy) => {
+          setTriggering(busy && triggerTarget ? triggerTarget.id : null);
+        }}
+        onTriggered={() => {
+          if (runsAgent && runsAgent.id === triggerTarget?.id) void fetchRuns(runsAgent.id);
+        }}
+      />
 
       <Dialog open={runsOpen} onOpenChange={setRunsOpen}>
         <DialogContent className="max-w-2xl rounded-2xl border border-border/70 bg-card p-0 shadow-2xl">

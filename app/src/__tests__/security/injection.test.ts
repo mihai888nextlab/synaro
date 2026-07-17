@@ -93,6 +93,32 @@ describe("security: injection payloads do not cause 500", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSession(SECURITY_USER_A);
+
+    // restoreMocks: true can clear factory implementations — re-apply every test.
+    mockGetUserProjectCardsWithRows.mockResolvedValue({
+      rows: [{ id: SECURITY_PROJECT_A, userId: SECURITY_USER_A }],
+      cards: [],
+    });
+    mockGetUserAgentCards.mockResolvedValue([{ id: "agent-owned" }]);
+    mockAllocateUniqueProjectSlug.mockResolvedValue("safe-slug");
+    mockProvisionProjectEnvironment.mockResolvedValue({ status: "RUNNING", port: 8080 });
+    mockFetchEnvironmentsForProject.mockResolvedValue([
+      {
+        id: "env-1",
+        projectId: SECURITY_PROJECT_A,
+        status: "RUNNING",
+        port: null,
+        containerId: null,
+      },
+    ]);
+    mockPickActiveRuntimeEnvironment.mockImplementation(
+      (rows: { id: string; status?: string }[] | null | undefined) => {
+        if (!Array.isArray(rows) || rows.length === 0) return null;
+        return rows.find((r) => r.status === "RUNNING" || r.status === "PROVISIONING") ?? rows[0] ?? null;
+      },
+    );
+    mockTerminalWriteWorkspaceFile.mockResolvedValue(undefined);
+
     jest.mocked(prisma.project.findFirst).mockResolvedValue({ id: SECURITY_PROJECT_A });
     jest.mocked(prisma.project.create).mockResolvedValue({
       ...projectRow,

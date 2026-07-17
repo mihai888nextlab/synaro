@@ -119,6 +119,8 @@ const roBase: Messages = {
     customizeTitle: "Personalizează panoul",
     edit: "Editează",
     addWidget: "Adaugă widget",
+    addLayoutTemplate: "Layout agent + metrici",
+    resizeHint: "Trage colțurile pentru redimensionare sau folosește presetările de pe fiecare widget.",
     done: "Gata",
     reset: "Resetează",
     removeWidget: "Elimină widget",
@@ -142,7 +144,12 @@ const roBase: Messages = {
     viewLogs: "Vezi jurnalul",
     noLogsTitle: "Nu există înregistrări",
     noLogsBody:
-      "Încă nu există activitate. Pornește sau oprește un container de proiect pentru a vedea evenimente aici.",
+      "Încă nu există activitate. Pornește sau oprește un container de proiect, sau rulează un agent, pentru a vedea evenimente aici.",
+    mobileMonitorHint:
+      "Un panou compact pentru workspace. Personalizează panoul complet pe un ecran mai mare.",
+    mobileOverview: "Prezentare generală",
+    mobileLastRuns: "Ultimele rulări",
+    mobileNoAgents: "Nu există agenți încă. Creează un agent pe desktop pentru a vedea aici ultimele rulări.",
   },
   auth: {
     signIn: "Autentificare",

@@ -113,6 +113,19 @@ export function AgentFormFields({
         onValidationError={onScheduleValidationError}
       />
 
+      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/70 bg-muted/20 px-4 py-3">
+        <input
+          type="checkbox"
+          checked={value.emailOnComplete}
+          onChange={(e) => setField("emailOnComplete", e.target.checked)}
+          className="mt-0.5 size-4 rounded border-border/70"
+        />
+        <span className="flex flex-col gap-0.5">
+          <span className="text-sm font-medium text-foreground">{t("agents.emailOnComplete")}</span>
+          <span className="text-xs text-muted-foreground">{t("agents.emailOnCompleteHint")}</span>
+        </span>
+      </label>
+
       <div className="rounded-xl border border-border/70 bg-muted/20">
         <button
           type="button"

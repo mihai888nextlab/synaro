@@ -241,9 +241,9 @@ function DocsSidebar({
       return;
     }
 
-    if (event.key === "Enter" && highlightedIndex >= 0) {
+    if (event.key === "Enter" && keyboardNavEnabled) {
       event.preventDefault();
-      const item = flatItems[highlightedIndex];
+      const item = flatItems[highlightedIndex >= 0 ? highlightedIndex : 0];
       if (!item) return;
       void router.push(docHref(item.slug));
       onNavigate?.();

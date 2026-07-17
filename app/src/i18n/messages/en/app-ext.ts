@@ -224,7 +224,10 @@ export const enAppExt: Messages = {
     cronSchedule: "Cron Schedule",
     cronPlaceholder: "0 9 * * *|30 17 * * *",
     scheduleEnabled: "Run on schedule",
-    scheduleEnabledHint: "Automatically trigger this agent on a recurring schedule.",
+    scheduleEnabledHint: "Automatically trigger this agent on a recurring schedule. Times use {timezone}.",
+    emailOnComplete: "Email me when a run finishes",
+    emailOnCompleteHint:
+      "Sends the full result to your account email when a run succeeds or fails.",
     scheduleFrequencyDaily: "Daily",
     scheduleFrequencyWeekly: "Weekly",
     scheduleFrequencyMonthly: "Monthly",
@@ -238,7 +241,7 @@ export const enAppExt: Messages = {
     scheduleSummaryDaily: "Daily at {times}",
     scheduleSummaryWeekly: "Weekly on {days} at {times}",
     scheduleSummaryMonthly: "Monthly on day {days} at {times}",
-    scheduleNextRun: "Next run: {when}",
+    scheduleNextRun: "Next run: {when} ({timezone})",
     scheduleDayMon: "Mon",
     scheduleDayTue: "Tue",
     scheduleDayWed: "Wed",
@@ -353,11 +356,12 @@ export const enAppExt: Messages = {
   logs: {
     title: "Logs",
     noLogsPageBody:
-      "Start or stop a project container to record activity. Logs reset each day.",
+      "Start a project container or run an agent to record activity. Logs reset each day.",
     columnAction: "Action",
-    columnProject: "Project",
+    columnProject: "Source",
     columnStatus: "Status",
     columnTime: "Time",
+    openRelated: "Open related: {action}",
     statusDone: "done",
     statusRunning: "running",
     statusStopped: "stopped",
@@ -496,12 +500,47 @@ export const enAppExt: Messages = {
     groupProjects: "Projects",
     groupAgents: "Agents",
     groupQuickActions: "Quick actions",
+    groupActivityLogs: "Activity",
+    groupAgentRuns: "Agent runs",
     openProject: "Open project: {name}",
     openAgent: "Open agent: {name}",
+    openActivityLog: "Open activity: {action}",
+    openAgentRun: "Open run: {name}",
+    agentRunDescription: "{status} · {time} · #{id}",
+    agentRunDescriptionNoTime: "{status} · #{id}",
     goTo: "Go to {title}",
     searchAriaLabel: "Search pages, projects, agents, and actions",
     projectFallbackDescription: "Open project workspace",
     agentFallbackDescription: "Open agent on agents page",
+    activityLogFallbackDescription: "Open activity log entry",
+    agentRunFallbackDescription: "Open agent run detail",
+    createProjectTitle: "Create project",
+    createProjectDescription: "Start a new workspace or import code.",
+    newAgentTitle: "New agent",
+    newAgentDescription: "Create an autonomous agent.",
+    openApiKeysActionTitle: "Open API keys",
+    openApiKeysActionDescription: "Manage keys for the public API.",
+    runStatusPENDING: "Pending",
+    runStatusRUNNING: "Running",
+    runStatusNEEDS_INPUT: "Needs input",
+    runStatusDONE: "Done",
+    runStatusFAILED: "Failed",
+    runStatusCANCELLED: "Cancelled",
+    keywords: {
+      dashboard: "home,overview",
+      projects: "repos,files,repositories",
+      logs: "events,history,activity",
+      settings: "config,preferences",
+      profile: "account,user",
+      preferences: "theme,appearance",
+      workspaceSettings: "idle,defaults,dashboard",
+      securitySettings: "password,sessions,delete",
+      apiKeys: "token,bearer,developer,v1,api",
+      help: "support,docs,help",
+      createProject: "create,new,add,project,workspace",
+      newAgent: "create,new,add,agent,automation",
+      openApiKeys: "api,keys,token,developer",
+    },
     dashboardTitle: "Dashboard",
     dashboardDescription: "Go to your workspace overview.",
     projectsTitle: "Projects",
@@ -553,12 +592,24 @@ export const enAppExt: Messages = {
       welcome: {
         title: "Welcome to Synaro",
         description:
-          "This tour walks through the main parts of the app. Click highlighted areas when prompted — the tour will follow your actions.",
+          "A guided tour of the main parts of the app. Click highlighted areas when prompted — the tour follows your actions.",
       },
       sidebar: {
         title: "Navigation",
         description:
-          "The sidebar is your home base: Dashboard, Projects, Agents, Logs, and Settings. Your account menu is at the bottom.",
+          "The sidebar is your home base: Dashboard, Projects, Agents, and Logs. Your account menu (including Settings) is at the bottom.",
+      },
+      dashboardEdit: {
+        title: "Customize your dashboard",
+        description:
+          "Edit mode lets you rearrange and resize widgets. Changes save automatically while you customize.",
+        encourageClick: "Click Edit to enter customize mode.",
+      },
+      dashboardWidgets: {
+        title: "Add and arrange widgets",
+        description:
+          "Use Add widget to open the gallery. Drag widgets onto the grid, then resize with the corner handle or size chips. Click Done when you're finished.",
+        encourageClick: "Click Add widget to browse the gallery, or continue with Next.",
       },
       navProjects: {
         title: "Projects",
@@ -569,98 +620,82 @@ export const enAppExt: Messages = {
       projectsNew: {
         title: "Create or import",
         description:
-          "Start blank, import from GitHub, or upload a folder. Each project gets an isolated container and AI chat.",
-        encourageClick: "Click + New project to open the creation dialog.",
-      },
-      projectsNewDialog: {
-        title: "Project setup",
-        description:
-          "Pick a runtime image and describe what you want to build. You can also import GitHub repos or upload files.",
-        encourageClick: "Explore the form, then click Next — or open an existing project below.",
+          "Start blank, import from GitHub, or upload a folder. Pick a runtime and describe what you want to build.",
+        encourageClick: "Click + New project to open the creation dialog, or continue with Next.",
       },
       projectsOpen: {
         title: "Open a project",
         description:
-          "Click any project card to enter the workspace — file tree, terminal, AI chat, and deployments live there.",
+          "Click a project card to enter the workspace — AI chat, files, terminal, and deployments live there.",
         encourageClick: "Click a project — the tour continues inside the workspace.",
       },
-      workspaceTabs: {
-        title: "Workspace tabs",
+      workspaceAi: {
+        title: "Workspace & AI chat",
         description:
-          "Switch between AI chat, file tree, terminal, and deployments. Everything runs inside your project's container.",
+          "Use the tabs for AI chat, file tree, terminal, and deployments. Describe changes in plain English — Synaro analyzes the repo and applies code.",
       },
-      aiChat: {
-        title: "AI chat",
+      dockerRuntime: {
+        title: "Runtime & terminal",
         description:
-          "Describe changes in plain English. Synaro analyzes your repo, asks clarifying questions when needed, and applies code.",
-        encourageClick: "Click AI chat to select this tab.",
-      },
-      aiComposer: {
-        title: "Send a prompt",
-        description:
-          "Type your request and press Enter. You'll see live progress, file-change previews, and markdown responses.",
-      },
-      fileTree: {
-        title: "File tree",
-        description:
-          "Browse files in your container workspace. Open files to view and edit — the tree refreshes when the AI writes changes.",
-        encourageClick: "Click File tree to explore your project files.",
-      },
-      dockerPill: {
-        title: "Runtime environment",
-        description:
-          "Start or stop the Docker container for this project. Files, terminal, and previews need the runtime running.",
-        encourageClick: "Try starting the runtime if it's stopped.",
-      },
-      terminal: {
-        title: "Terminal",
-        description:
-          "Run shell commands in your project container — install packages, run scripts, or debug alongside the AI.",
-        encourageClick: "Click Terminal to open the in-browser shell.",
-      },
-      deployments: {
-        title: "Deployments & preview",
-        description:
-          "Run your app and open a live preview. Use Run in the toolbar when the container is active.",
-        encourageClick: "Click Deployments to see preview options.",
+          "Start the Docker runtime so files, terminal, and previews work. Use the Terminal tab for shell commands in the container.",
+        encourageClick: "Try starting the runtime if it's stopped, then continue.",
       },
       navAgents: {
         title: "AI agents",
         description:
           "Agents are separate from project chat — use them for web research, HTTP calls, and scheduled tasks that return a text answer.",
-        encourageClick: "Click Agents in the sidebar.",
+        encourageClick: "Click Agents in the sidebar to open the agents page.",
       },
-      agentsIntro: {
+      agents: {
         title: "Build an agent",
         description:
           "Create agents with a system prompt and tools (web search, HTTP GET/POST). Run them on demand or on a cron schedule.",
-        encourageClick: "Click + New agent to see the setup form.",
+        encourageClick: "Click + New agent to peek at the setup form, or continue with Next.",
       },
-      agentsCreateDialog: {
-        title: "Agent configuration",
+      agentsRun: {
+        title: "Run an agent",
         description:
-          "Name your agent, write a system prompt, pick tools, and set max steps. Optional cron syntax runs the agent automatically.",
-        encourageClick: "Review the options, then continue with Next.",
+          "Press Run on an agent card to start a live run (you can add optional input). Use Runs to open history and inspect steps or output.",
+        encourageClick: "Click Run on an agent if you have one, or continue with Next.",
       },
-      header: {
-        title: "Header tools",
+      agentsRunDialog: {
+        title: "Confirm the run",
         description:
-          "Notifications alert you when AI tasks finish. The ? menu replays this tour or opens documentation. The pill shows background AI work.",
+          "Add optional input, then press Run Agent. You can follow progress from the header pill and the agent's run history.",
+        encourageClick: "Review the form, then continue with Next when you're ready.",
       },
       finish: {
         title: "You're ready to build",
         description:
-          "Create a project for code changes, or an agent for research tasks. Press ? anytime for the intro tour or docs.",
+          "Customize your dashboard, build in projects, or run agents for research. Open the help menu (circle icon) anytime to replay this tour or open documentation.",
       },
     },
   },
   widgets: {
-    addWidgetsHint: "Drag a widget onto the dashboard, or tap to configure and add.",
+    addWidgetsHint: "Drag a widget onto the dashboard, or tap to configure and add. Resize widgets with the corner handle or size chips in edit mode.",
     searchWidgets: "Search widgets",
     configureTitle: "Configure {title}",
     createProjectFirst: "Create a project first.",
     createAgentFirst: "Create an agent first.",
     onDashboard: "On dashboard",
+    sizePresets: {
+      tile: "Tile",
+      square: "Square",
+      wide: "Wide",
+      strip: "Strip",
+      grid2x2: "2×2 grid",
+      column: "Column",
+      sidebar: "Sidebar",
+      half: "Half",
+      full: "Full",
+      tall: "Tall",
+      tallPanel: "Tall panel",
+    },
+    kpiClusterLayout: {
+      grid: "2×2 grid",
+      row: "Single row",
+      column: "Stacked column",
+    },
     categories: {
       overview: "Overview",
       projects: "Projects",
@@ -674,6 +709,11 @@ export const enAppExt: Messages = {
         title: "Overview KPIs",
         subtitle: "Projects & environments",
         description: "Summary metrics for projects, running environments, and errors.",
+      },
+      kpi_cluster: {
+        title: "KPI cluster",
+        subtitle: "Four metrics together",
+        description: "All overview metrics in one resizable block — use as a 2×2 square beside other widgets.",
       },
       single_kpi: {
         title: "Single metric",
@@ -712,9 +752,22 @@ export const enAppExt: Messages = {
         description: "Pin a project workspace to your dashboard.",
       },
       agent_shortcut: {
-        title: "Agent shortcut",
-        subtitle: "Open agents",
-        description: "Pin an agent for quick access to the agents page.",
+        title: "Agent card",
+        subtitle: "Run and manage",
+        description: "Pin the classic agent card — run, edit, schedule, and enable/disable.",
+        noAgentSelected: "Select an agent when adding this widget.",
+        agentNotFound: "This agent is no longer available.",
+        previewAgentName: "Sample agent",
+      },
+      agent_last_run: {
+        title: "Agent last run",
+        subtitle: "Latest run preview",
+        description: "Show the most recent run for a selected agent with status and output preview.",
+        openAgent: "Open agent",
+        noAgentSelected: "Select an agent when adding this widget.",
+        agentNotFound: "This agent is no longer available.",
+        noRunsYet: "No runs yet for this agent.",
+        previewAgentName: "Sample agent",
       },
       api_keys_summary: {
         title: "API keys",

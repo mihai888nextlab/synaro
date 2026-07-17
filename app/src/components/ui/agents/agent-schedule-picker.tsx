@@ -15,6 +15,7 @@ import {
   type ScheduleUiState,
   validateScheduleUi,
 } from "@/lib/agents/agent-schedule";
+import { formatTimezoneLabel, getAgentCronTimezone } from "@/lib/agents/agent-cron-timezone";
 import { cn } from "@/lib/utils";
 
 const WEEK_DAY_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
@@ -68,6 +69,8 @@ export function AgentSchedulePicker({
 }: AgentSchedulePickerProps) {
   const { t, locale } = useTranslation();
   const [ui, setUi] = useState<ScheduleUiState>(() => cronStringToScheduleUi(schedule));
+  const cronTimezone = useMemo(() => getAgentCronTimezone(), []);
+  const timezoneLabel = useMemo(() => formatTimezoneLabel(cronTimezone, locale), [cronTimezone, locale]);
 
   useEffect(() => {
     setUi(cronStringToScheduleUi(schedule));
@@ -163,7 +166,9 @@ export function AgentSchedulePicker({
             <CalendarClock className="size-4 shrink-0 text-muted-foreground" aria-hidden />
             {t("agents.scheduleEnabled")}
           </span>
-          <span className="text-xs text-muted-foreground">{t("agents.scheduleEnabledHint")}</span>
+          <span className="text-xs text-muted-foreground">
+            {t("agents.scheduleEnabledHint", { timezone: timezoneLabel })}
+          </span>
         </span>
       </label>
 
@@ -371,16 +376,17 @@ export function AgentNextRunLabel({
   className?: string;
 }) {
   const { t, locale } = useTranslation();
+  const cronTimezone = useMemo(() => getAgentCronTimezone(), []);
   const nextLabel = useMemo(() => {
     if (!enabled || !schedule?.trim()) return null;
-    return formatNextScheduledRun(schedule, locale);
-  }, [enabled, schedule, locale]);
+    return formatNextScheduledRun(schedule, locale, new Date(), cronTimezone);
+  }, [enabled, schedule, locale, cronTimezone]);
 
   if (!nextLabel) return null;
 
   return (
     <p className={cn("text-xs text-muted-foreground/80", className)}>
-      {t("agents.scheduleNextRun", { when: nextLabel })}
+      {t("agents.scheduleNextRun", { when: nextLabel, timezone: formatTimezoneLabel(cronTimezone, locale) })}
     </p>
   );
 }

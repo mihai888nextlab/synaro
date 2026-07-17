@@ -19,6 +19,7 @@ model Agent {
   maxSteps     Int        @default(20)
   schedule     String?
   enabled      Boolean    @default(true)
+  emailOnComplete Boolean @default(false)
   model        String?
   mcpServers   Json?
   createdAt    DateTime   @default(now())

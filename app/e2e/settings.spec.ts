@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 import { E2E_USER_EMAIL, E2E_USER_NAME, resetE2eUserSettingsState } from "./helpers/seed";
-import { useEnglishLocale } from "./helpers/locale";
+import { forceEnglishLocale } from "./helpers/locale";
 
 test.describe("Settings", () => {
   test.beforeEach(async ({ page }) => {
     await resetE2eUserSettingsState();
-    await useEnglishLocale(page);
+    await forceEnglishLocale(page);
   });
 
   test("profile shows user email and supports name edit", async ({ page }) => {

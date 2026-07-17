@@ -224,7 +224,10 @@ export const roAppExt: Messages = {
     cronSchedule: "Programare cron",
     cronPlaceholder: "0 9 * * *|30 17 * * *",
     scheduleEnabled: "Rulează programat",
-    scheduleEnabledHint: "Declanșează automat acest agent după un program recurent.",
+    scheduleEnabledHint: "Declanșează automat acest agent după un program recurent. Orele folosesc {timezone}.",
+    emailOnComplete: "Trimite-mi email când un run se termină",
+    emailOnCompleteHint:
+      "Trimite rezultatul complet pe emailul contului tău când un run reușește sau eșuează.",
     scheduleFrequencyDaily: "Zilnic",
     scheduleFrequencyWeekly: "Săptămânal",
     scheduleFrequencyMonthly: "Lunar",
@@ -238,7 +241,7 @@ export const roAppExt: Messages = {
     scheduleSummaryDaily: "Zilnic la {times}",
     scheduleSummaryWeekly: "Săptămânal {days} la {times}",
     scheduleSummaryMonthly: "Lunar în zilele {days} la {times}",
-    scheduleNextRun: "Următoarea rulare: {when}",
+    scheduleNextRun: "Următoarea rulare: {when} ({timezone})",
     scheduleDayMon: "Lun",
     scheduleDayTue: "Mar",
     scheduleDayWed: "Mie",
@@ -354,11 +357,12 @@ export const roAppExt: Messages = {
   logs: {
     title: "Jurnal",
     noLogsPageBody:
-      "Pornește sau oprește un container de proiect pentru a înregistra activitate. Jurnalul se resetează zilnic.",
+      "Pornește un container de proiect sau rulează un agent pentru a înregistra activitate. Jurnalul se resetează zilnic.",
     columnAction: "Acțiune",
-    columnProject: "Proiect",
+    columnProject: "Sursă",
     columnStatus: "Stare",
     columnTime: "Timp",
+    openRelated: "Deschide legătura: {action}",
     statusDone: "finalizat",
     statusRunning: "rulează",
     statusStopped: "oprit",
@@ -500,12 +504,47 @@ export const roAppExt: Messages = {
     groupProjects: "Proiecte",
     groupAgents: "Agenți",
     groupQuickActions: "Acțiuni rapide",
+    groupActivityLogs: "Activitate",
+    groupAgentRuns: "Rulări agent",
     openProject: "Deschide proiectul: {name}",
     openAgent: "Deschide agentul: {name}",
+    openActivityLog: "Deschide activitatea: {action}",
+    openAgentRun: "Deschide rularea: {name}",
+    agentRunDescription: "{status} · {time} · #{id}",
+    agentRunDescriptionNoTime: "{status} · #{id}",
     goTo: "Mergi la {title}",
     searchAriaLabel: "Caută pagini, proiecte, agenți și acțiuni",
     projectFallbackDescription: "Deschide workspace-ul proiectului",
     agentFallbackDescription: "Deschide agentul în pagina Agenți",
+    activityLogFallbackDescription: "Deschide intrarea din jurnal",
+    agentRunFallbackDescription: "Deschide detaliile rulării agentului",
+    createProjectTitle: "Creează proiect",
+    createProjectDescription: "Pornește un workspace nou sau importă cod.",
+    newAgentTitle: "Agent nou",
+    newAgentDescription: "Creează un agent autonom.",
+    openApiKeysActionTitle: "Deschide chei API",
+    openApiKeysActionDescription: "Gestionează cheile pentru API-ul public.",
+    runStatusPENDING: "În așteptare",
+    runStatusRUNNING: "Rulează",
+    runStatusNEEDS_INPUT: "Necesită input",
+    runStatusDONE: "Finalizat",
+    runStatusFAILED: "Eșuat",
+    runStatusCANCELLED: "Anulat",
+    keywords: {
+      dashboard: "acasă,prezentare,panou",
+      projects: "repo,fișiere,depozit,proiecte",
+      logs: "evenimente,istoric,activitate,jurnal",
+      settings: "configurare,preferințe,setări",
+      profile: "cont,utilizator,profil",
+      preferences: "temă,aspect,interfață",
+      workspaceSettings: "inactivitate,implicite,panou,workspace",
+      securitySettings: "parolă,sesiuni,ștergere,securitate",
+      apiKeys: "token,bearer,dezvoltator,v1,api,chei",
+      help: "suport,documentație,ajutor",
+      createProject: "creează,nou,adaugă,proiect,workspace",
+      newAgent: "creează,nou,adaugă,agent,automatizare",
+      openApiKeys: "api,chei,token,dezvoltator",
+    },
     dashboardTitle: "Panou",
     dashboardDescription: "Mergi la prezentarea generală a workspace-ului.",
     projectsTitle: "Proiecte",
@@ -557,12 +596,24 @@ export const roAppExt: Messages = {
       welcome: {
         title: "Bine ai venit la Synaro",
         description:
-          "Acest tur parcurge părțile principale ale aplicației. Apasă zonele evidențiate când ești îndemnat — turul îți va urma acțiunile.",
+          "Un tur ghidat al părților principale ale aplicației. Apasă zonele evidențiate când ești îndemnat — turul îți urmează acțiunile.",
       },
       sidebar: {
         title: "Navigare",
         description:
-          "Bara laterală este baza ta: Panou, Proiecte, Agenți, Jurnal și Setări. Meniul contului este jos.",
+          "Bara laterală este baza ta: Panou, Proiecte, Agenți și Jurnal. Meniul contului (inclusiv Setări) este jos.",
+      },
+      dashboardEdit: {
+        title: "Personalizează panoul",
+        description:
+          "Modul Editare îți permite să rearanjezi și să redimensionezi widget-urile. Modificările se salvează automat în timp ce personalizezi.",
+        encourageClick: "Apasă Editare pentru a intra în modul de personalizare.",
+      },
+      dashboardWidgets: {
+        title: "Adaugă și aranjează widget-uri",
+        description:
+          "Folosește Adaugă widget pentru a deschide galeria. Trage widget-uri pe grilă, apoi redimensionează cu mânerul din colț sau chip-urile de mărime. Apasă Gata când termini.",
+        encourageClick: "Apasă Adaugă widget pentru a răsfoi galeria, sau continuă cu Următorul.",
       },
       navProjects: {
         title: "Proiecte",
@@ -573,88 +624,54 @@ export const roAppExt: Messages = {
       projectsNew: {
         title: "Creează sau importă",
         description:
-          "Începe de la zero, importă din GitHub sau încarcă un folder. Fiecare proiect primește un container izolat și chat AI.",
-        encourageClick: "Apasă + Proiect nou pentru a deschide dialogul de creare.",
-      },
-      projectsNewDialog: {
-        title: "Configurare proiect",
-        description:
-          "Alege o imagine runtime și descrie ce vrei să construiești. Poți importa și repo-uri GitHub sau încărca fișiere.",
-        encourageClick: "Explorează formularul, apoi apasă Următorul — sau deschide un proiect existent mai jos.",
+          "Începe de la zero, importă din GitHub sau încarcă un folder. Alege un runtime și descrie ce vrei să construiești.",
+        encourageClick: "Apasă + Proiect nou pentru dialogul de creare, sau continuă cu Următorul.",
       },
       projectsOpen: {
         title: "Deschide un proiect",
         description:
-          "Apasă orice card de proiect pentru a intra în workspace — arbore de fișiere, terminal, chat AI și deploy-uri.",
+          "Apasă un card de proiect pentru a intra în workspace — chat AI, fișiere, terminal și deploy-uri.",
         encourageClick: "Apasă un proiect — turul continuă în workspace.",
       },
-      workspaceTabs: {
-        title: "File workspace",
+      workspaceAi: {
+        title: "Workspace și chat AI",
         description:
-          "Comută între chat AI, arbore de fișiere, terminal și deploy-uri. Totul rulează în containerul proiectului.",
+          "Folosește tab-urile pentru chat AI, arbore de fișiere, terminal și deploy-uri. Descrie modificările în limbaj natural — Synaro analizează repo-ul și aplică codul.",
       },
-      aiChat: {
-        title: "Chat AI",
+      dockerRuntime: {
+        title: "Runtime și terminal",
         description:
-          "Descrie modificările în limbaj natural. Synaro analizează repo-ul, pune întrebări de clarificare când e nevoie și aplică codul.",
-        encourageClick: "Apasă Chat AI pentru a selecta acest tab.",
-      },
-      aiComposer: {
-        title: "Trimite un prompt",
-        description:
-          "Scrie cererea și apasă Enter. Vei vedea progres live, previzualizări ale modificărilor de fișiere și răspunsuri markdown.",
-      },
-      fileTree: {
-        title: "Arbore fișiere",
-        description:
-          "Răsfoiește fișierele din workspace-ul containerului. Deschide fișiere pentru vizualizare și editare — arborele se reîmprospătează când AI scrie modificări.",
-        encourageClick: "Apasă Arbore fișiere pentru a explora fișierele proiectului.",
-      },
-      dockerPill: {
-        title: "Mediu runtime",
-        description:
-          "Pornește sau oprește containerul Docker pentru acest proiect. Fișierele, terminalul și previzualizările necesită runtime activ.",
-        encourageClick: "Încearcă să pornești runtime-ul dacă este oprit.",
-      },
-      terminal: {
-        title: "Terminal",
-        description:
-          "Rulează comenzi shell în containerul proiectului — instalează pachete, rulează scripturi sau depanează alături de AI.",
-        encourageClick: "Apasă Terminal pentru a deschide shell-ul în browser.",
-      },
-      deployments: {
-        title: "Deploy-uri și previzualizare",
-        description:
-          "Rulează aplicația și deschide o previzualizare live. Folosește Rulează din bara de instrumente când containerul este activ.",
-        encourageClick: "Apasă Deploy-uri pentru a vedea opțiunile de previzualizare.",
+          "Pornește runtime-ul Docker ca fișierele, terminalul și previzualizările să funcționeze. Folosește tab-ul Terminal pentru comenzi shell în container.",
+        encourageClick: "Încearcă să pornești runtime-ul dacă este oprit, apoi continuă.",
       },
       navAgents: {
         title: "Agenți AI",
         description:
           "Agenții sunt separați de chat-ul proiectului — folosește-i pentru cercetare web, apeluri HTTP și sarcini programate care returnează un răspuns text.",
-        encourageClick: "Apasă Agenți în bara laterală.",
+        encourageClick: "Apasă Agenți în bara laterală pentru a deschide pagina de agenți.",
       },
-      agentsIntro: {
+      agents: {
         title: "Construiește un agent",
         description:
           "Creează agenți cu prompt de sistem și instrumente (căutare web, HTTP GET/POST). Rulează-i la cerere sau pe un program cron.",
-        encourageClick: "Apasă + Agent nou pentru a vedea formularul de configurare.",
+        encourageClick: "Apasă + Agent nou pentru a vedea formularul, sau continuă cu Următorul.",
       },
-      agentsCreateDialog: {
-        title: "Configurare agent",
+      agentsRun: {
+        title: "Rulează un agent",
         description:
-          "Denumește agentul, scrie un prompt de sistem, alege instrumente și setează pașii maximi. Sintaxa cron opțională rulează agentul automat.",
-        encourageClick: "Revizuiește opțiunile, apoi continuă cu Următorul.",
+          "Apasă Rulează pe un card de agent pentru a porni un run live (poți adăuga input opțional). Folosește Run-uri pentru istoric, pași și output.",
+        encourageClick: "Apasă Rulează pe un agent dacă ai unul, sau continuă cu Următorul.",
       },
-      header: {
-        title: "Instrumente antet",
+      agentsRunDialog: {
+        title: "Confirmă run-ul",
         description:
-          "Notificările te alertează când sarcinile AI se termină. Meniul ? reia acest tur sau deschide documentația. Pilula arată munca AI în fundal.",
+          "Adaugă input opțional, apoi apasă Rulează agentul. Poți urmări progresul din pilula din antet și din istoricul de run-uri al agentului.",
+        encourageClick: "Revizuiește formularul, apoi continuă cu Următorul când ești gata.",
       },
       finish: {
         title: "Ești gata să construiești",
         description:
-          "Creează un proiect pentru modificări de cod, sau un agent pentru sarcini de cercetare. Apasă ? oricând pentru turul introductiv sau documentație.",
+          "Personalizează panoul, construiește în proiecte sau rulează agenți pentru cercetare. Deschide meniul de ajutor (iconița cerc) oricând pentru a relua turul sau a deschide documentația.",
       },
     },
   },
@@ -666,6 +683,24 @@ export const roAppExt: Messages = {
     createProjectFirst: "Creează mai întâi un proiect.",
     createAgentFirst: "Creează mai întâi un agent.",
     onDashboard: "Pe panou",
+    sizePresets: {
+      tile: "Casetă",
+      square: "Pătrat",
+      wide: "Lat",
+      strip: "Bandă",
+      grid2x2: "Grilă 2×2",
+      column: "Coloană",
+      sidebar: "Bară laterală",
+      half: "Jumătate",
+      full: "Complet",
+      tall: "Înalt",
+      tallPanel: "Panou înalt",
+    },
+    kpiClusterLayout: {
+      grid: "Grilă 2×2",
+      row: "Rând unic",
+      column: "Coloană stivuită",
+    },
     categories: {
       overview: "Prezentare generală",
       projects: "Proiecte",
@@ -679,6 +714,11 @@ export const roAppExt: Messages = {
         title: "KPI-uri generale",
         subtitle: "Proiecte și medii",
         description: "Metrici sumare pentru proiecte, medii active și erori.",
+      },
+      kpi_cluster: {
+        title: "Cluster KPI",
+        subtitle: "Patru metrici împreună",
+        description: "Toate metricile generale într-un bloc redimensionabil — folosește ca pătrat 2×2 lângă alte widget-uri.",
       },
       single_kpi: {
         title: "Metrică singulară",
@@ -717,9 +757,23 @@ export const roAppExt: Messages = {
         description: "Fixează un workspace de proiect pe panou.",
       },
       agent_shortcut: {
-        title: "Scurtătură agent",
-        subtitle: "Deschide agenți",
-        description: "Fixează un agent pentru acces rapid la pagina de agenți.",
+        title: "Card de agent",
+        subtitle: "Rulează și gestionează",
+        description: "Fixează cardul clasic de agent — rulare, editare, program și activare/dezactivare.",
+        noAgentSelected: "Selectează un agent la adăugarea acestui widget.",
+        agentNotFound: "Acest agent nu mai este disponibil.",
+        previewAgentName: "Agent exemplu",
+      },
+      agent_last_run: {
+        title: "Ultima rulare agent",
+        subtitle: "Previzualizare rulare recentă",
+        description:
+          "Afișează cea mai recentă rulare pentru un agent selectat, cu stare și previzualizare rezultat.",
+        openAgent: "Deschide agentul",
+        noAgentSelected: "Selectează un agent la adăugarea acestui widget.",
+        agentNotFound: "Acest agent nu mai este disponibil.",
+        noRunsYet: "Încă nu există rulări pentru acest agent.",
+        previewAgentName: "Agent exemplu",
       },
       api_keys_summary: {
         title: "Chei API",

@@ -49,4 +49,19 @@ describe("AgentRunSteps", () => {
     expect(screen.getByText("Found docs about Synaro agents.")).toBeInTheDocument();
     expect(screen.getByText("Completed research.")).toBeInTheDocument();
   });
+
+  it("summarizes bulky HTML observations instead of dumping them", () => {
+    const steps: ReActStep[] = [
+      {
+        step: 1,
+        tool: "http_get",
+        args: {},
+        observation: `HTTP 200 OK\n\n<!doctype html><html><body>${"x".repeat(12_000)}</body></html>`,
+      },
+    ];
+    renderSteps(steps, true);
+    expect(screen.getByText("http_get")).toBeInTheDocument();
+    expect(screen.getByText(/Fetched page \(~\d+ KB\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/<!doctype/i)).not.toBeInTheDocument();
+  });
 });

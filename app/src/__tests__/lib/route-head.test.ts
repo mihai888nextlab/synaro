@@ -1,6 +1,35 @@
 import { describe, expect, it } from "@jest/globals";
 
-import { routeHeadProps } from "@/lib/seo/route-head";
+import { isPrivateAppRoute, routeHeadProps } from "@/lib/seo/route-head";
+
+describe("isPrivateAppRoute", () => {
+  it("includes dashboard shell routes", () => {
+    expect(isPrivateAppRoute("/dashboard")).toBe(true);
+    expect(isPrivateAppRoute("/projects")).toBe(true);
+    expect(isPrivateAppRoute("/projects/[projectSlug]")).toBe(true);
+    expect(isPrivateAppRoute("/agents")).toBe(true);
+    expect(isPrivateAppRoute("/agents/[agentId]/runs/[runId]")).toBe(true);
+    expect(isPrivateAppRoute("/logs")).toBe(true);
+    expect(isPrivateAppRoute("/settings")).toBe(true);
+    expect(isPrivateAppRoute("/settings/api-keys")).toBe(true);
+  });
+
+  it("excludes marketing, auth, docs, and public share routes", () => {
+    expect(isPrivateAppRoute("/")).toBe(false);
+    expect(isPrivateAppRoute("/features")).toBe(false);
+    expect(isPrivateAppRoute("/pricing")).toBe(false);
+    expect(isPrivateAppRoute("/about")).toBe(false);
+    expect(isPrivateAppRoute("/contact")).toBe(false);
+    expect(isPrivateAppRoute("/login")).toBe(false);
+    expect(isPrivateAppRoute("/signup")).toBe(false);
+    expect(isPrivateAppRoute("/forgot-password")).toBe(false);
+    expect(isPrivateAppRoute("/documentation")).toBe(false);
+    expect(isPrivateAppRoute("/documentation/[slug]")).toBe(false);
+    expect(isPrivateAppRoute("/projects/invite/[token]")).toBe(false);
+    expect(isPrivateAppRoute("/p/[projectSlug]")).toBe(false);
+    expect(isPrivateAppRoute("/a/[agentId]")).toBe(false);
+  });
+});
 
 describe("routeHeadProps", () => {
   it("maps home route to marketing seo", () => {

@@ -47,4 +47,51 @@ describe("MarkdownLite", () => {
     const { container } = render(<MarkdownLite text="## Section title" />);
     expect(container.querySelector("h3")?.textContent).toBe("Section title");
   });
+
+  it("renders h4–h6 atx headings including trailing hashes", () => {
+    const { container } = render(
+      <MarkdownLite text={"#### Why It Matters\n\n##### Details ####"} />,
+    );
+    expect(container.querySelector("h5")?.textContent).toBe("Why It Matters");
+    expect(container.querySelectorAll("h5")).toHaveLength(2);
+    expect(container.querySelectorAll("h5")[1]?.textContent).toBe("Details");
+  });
+
+  it("renders thematic breaks for --- *** and ___", () => {
+    const { container } = render(
+      <MarkdownLite text={"Before\n\n---\n\nAfter\n\n***\n\n___\n"} />,
+    );
+    expect(container.querySelectorAll("hr")).toHaveLength(3);
+  });
+
+  it("does not hang on unmatched inline markers", () => {
+    const started = Date.now();
+    const { container } = render(
+      <MarkdownLite
+        text={"Price ~7,560* open 7,558 and a lone ` backtick plus [orphan bracket"}
+      />,
+    );
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(container.textContent).toContain("7,560*");
+    expect(container.textContent).toContain("`");
+    expect(container.textContent).toContain("[orphan");
+  });
+
+  it("renders stock-style tables with stray asterisks without hanging", () => {
+    const started = Date.now();
+    render(
+      <MarkdownLite
+        text={`## S&P 500 — Live Price*
+
+| Metric | Value |
+|--------|-------|
+| Live Price | ~7,560.00 |
+| Open | 7,558.80* |
+`}
+      />,
+    );
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByText("~7,560.00")).toBeInTheDocument();
+  });
 });

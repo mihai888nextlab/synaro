@@ -12,7 +12,6 @@ import {
   PanelLeftOpen,
   LogOut,
   User,
-  CircleUser,
   Bot,
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
@@ -37,7 +36,6 @@ const navItems: NavItem[] = [
   { labelKey: "nav.projects", href: "/projects", icon: Folder },
   { labelKey: "nav.agents", href: "/agents", icon: Bot },
   { labelKey: "nav.logs", href: "/logs", icon: ScrollText },
-  { labelKey: "nav.settings", href: "/settings", icon: Settings },
 ];
 
 function isActiveRoute(current: string, href: string) {
@@ -52,10 +50,13 @@ export function DashboardSidebar({
   isCollapsed,
   onToggleCollapse,
   onNavigate,
+  headerEnd,
 }: {
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   onNavigate?: () => void;
+  /** Optional trailing control in the brand row (e.g. mobile close). */
+  headerEnd?: React.ReactNode;
 }) {
   const router = useRouter();
   const { t } = useTranslation();
@@ -109,13 +110,14 @@ export function DashboardSidebar({
       <div className="flex h-full flex-col">
         <div
           className={[
-            "flex h-14 items-center justify-between",
+            "flex h-14 items-center justify-between gap-2",
+            headerEnd ? "pr-2" : "",
           ].join(" ")}
         >
           <Link
             href="/dashboard"
             className={[
-              "ml-0 flex w-full items-center gap-0",
+              "ml-0 flex min-w-0 flex-1 items-center gap-0",
               isCollapsed ? "justify-center" : "justify-start",
             ].join(" ")}
           >
@@ -133,6 +135,7 @@ export function DashboardSidebar({
               Synaro
             </span>
           </Link>
+          {headerEnd ? <div className="shrink-0">{headerEnd}</div> : null}
         </div>
 
         <button
@@ -261,7 +264,7 @@ export function DashboardSidebar({
                 {status === "authenticated" ? (
                   <>
                     <Link
-                      href="/settings/profile"
+                      href="/settings"
                       onClick={() => {
                         setMenuOpen(false);
                         onNavigate?.();
@@ -269,8 +272,8 @@ export function DashboardSidebar({
                       className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
                       role="menuitem"
                     >
-                      <CircleUser className="size-4 shrink-0 text-muted-foreground" />
-                      {t("nav.profile")}
+                      <Settings className="size-4 shrink-0 text-muted-foreground" />
+                      {t("nav.settings")}
                     </Link>
                     <button
                       type="button"

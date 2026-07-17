@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
+
+import { recordAgentActivityLog } from "@/lib/activity-log";
 import { authOptions } from "@/lib/next-auth-options";
 
 function agentServiceUrl(): string {
@@ -47,11 +49,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === "DELETE") {
     try {
+      let agentName = "Agent";
+      const existing = await fetch(`${agentServiceUrl()}/api/agents/${agentId}`, {
+        headers: agentHeaders(),
+      });
+      if (existing.ok && existing.status === 200) {
+        try {
+          const agent = (await existing.json()) as { name?: string };
+          if (typeof agent.name === "string" && agent.name.trim()) agentName = agent.name;
+        } catch {
+          // Upstream may return an empty body; keep default agent name.
+        }
+      }
+
       const upstream = await fetch(`${agentServiceUrl()}/api/agents/${agentId}`, {
         method: "DELETE",
         headers: agentHeaders(),
       });
-      if (upstream.status === 204) return res.status(204).end();
+      if (upstream.status === 204) {
+        void recordAgentActivityLog({
+          userId: session.user.id,
+          agentName,
+          kind: "deleted",
+          agentId,
+        }).catch(() => undefined);
+        return res.status(204).end();
+      }
       const data = (await upstream.json()) as unknown;
       return res.status(upstream.status).json(data);
     } catch {

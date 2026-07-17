@@ -46,6 +46,16 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     void prefetchSearchIndex();
   }, []);
 
+  useEffect(() => {
+    const onOnboardingAction = (event: Event) => {
+      const detail = (event as CustomEvent<{ type?: string }>).detail;
+      if (detail?.type === "open-mobile-sidebar") setMobileOpen(true);
+      if (detail?.type === "close-mobile-sidebar") setMobileOpen(false);
+    };
+    window.addEventListener("synaro:onboarding-action", onOnboardingAction);
+    return () => window.removeEventListener("synaro:onboarding-action", onOnboardingAction);
+  }, []);
+
   const breadcrumbs = useMemo((): BreadcrumbSegment[] => {
     const path = router.pathname;
     const q = router.query;
@@ -142,7 +152,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     router.pathname === "/projects/[projectSlug]/analytics";
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground [scrollbar-gutter:stable]">
       {/* Fixed to the viewport on lg+ so long pages do not scroll the rail away (sticky breaks under some overflow ancestors). */}
       <div className="fixed left-0 top-0 z-30 hidden h-dvh lg:block">
         <DashboardSidebar
@@ -283,20 +293,20 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
           />
           <div className="absolute inset-y-0 left-0 w-[280px]">
             <div className="h-full">
-              <div className="absolute right-3 top-3 z-10">
-                <button
-                  type="button"
-                  onClick={() => setMobileOpen(false)}
-                  className="inline-flex size-9 items-center justify-center rounded-md border border-white/10 bg-black/60 text-zinc-200 backdrop-blur transition hover:bg-white/10"
-                  aria-label={t("workspace.closeSidebar")}
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
               <DashboardSidebar
                 isCollapsed={false}
                 onToggleCollapse={() => {}}
                 onNavigate={() => setMobileOpen(false)}
+                headerEnd={
+                  <button
+                    type="button"
+                    onClick={() => setMobileOpen(false)}
+                    className="inline-flex size-9 items-center justify-center rounded-xl border border-border/70 bg-card text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground"
+                    aria-label={t("workspace.closeSidebar")}
+                  >
+                    <X className="size-4" />
+                  </button>
+                }
               />
             </div>
           </div>

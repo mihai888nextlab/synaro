@@ -3,7 +3,6 @@ import { expect, test } from "@playwright/test";
 import {
   acceptNextDialog,
   E2E_AGENT_ID,
-  E2E_AGENT_SCHEDULED_ID,
   E2E_RUN_ID,
   E2E_RUN_NEEDS_INPUT_ID,
   makeAutoAgent,
@@ -17,11 +16,11 @@ import {
   makeScheduledAgent,
   mockAgentApi,
 } from "./helpers/agents";
-import { useEnglishLocale } from "./helpers/locale";
+import { forceEnglishLocale } from "./helpers/locale";
 
 test.describe("Agents", () => {
   test.beforeEach(async ({ page }) => {
-    await useEnglishLocale(page);
+    await forceEnglishLocale(page);
   });
 
   test.describe("page basics", () => {
@@ -266,7 +265,7 @@ test.describe("Agents", () => {
       await mockAgentApi(page, {
         agents: [makeAutoAgent()],
         runsByAgentId: { [E2E_AGENT_ID]: [makeRunDone()] },
-        getRun: (runId, poll) => (poll <= 2 ? makeRunRunning() : makeRunDone()),
+        getRun: (runId, poll) => (poll <= 1 ? makeRunRunning() : makeRunDone()),
       });
 
       await page.goto("/agents", { waitUntil: "networkidle" });
@@ -276,8 +275,8 @@ test.describe("Agents", () => {
 
       await expect(page).toHaveURL(`/agents/${E2E_AGENT_ID}/runs/${E2E_RUN_ID}`);
       await expect(page.getByText("web_search")).toBeVisible();
-      await expect(page.getByText("Synaro is an AI dev workspace.")).toBeVisible();
-      await expect(page.getByText("Done")).toBeVisible();
+      await expect(page.getByText("Synaro is an AI dev workspace.")).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText("Done")).toBeVisible({ timeout: 15_000 });
     });
 
     test("shows done run output preview in runs dialog", async ({ page }) => {

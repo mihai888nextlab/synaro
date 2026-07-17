@@ -1,0 +1,67 @@
+{
+  "name": "@synaro/sdk",
+  "version": "0.2.0",
+  "description": "Official TypeScript SDK for the Synaro public API (/api/v1)",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "synaro": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "openapi",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mihai888nextlab/synaro.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://synaro.tech/documentation/public-api-sdk",
+  "bugs": {
+    "url": "https://github.com/mihai888nextlab/synaro/issues"
+  },
+  "keywords": [
+    "synaro",
+    "sdk",
+    "api",
+    "agents",
+    "typescript"
+  ],
+  "devDependencies": {
+    "@types/node": "^20.11.20",
+    "tsup": "^8.3.5",
+    "typescript": "^5.3.3",
+    "vitest": "^2.1.8"
+  }
+}

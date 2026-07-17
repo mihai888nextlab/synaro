@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 import { E2E_PROJECT_PRIMARY_SLUG } from "./helpers/seed";
-import { useEnglishLocale } from "./helpers/locale";
+import { forceEnglishLocale } from "./helpers/locale";
 
 test.describe("Project workspace", () => {
   test.beforeEach(async ({ page }) => {
-    await useEnglishLocale(page);
+    await forceEnglishLocale(page);
   });
 
   test("workspace shell shows main tabs", async ({ page }) => {

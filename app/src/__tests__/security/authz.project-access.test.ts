@@ -20,14 +20,8 @@ import {
   mockSession,
 } from "@/testing/security-route-helpers";
 
-jest.mock("@/lib/environment-service-api", () => ({
-  fetchEnvironmentsForProject: jest.fn().mockResolvedValue([]),
-  pickActiveRuntimeEnvironment: jest.fn(),
-  remoteListWorkspaceFiles: jest.fn(),
-  destroyAllRemoteEnvironmentsForProject: jest.fn().mockResolvedValue(undefined),
-}));
-
 const findFirstMock = jest.mocked(prisma.project.findFirst);
+const deleteMock = jest.mocked(prisma.project.delete);
 
 describe("security: project access filters", () => {
   it("whereProjectVisibleToUser scopes to owner or member", () => {
@@ -47,6 +41,7 @@ describe("security: project access filters", () => {
 describe("security: IDOR — foreign project returns 404", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    deleteMock.mockResolvedValue({ id: SECURITY_PROJECT_A } as never);
   });
 
   it("GET /api/projects/[projectId]/workspace-files", async () => {
@@ -86,6 +81,7 @@ describe("security: IDOR — foreign project returns 404", () => {
         where: { id: SECURITY_PROJECT_A, userId: SECURITY_USER_B },
       }),
     );
+    expect(deleteMock).not.toHaveBeenCalled();
   });
 
   it("DELETE /api/projects/[projectId] uses owner-only guard (not collaborator)", async () => {
@@ -102,6 +98,7 @@ describe("security: IDOR — foreign project returns 404", () => {
         where: { id: SECURITY_PROJECT_A, userId: SECURITY_USER_A },
       }),
     );
+    expect(deleteMock).toHaveBeenCalledWith({ where: { id: SECURITY_PROJECT_A } });
     expect(res.statusCode).toBe(204);
   });
 });

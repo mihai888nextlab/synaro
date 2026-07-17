@@ -1,9 +1,9 @@
-import { Prisma } from "@prisma/client";
-
-import { prisma } from "@/lib/prisma";
 import { DEFAULT_DASHBOARD_LAYOUT } from "@/lib/dashboard/default-layout";
 import type { DashboardLayout } from "@/lib/dashboard/layout-schema";
+import type { LayoutValidationContext } from "@/lib/dashboard/validate-layout";
 import { parseDashboardLayout, validateDashboardLayout } from "@/lib/dashboard/validate-layout";
+import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 export async function getUserDashboardLayout(userId: string): Promise<DashboardLayout | null> {
   const user = await prisma.user.findUnique({
@@ -17,8 +17,8 @@ export async function getUserDashboardLayout(userId: string): Promise<DashboardL
 export async function saveUserDashboardLayout(
   userId: string,
   layout: DashboardLayout,
-  ctx: { projectIds: Set<string>; agentIds: Set<string> },
-): Promise<{ ok: true } | { ok: false; error: string }> {
+  ctx: LayoutValidationContext,
+): Promise<{ ok: true; layout: DashboardLayout } | { ok: false; error: string }> {
   const validated = validateDashboardLayout(layout, ctx);
   if (!validated.ok) return validated;
 
@@ -30,7 +30,7 @@ export async function saveUserDashboardLayout(
     },
   });
 
-  return { ok: true };
+  return { ok: true, layout: validated.layout };
 }
 
 export async function resetUserDashboardLayout(userId: string): Promise<void> {

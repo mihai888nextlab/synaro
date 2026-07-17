@@ -1,14 +1,36 @@
 import { useMemo } from "react";
 
 import { useTranslation } from "@/components/ui/locale-provider";
-import type { WidgetRegistryMeta } from "@/lib/dashboard/layout-schema";
+import type {
+  WidgetRegistryMeta,
+  WidgetSizeConstraints,
+  WidgetSizePreset,
+} from "@/lib/dashboard/layout-schema";
 
-type WidgetRegistryMetaBase = Omit<WidgetRegistryMeta, "title" | "subtitle" | "description" | "categoryLabel"> & {
+type WidgetRegistryMetaBase = Omit<
+  WidgetRegistryMeta,
+  "title" | "subtitle" | "description" | "categoryLabel"
+> & {
   titleKey: string;
   subtitleKey: string;
   descriptionKey: string;
   categoryKey: string;
 };
+
+const KPI_TILE: WidgetSizeConstraints = { minW: 2, maxW: 6, minH: 2, maxH: 6 };
+const KPI_TILE_PRESETS: WidgetSizePreset[] = [
+  { id: "tile", labelKey: "widgets.sizePresets.tile", w: 3, h: 2 },
+  { id: "sidebar", labelKey: "widgets.sizePresets.sidebar", w: 2, h: 4 },
+  { id: "square", labelKey: "widgets.sizePresets.square", w: 3, h: 3 },
+  { id: "wide", labelKey: "widgets.sizePresets.wide", w: 6, h: 2 },
+];
+
+const SHORTCUT: WidgetSizeConstraints = { minW: 2, maxW: 6, minH: 2, maxH: 4 };
+const SHORTCUT_PRESETS: WidgetSizePreset[] = [
+  { id: "tile", labelKey: "widgets.sizePresets.tile", w: 3, h: 2 },
+  { id: "tall", labelKey: "widgets.sizePresets.tall", w: 3, h: 3 },
+  { id: "wide", labelKey: "widgets.sizePresets.wide", w: 6, h: 2 },
+];
 
 export const WIDGET_REGISTRY_META_BASE: WidgetRegistryMetaBase[] = [
   {
@@ -19,9 +41,42 @@ export const WIDGET_REGISTRY_META_BASE: WidgetRegistryMetaBase[] = [
     category: "overview",
     categoryKey: "widgets.categories.overview",
     keywords: ["kpi", "metrics", "overview", "stats", "running"],
-    allowedSizes: [{ w: 12, h: 2 }],
+    allowedSizes: [
+      { w: 12, h: 2 },
+      { w: 6, h: 4 },
+      { w: 4, h: 6 },
+    ],
+    sizeConstraints: { minW: 4, maxW: 12, minH: 2, maxH: 6 },
+    sizePresets: [
+      { id: "strip", labelKey: "widgets.sizePresets.strip", w: 12, h: 2 },
+      { id: "grid", labelKey: "widgets.sizePresets.grid2x2", w: 6, h: 4 },
+      { id: "column", labelKey: "widgets.sizePresets.column", w: 4, h: 6 },
+    ],
     maxInstances: 1,
     defaultSize: { w: 12, h: 2 },
+  },
+  {
+    type: "kpi_cluster",
+    titleKey: "widgets.types.kpi_cluster.title",
+    subtitleKey: "widgets.types.kpi_cluster.subtitle",
+    descriptionKey: "widgets.types.kpi_cluster.description",
+    category: "overview",
+    categoryKey: "widgets.categories.overview",
+    keywords: ["kpi", "metrics", "overview", "stats", "cluster", "grid"],
+    allowedSizes: [
+      { w: 4, h: 8 },
+      { w: 6, h: 4 },
+      { w: 12, h: 2 },
+    ],
+    sizeConstraints: { minW: 4, maxW: 12, minH: 2, maxH: 8 },
+    sizePresets: [
+      { id: "sidebar", labelKey: "widgets.sizePresets.sidebar", w: 4, h: 8 },
+      { id: "grid", labelKey: "widgets.sizePresets.grid2x2", w: 6, h: 4 },
+      { id: "strip", labelKey: "widgets.sizePresets.strip", w: 12, h: 2 },
+    ],
+    maxInstances: 2,
+    defaultSize: { w: 4, h: 8 },
+    requiresConfig: true,
   },
   {
     type: "single_kpi",
@@ -33,8 +88,11 @@ export const WIDGET_REGISTRY_META_BASE: WidgetRegistryMetaBase[] = [
     keywords: ["kpi", "metric", "number", "stat"],
     allowedSizes: [
       { w: 3, h: 2 },
+      { w: 3, h: 3 },
       { w: 6, h: 2 },
     ],
+    sizeConstraints: KPI_TILE,
+    sizePresets: KPI_TILE_PRESETS,
     maxInstances: 8,
     defaultSize: { w: 3, h: 2 },
     requiresConfig: true,
@@ -47,7 +105,16 @@ export const WIDGET_REGISTRY_META_BASE: WidgetRegistryMetaBase[] = [
     category: "projects",
     categoryKey: "widgets.categories.projects",
     keywords: ["projects", "workspace", "docker", "repos"],
-    allowedSizes: [{ w: 12, h: 5 }],
+    allowedSizes: [
+      { w: 12, h: 5 },
+      { w: 6, h: 5 },
+    ],
+    sizeConstraints: { minW: 6, maxW: 12, minH: 4, maxH: 8 },
+    sizePresets: [
+      { id: "full", labelKey: "widgets.sizePresets.full", w: 12, h: 5 },
+      { id: "half", labelKey: "widgets.sizePresets.half", w: 6, h: 5 },
+      { id: "tall", labelKey: "widgets.sizePresets.tallPanel", w: 12, h: 7 },
+    ],
     maxInstances: 1,
     defaultSize: { w: 12, h: 5 },
   },
@@ -59,7 +126,16 @@ export const WIDGET_REGISTRY_META_BASE: WidgetRegistryMetaBase[] = [
     category: "agents",
     categoryKey: "widgets.categories.agents",
     keywords: ["agents", "ai", "automation", "cron"],
-    allowedSizes: [{ w: 12, h: 5 }],
+    allowedSizes: [
+      { w: 12, h: 5 },
+      { w: 6, h: 5 },
+    ],
+    sizeConstraints: { minW: 6, maxW: 12, minH: 4, maxH: 8 },
+    sizePresets: [
+      { id: "full", labelKey: "widgets.sizePresets.full", w: 12, h: 5 },
+      { id: "half", labelKey: "widgets.sizePresets.half", w: 6, h: 5 },
+      { id: "tall", labelKey: "widgets.sizePresets.tallPanel", w: 12, h: 7 },
+    ],
     maxInstances: 1,
     defaultSize: { w: 12, h: 5 },
   },
@@ -71,7 +147,15 @@ export const WIDGET_REGISTRY_META_BASE: WidgetRegistryMetaBase[] = [
     category: "activity",
     categoryKey: "widgets.categories.activity",
     keywords: ["activity", "logs", "history", "events"],
-    allowedSizes: [{ w: 12, h: 5 }],
+    allowedSizes: [
+      { w: 12, h: 5 },
+      { w: 6, h: 5 },
+    ],
+    sizeConstraints: { minW: 6, maxW: 12, minH: 4, maxH: 8 },
+    sizePresets: [
+      { id: "full", labelKey: "widgets.sizePresets.full", w: 12, h: 5 },
+      { id: "half", labelKey: "widgets.sizePresets.half", w: 6, h: 5 },
+    ],
     maxInstances: 1,
     defaultSize: { w: 12, h: 5 },
   },
@@ -86,6 +170,12 @@ export const WIDGET_REGISTRY_META_BASE: WidgetRegistryMetaBase[] = [
     allowedSizes: [
       { w: 6, h: 4 },
       { w: 12, h: 4 },
+    ],
+    sizeConstraints: { minW: 4, maxW: 12, minH: 3, maxH: 8 },
+    sizePresets: [
+      { id: "half", labelKey: "widgets.sizePresets.half", w: 6, h: 4 },
+      { id: "full", labelKey: "widgets.sizePresets.full", w: 12, h: 4 },
+      { id: "tall", labelKey: "widgets.sizePresets.tallPanel", w: 6, h: 6 },
     ],
     maxInstances: 2,
     defaultSize: { w: 6, h: 4 },
@@ -102,6 +192,8 @@ export const WIDGET_REGISTRY_META_BASE: WidgetRegistryMetaBase[] = [
       { w: 3, h: 2 },
       { w: 6, h: 2 },
     ],
+    sizeConstraints: SHORTCUT,
+    sizePresets: SHORTCUT_PRESETS,
     maxInstances: 12,
     defaultSize: { w: 3, h: 2 },
     requiresConfig: true,
@@ -118,8 +210,33 @@ export const WIDGET_REGISTRY_META_BASE: WidgetRegistryMetaBase[] = [
       { w: 3, h: 2 },
       { w: 6, h: 3 },
     ],
+    sizeConstraints: SHORTCUT,
+    sizePresets: SHORTCUT_PRESETS,
     maxInstances: 8,
     defaultSize: { w: 3, h: 2 },
+    requiresConfig: true,
+  },
+  {
+    type: "agent_last_run",
+    titleKey: "widgets.types.agent_last_run.title",
+    subtitleKey: "widgets.types.agent_last_run.subtitle",
+    descriptionKey: "widgets.types.agent_last_run.description",
+    category: "agents",
+    categoryKey: "widgets.categories.agents",
+    keywords: ["agent", "run", "last", "preview", "status", "output"],
+    allowedSizes: [
+      { w: 6, h: 4 },
+      { w: 12, h: 4 },
+      { w: 12, h: 6 },
+    ],
+    sizeConstraints: { minW: 4, maxW: 12, minH: 4, maxH: 10 },
+    // 2×2 matches kpi_cluster "2×2 grid" footprint (6×4) so heights align side-by-side.
+    sizePresets: [
+      { id: "grid2x2", labelKey: "widgets.sizePresets.grid2x2", w: 6, h: 4 },
+      { id: "full", labelKey: "widgets.sizePresets.full", w: 12, h: 6 },
+    ],
+    maxInstances: 8,
+    defaultSize: { w: 6, h: 4 },
     requiresConfig: true,
   },
   {
@@ -129,13 +246,21 @@ export const WIDGET_REGISTRY_META_BASE: WidgetRegistryMetaBase[] = [
     descriptionKey: "widgets.types.agent_shortcut.description",
     category: "agents",
     categoryKey: "widgets.categories.agents",
-    keywords: ["agent", "shortcut", "pin", "ai"],
+    keywords: ["agent", "card", "run", "shortcut", "pin", "ai"],
     allowedSizes: [
-      { w: 3, h: 2 },
-      { w: 6, h: 3 },
+      { w: 4, h: 4 },
+      { w: 6, h: 4 },
+      { w: 8, h: 4 },
+      { w: 12, h: 4 },
+    ],
+    sizeConstraints: { minW: 4, maxW: 12, minH: 3, maxH: 6 },
+    sizePresets: [
+      { id: "half", labelKey: "widgets.sizePresets.half", w: 6, h: 4 },
+      { id: "wide", labelKey: "widgets.sizePresets.wide", w: 8, h: 4 },
+      { id: "full", labelKey: "widgets.sizePresets.full", w: 12, h: 4 },
     ],
     maxInstances: 8,
-    defaultSize: { w: 3, h: 2 },
+    defaultSize: { w: 6, h: 4 },
     requiresConfig: true,
   },
   {
@@ -150,6 +275,8 @@ export const WIDGET_REGISTRY_META_BASE: WidgetRegistryMetaBase[] = [
       { w: 3, h: 2 },
       { w: 6, h: 2 },
     ],
+    sizeConstraints: KPI_TILE,
+    sizePresets: KPI_TILE_PRESETS,
     maxInstances: 1,
     defaultSize: { w: 3, h: 2 },
   },
@@ -232,3 +359,17 @@ export const KPI_METRIC_OPTIONS = KPI_METRIC_OPTION_DEFS.map((opt) => ({
   ...opt,
   label: opt.labelKey,
 }));
+
+export const KPI_CLUSTER_LAYOUT_OPTIONS = [
+  { layout: "grid" as const, labelKey: "widgets.kpiClusterLayout.grid" },
+  { layout: "row" as const, labelKey: "widgets.kpiClusterLayout.row" },
+  { layout: "column" as const, labelKey: "widgets.kpiClusterLayout.column" },
+];
+
+export function useKpiClusterLayoutOptions() {
+  const { t } = useTranslation();
+  return useMemo(
+    () => KPI_CLUSTER_LAYOUT_OPTIONS.map((opt) => ({ ...opt, label: t(opt.labelKey) })),
+    [t],
+  );
+}

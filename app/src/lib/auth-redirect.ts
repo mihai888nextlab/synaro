@@ -37,7 +37,11 @@ export async function redirectIfAuthed<P extends Record<string, unknown> = Recor
   props?: P,
 ): Promise<GetServerSidePropsResult<P>> {
   const session = await getServerSession(ctx.req, ctx.res, authOptions);
-  if (session) {
+  // Only treat a FULLY valid session as "authed". A blocked session (unverified
+  // email or bumped sessionVersion) comes back truthy but with no `user` — using
+  // `if (session)` here would bounce it to /dashboard, which requires `user.id`
+  // and bounces it right back to /login → infinite redirect loop.
+  if (session?.user?.id) {
     return {
       redirect: {
         destination,

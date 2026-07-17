@@ -111,6 +111,9 @@ services:
       PORT: 3001
       LOG_LEVEL: info
       ALLOWED_ORIGINS: https://${SYNARO_DOMAIN}
+    volumes:
+      - ./services/project-service/src:/app/src
+      - ./services/project-service/prisma:/app/prisma
     networks:
       - synaro-internal
     depends_on:
@@ -134,6 +137,8 @@ services:
       ALLOWED_ORIGINS: https://${SYNARO_DOMAIN}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./services/environment-service/src:/app/src
+      - ./services/environment-service/prisma:/app/prisma
     networks:
       - synaro-internal
     depends_on:
@@ -159,6 +164,8 @@ services:
       PROJECTS_PATH: /projects
     volumes:
       - projects_data:/projects
+      - ./services/ai-orchestration-service/src:/app/src
+      - ./services/ai-orchestration-service/prisma:/app/prisma
     networks:
       - synaro-internal
     depends_on:
@@ -186,6 +193,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - projects_data:/projects
       - /etc/rancher/k3s/k3s.yaml:/root/.kube/config:ro
+      - ./services/execution-manager/src:/app/src
+      - ./services/execution-manager/prisma:/app/prisma
     networks:
       - synaro-internal
     depends_on:
@@ -210,6 +219,9 @@ services:
       AGENT_RUNNER_URL: http://agent-runner:3006
       AGENT_SERVICE_KEY: ${AGENT_SERVICE_KEY}
       APP_INTERNAL_URL: http://app:3000
+    volumes:
+      - ./services/agent-service/src:/app/src
+      - ./services/agent-service/prisma:/app/prisma
     networks:
       - synaro-internal
     depends_on:
@@ -234,6 +246,9 @@ services:
       AGENT_SERVICE_URL: http://agent-service:3005
       AGENT_SERVICE_KEY: ${AGENT_SERVICE_KEY}
       AGENT_CRON_TIMEZONE: ${AGENT_CRON_TIMEZONE:-Europe/Bucharest}
+    volumes:
+      - ./services/agent-runner/src:/app/src
+      - ./services/agent-runner/prisma:/app/prisma
     networks:
       - synaro-internal
     depends_on:

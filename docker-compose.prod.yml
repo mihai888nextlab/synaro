@@ -274,7 +274,12 @@ services:
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
       RESEND_API_KEY: ${RESEND_API_KEY}
       RESEND_FROM: ${RESEND_FROM:-Synaro <noreply@synaro.tech>}
+      # Server-side service URLs (read by API routes; the NEXT_PUBLIC_* vars below
+      # are client bundles only and are NOT read by server code).
       ENVIRONMENT_SERVICE_URL: http://environment-service:3002
+      AI_SERVICE_URL: http://ai-orchestration-service:3003
+      AGENT_SERVICE_URL: http://agent-service:3005
+      AGENT_SERVICE_KEY: ${AGENT_SERVICE_KEY}
       NEXT_PUBLIC_PROJECT_SERVICE_URL: http://project-service:3001
       NEXT_PUBLIC_AI_SERVICE_URL: http://ai-orchestration-service:3003
       NEXT_PUBLIC_AGENT_SERVICE_URL: http://agent-service:3005

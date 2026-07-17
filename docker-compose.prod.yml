@@ -135,6 +135,11 @@ services:
       PORT: 3002
       LOG_LEVEL: info
       ALLOWED_ORIGINS: https://${SYNARO_DOMAIN}
+      # Set => project containers get Traefik labels + a {subdomain}.{domain} URL.
+      # Unset => they fall back to dev-style host ports, which prod cannot route.
+      SYNARO_DOMAIN: ${SYNARO_DOMAIN}
+      # terminal-ws-token.ts throws at startup without one of these.
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./services/environment-service/src:/app/src
@@ -162,6 +167,7 @@ services:
       ALLOWED_ORIGINS: https://${SYNARO_DOMAIN}
       KIMI_API_KEY: ${KIMI_API_KEY}
       PROJECTS_PATH: /projects
+      ENVIRONMENT_SERVICE_URL: http://environment-service:3002
     volumes:
       - projects_data:/projects
       - ./services/ai-orchestration-service/src:/app/src
@@ -186,6 +192,9 @@ services:
       NODE_ENV: production
       PORT: 3004
       LOG_LEVEL: info
+      # The manager reads PROJECTS_VOLUME_PATH; without it, it falls back to a
+      # host path that does not exist inside this container.
+      PROJECTS_VOLUME_PATH: /projects
       PROJECTS_PATH: /projects
       K8S_NAMESPACE: synaro-projects
       BASE_DOMAIN: ${SYNARO_DOMAIN}
@@ -216,6 +225,8 @@ services:
       PORT: 3005
       LOG_LEVEL: info
       ALLOWED_ORIGINS: https://${SYNARO_DOMAIN}
+      # index.ts reads CORS_ORIGIN, not ALLOWED_ORIGINS; without it CORS defaults to '*'.
+      CORS_ORIGIN: https://${SYNARO_DOMAIN}
       AGENT_RUNNER_URL: http://agent-runner:3006
       AGENT_SERVICE_KEY: ${AGENT_SERVICE_KEY}
       APP_INTERNAL_URL: http://app:3000

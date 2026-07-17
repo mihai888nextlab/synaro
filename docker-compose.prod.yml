@@ -274,6 +274,7 @@ services:
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
       RESEND_API_KEY: ${RESEND_API_KEY}
       RESEND_FROM: ${RESEND_FROM:-Synaro <noreply@synaro.tech>}
+      ENVIRONMENT_SERVICE_URL: http://environment-service:3002
       NEXT_PUBLIC_PROJECT_SERVICE_URL: http://project-service:3001
       NEXT_PUBLIC_AI_SERVICE_URL: http://ai-orchestration-service:3003
       NEXT_PUBLIC_AGENT_SERVICE_URL: http://agent-service:3005
@@ -308,6 +309,8 @@ services:
       postgresql:
         condition: service_healthy
       project-service:
+        condition: service_started
+      environment-service:
         condition: service_started
       ai-orchestration-service:
         condition: service_started

@@ -173,5 +173,12 @@ export async function runTool(
 ): Promise<string> {
   const tool = toolset.byName.get(name)
   if (!tool) return `Unknown tool: ${name}`
-  return tool.execute(args, ctx)
+  try {
+    return await tool.execute(args, ctx)
+  } catch (err) {
+    // A throwing tool must not crash the whole run — feed the failure back as an
+    // observation so the model can retry or finish, and name the tool for the logs.
+    const message = err instanceof Error ? err.message : String(err)
+    return `Error running tool "${name}": ${message}`
+  }
 }

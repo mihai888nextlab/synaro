@@ -21,7 +21,9 @@ const MAX_PORT = 4999
  */
 const SYNARO_DOMAIN = process.env.SYNARO_DOMAIN?.trim() ?? ''
 const TRAEFIK_NETWORK = process.env.TRAEFIK_NETWORK?.trim() || 'traefik-net'
-const ACME_RESOLVER = process.env.ACME_RESOLVER?.trim() || 'letsencrypt'
+// Empty by default: only pin an ACME certresolver on env routers when one is actually configured
+// in Traefik. Referencing a resolver Traefik doesn't have makes it drop the whole router (404).
+const ACME_RESOLVER = process.env.ACME_RESOLVER?.trim() || ''
 
 /** Build a URL-safe subdomain from a project slug + first 6 chars of env UUID. */
 function buildSubdomain(projectSlug: string, envId: string): string {
@@ -259,8 +261,13 @@ export async function createEnvironment(
       const routerName = `synaro-env-${environment.id}`
       labels['traefik.enable'] = 'true'
       labels[`traefik.http.routers.${routerName}.rule`] = `Host(\`${subdomain}.${SYNARO_DOMAIN}\`)`
+      // Mirror the working app router: TLS on the websecure entrypoint, cert from the file provider.
+      labels[`traefik.http.routers.${routerName}.entrypoints`] = 'websecure'
       labels[`traefik.http.routers.${routerName}.tls`] = 'true'
-      labels[`traefik.http.routers.${routerName}.tls.certresolver`] = ACME_RESOLVER
+      // Only reference a certresolver when Traefik actually has one — otherwise it drops the router.
+      if (ACME_RESOLVER) {
+        labels[`traefik.http.routers.${routerName}.tls.certresolver`] = ACME_RESOLVER
+      }
       labels[`traefik.http.services.${routerName}.loadbalancer.server.port`] = '3000'
     }
 
@@ -429,7 +436,11 @@ export async function destroyEnvironment(id: string) {
     } catch {
       // container may already be stopped
     }
-    await container.remove()
+    try {
+      await container.remove()
+    } catch {
+      // container may already be removed (e.g. manual `docker rm`) — still delete the DB row
+    }
   }
 
   return prisma.environment.delete({ where: { id } })

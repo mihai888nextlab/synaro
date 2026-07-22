@@ -201,10 +201,12 @@ export async function createEnvironment(
     // no host port binding needed. In local-dev mode we still allocate a host port.
     const useTraefik = Boolean(SYNARO_DOMAIN)
     const port = useTraefik ? null : await allocatePort()
-    const subdomain =
-      useTraefik && options?.projectSlug
-        ? buildSubdomain(options.projectSlug, environment.id)
-        : null
+    // In Traefik mode every environment MUST get a subdomain — it's the only way to reach the
+    // container (no host port is bound). Fall back to a generic label if no slug was provided,
+    // otherwise the env has no route and `run` fails with "Environment has no port assigned".
+    const subdomain = useTraefik
+      ? buildSubdomain(options?.projectSlug || 'app', environment.id)
+      : null
 
     // Pull image if not present
     await new Promise<void>((resolve, reject) => {

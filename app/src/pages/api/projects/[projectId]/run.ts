@@ -51,7 +51,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const env = pickActiveRuntimeEnvironment(envs);
   if (!env) return res.status(400).json({ error: "No running environment. Start the runtime first." });
   if (!env.port && !env.publicUrl) return res.status(400).json({ error: "Environment has no port assigned." });
-  const previewUrl = `/api/preview/${env.id}`;
+  // In production (Traefik) the container is reachable only at its public subdomain URL — the
+  // /api/preview proxy needs a bound host port, which only exists in local-dev mode. Prefer the
+  // absolute public URL whenever the environment has one.
+  const previewUrl =
+    env.publicUrl && /^https?:\/\//.test(env.publicUrl) ? env.publicUrl : `/api/preview/${env.id}`;
 
   if (req.method === "GET") {
     const action = typeof req.query.action === "string" ? req.query.action : null;

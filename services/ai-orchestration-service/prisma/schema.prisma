@@ -29,6 +29,7 @@ enum TaskStatus {
   ANALYZING
   GENERATING
   APPLYING
+  VERIFYING
   DONE
   FAILED
 }

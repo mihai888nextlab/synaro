@@ -2,6 +2,48 @@ const ENV_SERVICE_URL = process.env.ENVIRONMENT_SERVICE_URL ?? 'http://localhost
 
 export type EnvRow = { id: string; status: string; projectId: string }
 
+/**
+ * Run a shell command inside the environment container (env-service `/terminal`).
+ * Used by the health check to start the dev server, poll the port, tail logs, and probe HTTP.
+ */
+export async function remoteExec(
+  envId: string,
+  command: string,
+  timeoutMs = 120_000,
+): Promise<{ output: string; exitCode: number | null }> {
+  const res = await fetch(
+    `${ENV_SERVICE_URL}/api/environments/${encodeURIComponent(envId)}/terminal`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command }),
+      signal: AbortSignal.timeout(timeoutMs),
+    },
+  )
+  const text = await res.text()
+  if (!res.ok) throw new Error(text || `Terminal exec failed (${res.status})`)
+  let data: { output?: unknown; exitCode?: unknown } = {}
+  try {
+    data = JSON.parse(text) as typeof data
+  } catch {
+    data = {}
+  }
+  return {
+    output: typeof data.output === 'string' ? data.output : '',
+    exitCode: typeof data.exitCode === 'number' ? data.exitCode : null,
+  }
+}
+
+/** Tail the previewed app's dev-server log inside the container. */
+export async function readAppLog(envId: string, lines = 150): Promise<string> {
+  const { output } = await remoteExec(
+    envId,
+    `tail -n ${lines} /tmp/app.log 2>/dev/null || echo '(no logs yet)'`,
+    30_000,
+  )
+  return output
+}
+
 /** Returns the RUNNING environment for a project, or null if none is active. */
 export async function getActiveEnvironment(projectId: string): Promise<EnvRow | null> {
   const res = await fetch(

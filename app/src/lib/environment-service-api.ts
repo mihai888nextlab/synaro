@@ -275,9 +275,14 @@ export async function remoteRenameWorkspacePath(
   }
 }
 
-export async function remoteDestroyEnvironment(envId: string): Promise<void> {
+export async function remoteDestroyEnvironment(
+  envId: string,
+  opts?: { purgeVolume?: boolean },
+): Promise<void> {
   const base = environmentServiceBaseUrl();
-  const res = await fetch(`${base}/api/environments/${encodeURIComponent(envId)}`, {
+  // Only purge the persistent workspace volume on true project deletion — never on the recreate flow.
+  const query = opts?.purgeVolume ? "?purgeVolume=1" : "";
+  const res = await fetch(`${base}/api/environments/${encodeURIComponent(envId)}${query}`, {
     method: "DELETE",
     signal: AbortSignal.timeout(120_000),
   });
@@ -298,7 +303,8 @@ export async function destroyAllRemoteEnvironmentsForProject(projectId: string):
   }
   for (const row of rows) {
     try {
-      await remoteDestroyEnvironment(row.id);
+      // Project is being deleted — also remove the persistent workspace volume.
+      await remoteDestroyEnvironment(row.id, { purgeVolume: true });
     } catch {
       /* continue — still delete app project row */
     }

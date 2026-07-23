@@ -1,4 +1,4 @@
-import { kimi, MODELS, TOKEN_BUDGETS } from '../lib/kimi.js'
+import { kimi, MODELS, ORCHESTRATION } from '../lib/kimi.js'
 import { buildRepoTree } from '../lib/filesystem.js'
 import {
   getActiveEnvironment,
@@ -17,9 +17,15 @@ import {
 } from '../lib/task-intent.js'
 import { streamKimiChatCompletion } from '../lib/kimi-stream.js'
 import { readWorkspaceFilesParallel } from '../lib/read-workspace-files.js'
+import { loadRecentTaskContext } from '../lib/memory.js'
+import { planWork } from './planner.js'
+import { runWorkersInParallel, runFixPass } from './worker.js'
+import { integrate } from './integrator.js'
+import { runHealthCheck } from './health-check.js'
+import { mergeChanges } from './parse-changes.js'
 import { prisma } from '../lib/prisma.js'
 
-type TaskStatus = 'PENDING' | 'ANALYZING' | 'GENERATING' | 'APPLYING' | 'DONE' | 'FAILED'
+type TaskStatus = 'PENDING' | 'ANALYZING' | 'GENERATING' | 'APPLYING' | 'VERIFYING' | 'DONE' | 'FAILED'
 
 interface FileChange {
   path: string
@@ -43,10 +49,16 @@ interface TaskResult {
   changes: FileChange[]
   summary: string
   meta?: {
-    /** Number of workspace files successfully read for this task. */
+    /** Number of workspace files seen for this task. */
     exploredFiles: number
-    /** Approximate number of AI calls made (analysis + generation passes). */
+    /** Approximate number of AI calls made (plan + workers + integrator + fixes). */
     aiSteps: number
+    /** Role-workers dispatched by the planner. */
+    workers?: number
+    /** Self-heal iterations run by the health loop. */
+    healthIterations?: number
+    /** Whether the app passed the health check. */
+    healthy?: boolean
   }
   git?: TaskGitOutcome
   /** Set when a new GitHub repo was linked — app should persist on Project.cloneRepositoryUrl */
@@ -103,113 +115,6 @@ Return ONLY valid JSON, no explanation.`
     files,
     inputTokens: response.usage?.prompt_tokens ?? 0,
     outputTokens: response.usage?.completion_tokens ?? 0,
-  }
-}
-
-// Step 2 — generate all file changes needed for the task
-async function generateChanges(
-  prompt: string,
-  existingFiles: { path: string; content: string }[],
-  taskId?: string,
-): Promise<{ result: TaskResult; inputTokens: number; outputTokens: number }> {
-  const systemPrompt = `You are an expert software engineer. Given a task and the current source files, produce all necessary file changes to complete the task — including new files.
-
-Return ONLY a JSON object in this exact format:
-{
-  "summary": "One-sentence description of what was done",
-  "changes": [
-    {
-      "path": "relative/path/to/file.ts",
-      "content": "full file content"
-    }
-  ]
-}
-
-Rules:
-- Always return the FULL file content for every changed or created file (never null or omit content)
-- Every item in changes must have path (string) and content (string)
-- Create new files when needed (routes, modules, components, etc.)
-- Include all files required for the feature to work end-to-end
-- Wire new code into existing entry points (index.ts, app.ts, router, etc.) when needed
-- Return ONLY valid JSON — no explanation outside the JSON block
-- For Next.js projects: do NOT set distDir in next.config.js/mjs (always use the default .next); do NOT set output: 'export' or output: 'standalone'; always include a dev script ("next dev") in package.json; the app must bind to process.env.PORT (default 3000)`
-
-  const filesSection =
-    existingFiles.length > 0
-      ? existingFiles.map((f) => `### ${f.path}\n\`\`\`\n${f.content}\n\`\`\``).join('\n\n')
-      : '(no existing files yet — this is a new project)'
-
-  const userPrompt = `Task: ${prompt}\n\nExisting files:\n\n${filesSection}`
-  const messages = [
-    { role: 'system' as const, content: systemPrompt },
-    { role: 'user' as const, content: userPrompt },
-  ]
-
-  let raw: string
-  let finishReason: string | null | undefined
-  let inputTokens = 0
-  let outputTokens = 0
-
-  if (taskId) {
-    const streamed = await streamKimiChatCompletion({
-      taskId,
-      messages,
-      maxTokens: TOKEN_BUDGETS.MAX_OUTPUT,
-    })
-    raw = streamed.content || '{}'
-    inputTokens = streamed.inputTokens
-    outputTokens = streamed.outputTokens
-    finishReason = streamed.finishReason
-  } else {
-    const response = await kimi.chat.completions.create({
-      model: MODELS.GENERATE,
-      max_tokens: TOKEN_BUDGETS.MAX_OUTPUT,
-      messages,
-    })
-    raw = response.choices[0]?.message?.content ?? '{}'
-    finishReason = response.choices[0]?.finish_reason
-    inputTokens = response.usage?.prompt_tokens ?? 0
-    outputTokens = response.usage?.completion_tokens ?? 0
-  }
-
-  let parsed: { summary?: string; changes?: FileChange[] } = {}
-  let parseError: string | null = null
-  try {
-    // Strip potential markdown code fences around the JSON
-    const cleaned = raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```$/m, '').trim()
-    parsed = JSON.parse(cleaned) as typeof parsed
-  } catch (e) {
-    parseError = String(e)
-  }
-
-  if (finishReason === 'length') {
-    throw new Error(
-      `AI response was cut off (output token limit reached at ${TOKEN_BUDGETS.MAX_OUTPUT} tokens). ` +
-        'The generated project is too large for a single pass. Try a simpler prompt or fewer features.',
-    )
-  }
-
-  if (parseError) {
-    throw new Error(`AI returned invalid JSON — could not parse file changes. Parse error: ${parseError}`)
-  }
-
-  const changes = (parsed.changes ?? [])
-    .filter(
-      (c): c is FileChange =>
-        Boolean(c) &&
-        typeof c.path === 'string' &&
-        c.path.trim().length > 0 &&
-        typeof c.content === 'string',
-    )
-    .map((c) => ({ path: c.path.trim(), content: c.content }))
-
-  return {
-    result: {
-      summary: parsed.summary ?? 'Changes applied.',
-      changes,
-    },
-    inputTokens,
-    outputTokens,
   }
 }
 
@@ -590,75 +495,122 @@ export async function executeTask(
 
     const shouldGitAfterCode = intent.mode === 'code_then_git'
 
-    // ── Step 2: List all workspace files ─────────────────────────────────
-    await updateProgress(taskId, 'Scanning your repository...')
+    const progress = async (msg: string) => {
+      await updateProgress(taskId, msg)
+    }
+
+    // ── Memory: replay recent tasks so follow-ups build on prior work ─────
+    const memory = await loadRecentTaskContext(task.projectId, taskId)
+
+    // ── Scan workspace + plan the work into disjoint-ownership workers ────
+    await progress('Scanning your repository...')
     const allPaths = await listContainerFiles(env.id)
     const repoTree = buildRepoTree(allPaths.map((p) => ({ path: p, size: 0 })))
-    await updateProgress(taskId, `Found ${allPaths.length} file${allPaths.length === 1 ? '' : 's'} — identifying relevant ones...`)
 
-    // ── Step 3: Identify relevant files ──────────────────────────────────
+    await progress('Planning the work...')
     aiSteps += 1
-    const analysis = await analyzeRelevantFiles(task.prompt, repoTree)
-    totalInputTokens += analysis.inputTokens
-    totalOutputTokens += analysis.outputTokens
+    const planned = await planWork(task.prompt, repoTree, memory)
+    totalInputTokens += planned.inputTokens
+    totalOutputTokens += planned.outputTokens
+    const plan = planned.plan
 
-    // ── Step 4: Read relevant files in parallel ───────────────────────────
-    // Hard safety: even if upstream returns malformed shapes, never allow a non-array here.
-    const relevantFiles: string[] = Array.isArray((analysis as any).files)
-      ? ((analysis as any).files as unknown[]).filter((f): f is string => typeof f === 'string')
-      : analysis.files
-    const fileCount = relevantFiles.length
-    await updateProgress(
-      taskId,
-      fileCount > 0
-        ? `Reading ${fileCount} relevant file${fileCount === 1 ? '' : 's'}...`
-        : 'No existing files — starting from scratch...',
-    )
-    const fileContents = await Promise.all(
-      relevantFiles.map(async (filePath) => {
-        const content = await readContainerFile(env.id, filePath)
-        return content !== null ? { path: filePath, content } : null
-      }),
-    )
-    const existingFiles = fileContents.filter((f): f is { path: string; content: string } => f !== null)
-    exploredFiles += existingFiles.length
-
-    // ── Step 5: Generate changes ─────────────────────────────────────────
+    // ── Workers run in parallel on their owned files ─────────────────────
     await updateTask(taskId, 'GENERATING', { streamContent: null })
-    await updateProgress(taskId, 'AI is writing your code...')
+    await progress(
+      `Dispatching ${plan.workers.length} worker${plan.workers.length === 1 ? '' : 's'} (${plan.workers
+        .map((w) => w.role)
+        .join(', ')})...`,
+    )
+    const workerOutputs = await runWorkersInParallel(env.id, plan.workers, task.prompt, memory, progress)
+    aiSteps += plan.workers.length
+    for (const w of workerOutputs) {
+      totalInputTokens += w.inputTokens
+      totalOutputTokens += w.outputTokens
+    }
 
-    aiSteps += 1
-    const generation = await generateChanges(task.prompt, existingFiles, taskId)
-    totalInputTokens += generation.inputTokens
-    totalOutputTokens += generation.outputTokens
-
-    // ── Step 6: Write files into the container ────────────────────────────
-    await updateTask(taskId, 'APPLYING')
-
-    if (generation.result.changes.length === 0) {
+    const workerChanges = mergeChanges(workerOutputs.flatMap((w) => w.changes))
+    if (workerChanges.length === 0) {
       throw new Error(
-        'AI did not produce any file changes. The response may have been empty or malformed. ' +
+        'The workers did not produce any file changes. The response may have been empty or malformed. ' +
           'Please try again with a more specific prompt.',
       )
     }
 
-    const existingByPath = new Map(existingFiles.map((f) => [f.path, f.content]))
-    const enrichedChanges = generation.result.changes.map((c) => ({
+    // ── Apply worker output, then integrate (wire the modules together) ──
+    await updateTask(taskId, 'APPLYING')
+    // Snapshot pre-task content of changed files for diffing before overwriting.
+    const priorContent = new Map<string, string>()
+    for (const f of await readWorkspaceFilesParallel(env.id, workerChanges.map((c) => c.path))) {
+      priorContent.set(f.path, f.content)
+    }
+    await progress(`Writing ${workerChanges.length} file${workerChanges.length === 1 ? '' : 's'}...`)
+    await writeContainerFiles(env.id, workerChanges.map(({ path, content }) => ({ path, content })))
+
+    const changedPaths = new Set(workerChanges.map((c) => c.path))
+    const allPathsAfter = Array.from(new Set([...allPaths, ...changedPaths]))
+
+    await progress('Integrating modules...')
+    aiSteps += 1
+    const integration = await integrate(env.id, task.prompt, plan, [...changedPaths], allPathsAfter)
+    totalInputTokens += integration.inputTokens
+    totalOutputTokens += integration.outputTokens
+    if (integration.changes.length > 0) {
+      for (const f of await readWorkspaceFilesParallel(env.id, integration.changes.map((c) => c.path))) {
+        if (!priorContent.has(f.path)) priorContent.set(f.path, f.content)
+      }
+      await writeContainerFiles(env.id, integration.changes.map(({ path, content }) => ({ path, content })))
+      integration.changes.forEach((c) => changedPaths.add(c.path))
+    }
+    let finalChanges = mergeChanges([...integration.changes, ...workerChanges])
+
+    // ── Health check + self-heal loop ────────────────────────────────────
+    await updateTask(taskId, 'VERIFYING')
+    await progress('Verifying the app runs...')
+    let health = await runHealthCheck(env.id, progress)
+    let healthIterations = 0
+    while (!health.healthy && healthIterations < ORCHESTRATION.MAX_HEALTH_ITERATIONS) {
+      healthIterations += 1
+      await progress(
+        `Health check failed — self-healing (attempt ${healthIterations}/${ORCHESTRATION.MAX_HEALTH_ITERATIONS})...`,
+      )
+      const fix = await runFixPass(
+        env.id,
+        task.prompt,
+        { error: health.error ?? 'unknown error', log: health.log },
+        [...changedPaths],
+      )
+      totalInputTokens += fix.inputTokens
+      totalOutputTokens += fix.outputTokens
+      aiSteps += 1
+      if (fix.changes.length === 0) break
+      for (const f of await readWorkspaceFilesParallel(env.id, fix.changes.map((c) => c.path))) {
+        if (!priorContent.has(f.path)) priorContent.set(f.path, f.content)
+      }
+      await writeContainerFiles(env.id, fix.changes.map(({ path, content }) => ({ path, content })))
+      fix.changes.forEach((c) => changedPaths.add(c.path))
+      finalChanges = mergeChanges([...fix.changes, ...finalChanges])
+      health = await runHealthCheck(env.id, progress)
+    }
+
+    // ── Assemble result ──────────────────────────────────────────────────
+    exploredFiles = allPaths.length
+    const enrichedChanges = finalChanges.map((c) => ({
       ...c,
-      previousContent: existingByPath.get(c.path) ?? null,
+      previousContent: priorContent.get(c.path) ?? null,
     }))
-
-    const changeCount = enrichedChanges.length
-    await updateProgress(taskId, `Writing ${changeCount} file${changeCount === 1 ? '' : 's'} to your project...`)
-    await writeContainerFiles(
-      env.id,
-      enrichedChanges.map(({ path, content }) => ({ path, content })),
-    )
-
+    const healthNote = health.healthy
+      ? ''
+      : ` ⚠ The app did not pass the health check after ${healthIterations} fix attempt${healthIterations === 1 ? '' : 's'}: ${health.error ?? 'unknown error'}`
     const result: TaskResult = {
-      ...generation.result,
+      summary: `${plan.summary}${healthNote}`,
       changes: enrichedChanges,
-      meta: { exploredFiles, aiSteps },
+      meta: {
+        exploredFiles,
+        aiSteps,
+        workers: plan.workers.length,
+        healthIterations,
+        healthy: health.healthy,
+      },
     }
     let linkedCloneRepositoryUrl: string | undefined
 

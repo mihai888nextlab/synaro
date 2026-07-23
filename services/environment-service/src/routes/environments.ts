@@ -384,8 +384,12 @@ export const environmentRoutes: FastifyPluginAsync = async (app) => {
   // DELETE /api/environments/:id
   app.delete('/:id', async (req, reply) => {
     const { id } = req.params as { id: string }
+    // ?purgeVolume=1 also removes the persistent workspace volume — only for full project deletion,
+    // NOT for the recreate flow (which must keep the volume so work survives).
+    const { purgeVolume } = req.query as { purgeVolume?: string }
+    const removeVolume = purgeVolume === '1' || purgeVolume === 'true'
     try {
-      await destroyEnvironment(id)
+      await destroyEnvironment(id, { removeVolume })
       return reply.status(204).send()
     } catch (err) {
       return reply.status(500).send({ error: 'Failed to destroy environment', detail: String(err) })

@@ -1,4 +1,11 @@
-export type AiTaskStatus = "PENDING" | "ANALYZING" | "GENERATING" | "APPLYING" | "DONE" | "FAILED";
+export type AiTaskStatus =
+  | "PENDING"
+  | "ANALYZING"
+  | "GENERATING"
+  | "APPLYING"
+  | "VERIFYING"
+  | "DONE"
+  | "FAILED";
 
 export type AiRemoteTask = {
   id: string;
@@ -22,6 +29,12 @@ export type TaskGitResult = {
 export type TaskResult = {
   summary?: string | null;
   changes: { path: string; content: string; previousContent?: string | null }[];
-  meta?: { exploredFiles?: number; aiSteps?: number };
+  meta?: {
+    exploredFiles?: number;
+    aiSteps?: number;
+    workers?: number;
+    healthIterations?: number;
+    healthy?: boolean;
+  };
   git?: TaskGitResult;
 };

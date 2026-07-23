@@ -261,6 +261,7 @@ function pillStatusLabel(
     if (/reading|scanning/i.test(raw)) return "Reading";
     if (/analyzing|identifying/i.test(raw)) return "Analyzing";
     if (/applying|writing \d+ file/i.test(raw)) return "Applying";
+    if (/verify|health|integrat|self-heal/i.test(raw)) return "Verifying";
     if (/github|commit|push/i.test(raw)) return "Syncing";
     if (/summariz/i.test(raw)) return "Summarizing";
     if (raw.length > 22) return `${raw.slice(0, 20)}…`;
@@ -273,6 +274,8 @@ function pillStatusLabel(
       return "Generating";
     case "APPLYING":
       return "Applying";
+    case "VERIFYING":
+      return "Verifying";
     default:
       return "Running";
   }

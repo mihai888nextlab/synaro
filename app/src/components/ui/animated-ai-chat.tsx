@@ -483,6 +483,7 @@ function statusLabel(status: TaskStatus, t: (key: string) => string): string {
     case "ANALYZING": return t("aiChat.statusAnalyzing");
     case "GENERATING": return t("aiChat.statusGenerating");
     case "APPLYING": return t("aiChat.statusApplying");
+    case "VERIFYING": return t("aiChat.statusVerifying");
     case "DONE": return t("aiChat.statusDone");
     case "FAILED": return t("aiChat.statusFailed");
   }
@@ -498,6 +499,8 @@ function thinkingForStatus(status: TaskStatus, t: (key: string) => string): stri
       return t("aiChat.thinkingGenerating");
     case "APPLYING":
       return t("aiChat.thinkingApplying");
+    case "VERIFYING":
+      return t("aiChat.thinkingVerifying");
     default:
       return null;
   }

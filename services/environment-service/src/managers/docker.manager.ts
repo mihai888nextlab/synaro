@@ -37,6 +37,16 @@ function buildSubdomain(projectSlug: string, envId: string): string {
   return `${slug}-${suffix}`
 }
 
+/**
+ * Named Docker volume that persists a project's workspace across env-container recreation.
+ * Keyed by **projectId** (not env id) so a fresh env for the same project reuses the same files —
+ * without this, destroying/recreating a container wipes all non-git work.
+ */
+export function workspaceVolumeName(projectId: string): string {
+  // Docker volume names must be [a-zA-Z0-9][a-zA-Z0-9_.-]*; project ids are UUIDs, sanitize defensively.
+  return `synaro-ws-${projectId.replace(/[^a-zA-Z0-9_.-]/g, '-')}`
+}
+
 /** Compute public URL for an environment. Falls back to localhost:{port} for local dev. */
 export function envPublicUrl(env: { subdomain?: string | null; port?: number | null }): string | null {
   if (SYNARO_DOMAIN && env.subdomain) return `https://${env.subdomain}.${SYNARO_DOMAIN}`
@@ -242,7 +252,10 @@ export async function createEnvironment(
         'apk add --no-cache git >/dev/null 2>&1 || true; ' +
         'mkdir -p /tmp/synaro-workspace; cd /tmp/synaro-workspace; ' +
         'rm -f .synaro-clone-ok .synaro-clone-failed; ' +
-        'if git clone --depth 1 "$SYNARO_GIT_CLONE_URL" app; then touch .synaro-clone-ok; ' +
+        // Persistent volume: if the workspace already has content from a prior run, reuse it —
+        // a non-empty `app` would make `git clone app` fail. Only clone into an empty/missing dir.
+        'if [ -d app ] && [ -n "$(ls -A app 2>/dev/null)" ]; then touch .synaro-clone-ok; ' +
+        'elif git clone --depth 1 "$SYNARO_GIT_CLONE_URL" app; then touch .synaro-clone-ok; ' +
         'else touch .synaro-clone-failed; fi; ' +
         'exec tail -f /dev/null'
     } else {
@@ -284,6 +297,16 @@ export async function createEnvironment(
       // In Traefik mode put the container on the shared proxy network so Traefik can reach it.
       // In local-dev mode use the default bridge with an explicit port binding.
       NetworkMode: useTraefik ? TRAEFIK_NETWORK : 'bridge',
+      // Persist the workspace on a per-project named volume so destroying/recreating the container
+      // (e.g. to change Traefik labels) no longer wipes non-git work. Docker auto-creates the volume
+      // on first use; it survives env recreation and is removed only on full project deletion.
+      Mounts: [
+        {
+          Type: 'volume',
+          Source: workspaceVolumeName(projectId),
+          Target: '/tmp/synaro-workspace',
+        },
+      ],
     }
     if (port !== null) {
       hostConfig.PortBindings = { '3000/tcp': [{ HostPort: String(port) }] }
@@ -433,7 +456,7 @@ export async function startEnvironment(id: string) {
   return updateStatus(id, 'RUNNING')
 }
 
-export async function destroyEnvironment(id: string) {
+export async function destroyEnvironment(id: string, opts?: { removeVolume?: boolean }) {
   const environment = await prisma.environment.findUnique({ where: { id } })
 
   if (environment?.containerId) {
@@ -447,6 +470,16 @@ export async function destroyEnvironment(id: string) {
       await container.remove()
     } catch {
       // container may already be removed (e.g. manual `docker rm`) — still delete the DB row
+    }
+  }
+
+  // The workspace volume intentionally SURVIVES a normal destroy so recreating a container (which is
+  // destroy+create) preserves the user's work. Only remove it when the whole project is deleted.
+  if (opts?.removeVolume && environment?.projectId) {
+    try {
+      await docker.getVolume(workspaceVolumeName(environment.projectId)).remove({ force: true })
+    } catch {
+      // volume may not exist or still be mounted by another env for the same project — best effort
     }
   }
 

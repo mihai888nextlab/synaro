@@ -259,16 +259,23 @@ export async function createEnvironment(
     }
     if (useTraefik && subdomain) {
       const routerName = `synaro-env-${environment.id}`
+      const hostRule = `Host(\`${subdomain}.${SYNARO_DOMAIN}\`)`
       labels['traefik.enable'] = 'true'
-      labels[`traefik.http.routers.${routerName}.rule`] = `Host(\`${subdomain}.${SYNARO_DOMAIN}\`)`
-      // Mirror the working app router: TLS on the websecure entrypoint, cert from the file provider.
+      labels[`traefik.http.services.${routerName}.loadbalancer.server.port`] = '3000'
+      // HTTPS router (direct TLS, or Cloudflare "Full" mode): serve on websecure with the file cert.
+      labels[`traefik.http.routers.${routerName}.rule`] = hostRule
       labels[`traefik.http.routers.${routerName}.entrypoints`] = 'websecure'
       labels[`traefik.http.routers.${routerName}.tls`] = 'true'
+      labels[`traefik.http.routers.${routerName}.service`] = routerName
       // Only reference a certresolver when Traefik actually has one — otherwise it drops the router.
       if (ACME_RESOLVER) {
         labels[`traefik.http.routers.${routerName}.tls.certresolver`] = ACME_RESOLVER
       }
-      labels[`traefik.http.services.${routerName}.loadbalancer.server.port`] = '3000'
+      // HTTP router (plain :80): Cloudflare "Flexible" mode connects to the origin over HTTP.
+      // Without this, subdomains 404 whenever Cloudflare terminates TLS and forwards on port 80.
+      labels[`traefik.http.routers.${routerName}-http.rule`] = hostRule
+      labels[`traefik.http.routers.${routerName}-http.entrypoints`] = 'web'
+      labels[`traefik.http.routers.${routerName}-http.service`] = routerName
     }
 
     const hostConfig: Record<string, unknown> = {

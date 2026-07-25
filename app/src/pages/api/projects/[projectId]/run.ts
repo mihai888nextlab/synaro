@@ -100,9 +100,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const runCommand = detectRunCommand(pkg);
     const hasPackageJson = pkg !== null;
 
-    const installStep = hasPackageJson
-      ? '([ -d node_modules ] || (echo "[synaro] Installing dependencies..." >> /tmp/app.log && npm install --loglevel=warn >> /tmp/app.log 2>&1)) && '
-      : "";
+    // Install dependencies to completion and record a marker BEFORE starting the dev server.
+    // Gating on a marker (not `[ -d node_modules ]`, which is already true mid-install) is what
+    // stops a second Run click from launching the app against a half-populated node_modules.
+    // Reinstall when package.json is newer than the marker (e.g. the AI added a dependency).
+    const installGuard = hasPackageJson
+      ? [
+          "if [ ! -d node_modules ] || [ ! -f /tmp/app.deps-ok ] || [ package.json -nt /tmp/app.deps-ok ]; then",
+          '  echo "[synaro] Installing dependencies..." >> /tmp/app.log',
+          "  if npm install --loglevel=warn >> /tmp/app.log 2>&1; then",
+          "    touch /tmp/app.deps-ok",
+          "  else",
+          '    echo "[synaro] npm install failed" >> /tmp/app.log',
+          "    exit 1",
+          "  fi",
+          "fi",
+        ].join("\n")
+      : "true";
 
     // Kill any process using port 3000 via inode lookup (/proc/net).
     // fuser is unreliable in Docker, and pkill -f matches the script itself.
@@ -128,24 +142,54 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Use newlines — busybox sh rejects `&;` (ampersand followed by semicolon).
     const bgScript = [
+      // Already serving on :3000 → don't kill+restart a healthy app on a repeat click.
+      "if grep -q ':0BB8 ' /proc/net/tcp /proc/net/tcp6 2>/dev/null; then echo SYNARO_ALREADY_RUNNING; exit 0; fi",
+      // Atomic start lock (mkdir is atomic) so overlapping Run clicks can't spawn concurrent
+      // installs that corrupt node_modules. Reclaim the lock only if the previous attempt is
+      // genuinely dead (e.g. the container was restarted and left a stale lock behind).
+      "if ! mkdir /tmp/app.starting 2>/dev/null; then",
+      "  OLDPID=$(cat /tmp/app.pid 2>/dev/null)",
+      '  if [ -n "$OLDPID" ] && kill -0 "$OLDPID" 2>/dev/null; then echo SYNARO_ALREADY_STARTING; exit 0; fi',
+      "  rmdir /tmp/app.starting 2>/dev/null || true",
+      '  mkdir /tmp/app.starting 2>/dev/null || { echo SYNARO_ALREADY_STARTING; exit 0; }',
+      "fi",
       "rm -f /tmp/app.log",
       killPort3000,
-      `(cd /tmp/synaro-workspace/app 2>/dev/null || cd /tmp/synaro-workspace 2>/dev/null; ${patchNextConfig} && ${installStep}echo "[synaro] Starting: ${runCommand}" >> /tmp/app.log && PORT=3000 ${runCommand} >> /tmp/app.log 2>&1) &`,
+      // The lock is held for the whole install+launch and released (trap) when the process exits,
+      // so a crash frees it for a later retry while a healthy run keeps it held.
+      "(",
+      "  trap 'rmdir /tmp/app.starting 2>/dev/null' EXIT",
+      "  cd /tmp/synaro-workspace/app 2>/dev/null || cd /tmp/synaro-workspace 2>/dev/null",
+      patchNextConfig,
+      installGuard,
+      `  echo "[synaro] Starting: ${runCommand}" >> /tmp/app.log`,
+      `  PORT=3000 ${runCommand} >> /tmp/app.log 2>&1`,
+      ") &",
       "APP_PID=$!",
       "echo $APP_PID > /tmp/app.pid",
       'echo "SYNARO_PID:$APP_PID"',
     ].join("\n");
 
+    let startOutput = "";
     try {
-      await remoteExecTerminal(env.id, bgScript);
+      const result = await remoteExecTerminal(env.id, bgScript);
+      startOutput = result.output ?? "";
     } catch (err) {
       return res.status(500).json({ error: String(err) });
     }
 
+    // Distinguish a fresh start from a click that hit an already-running / already-starting app.
+    const state = startOutput.includes("SYNARO_ALREADY_RUNNING")
+      ? "running"
+      : startOutput.includes("SYNARO_ALREADY_STARTING")
+        ? "starting"
+        : "started";
+
     return res.json({
       previewUrl,
       command: runCommand,
-      installing: hasPackageJson,
+      installing: hasPackageJson && state === "started",
+      state,
     });
   }
 

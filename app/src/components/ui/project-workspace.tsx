@@ -930,7 +930,8 @@ export function ProjectWorkspace({
       }
       const url = data.previewUrl ?? null;
 
-      // Poll until port 3000 is open in the container (max 60s)
+      // Poll until port 3000 is open in the container (max 180s — a cold `npm install` plus the
+      // first dev-server compile for a fresh project routinely exceeds 60s).
       let elapsed = 0;
       runPollRef.current = setInterval(async () => {
         elapsed += 2000;
@@ -942,7 +943,7 @@ export function ProjectWorkspace({
             runPollRef.current = null;
             setRunStatus("running");
             setPreviewUrl(statusData.previewUrl ?? url);
-          } else if (elapsed >= 60_000) {
+          } else if (elapsed >= 180_000) {
             clearInterval(runPollRef.current!);
             runPollRef.current = null;
             // Open anyway — app might still be installing

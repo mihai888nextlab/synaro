@@ -461,7 +461,7 @@ export const DOC_PAGES: Record<string, DocPage> = {
       {
         type: "ol",
         items: [
-          "Autentifică-te în Synaro și deschide Setări → Chei API (/settings/api-keys)",
+          "Autentifică-te în Synaro și deschide Setări → Securitate → Chei API (/settings/security#api-keys)",
           "Creează o cheie, copiază secretul imediat (este afișat o singură dată)",
           "Trimite Authorization: Bearer <your_key> la fiecare cerere /api/v1",
           "Apelează GET /api/v1/me pentru a verifica că cheia funcționează",

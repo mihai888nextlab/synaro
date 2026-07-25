@@ -107,7 +107,7 @@ export function ApiKeysSummaryWidget({ data, widget, variant, layoutMode = "grid
 
   return (
     <Link
-      href="/settings/api-keys"
+      href="/settings/security#api-keys"
       className={shortcutShell(variant === "preview" ? "pointer-events-none" : undefined, layoutMode === "fluid")}
     >
       <div

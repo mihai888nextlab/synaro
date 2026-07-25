@@ -16,6 +16,7 @@ import {
   Plus,
   SendIcon,
   Sparkles,
+  Square,
   UserIcon,
   XIcon,
 } from "lucide-react";
@@ -33,7 +34,7 @@ import { AiFileChangeCardList } from "@/components/ui/ai-file-change-card";
 import { TaskLivePreview, TypewriterMarkdown } from "@/components/ui/ai-task-live-preview";
 import { MarkdownLite } from "@/components/ui/markdown-lite";
 import { useWorkspaceChatPreview } from "@/components/ui/workspace-chat-preview";
-import { isTerminalTaskStatus, resolveTaskAnswerContent } from "@/lib/ai-task-message";
+import { isTerminalTaskStatus, looksLikeMessageKey, resolveTaskAnswerContent } from "@/lib/ai-task-message";
 import type { TaskResult } from "@/lib/ai-task-types";
 import { SpeechWaveform } from "@/components/ui/speech-waveform";
 import { SynaroAssistantAvatar } from "@/components/ui/synaro-logo";
@@ -221,13 +222,21 @@ function MessageBubble({
   const { t } = useTranslation();
   const isUser = message.role === "user";
   const isClarification = Boolean(message.questions && message.questions.length > 0);
-  const isRunning =
-    message.taskStatus &&
-    message.taskStatus !== "DONE" &&
-    message.taskStatus !== "FAILED";
+  const isRunning = Boolean(message.taskStatus && !isTerminalTaskStatus(message.taskStatus));
   const isDone = message.taskStatus === "DONE";
   const isFailed = message.taskStatus === "FAILED";
-  const hasAnswerText = Boolean(message.content?.trim());
+  const isCancelled = message.taskStatus === "CANCELLED";
+  const resolvedContent = (() => {
+    const raw = message.content?.trim() ?? "";
+    if (!raw) return isCancelled ? t("aiChat.stopped") : message.content;
+    if (looksLikeMessageKey(raw)) {
+      const translated = t(raw);
+      if (translated !== raw) return translated;
+      if (isCancelled) return t("aiChat.stopped");
+    }
+    return message.content;
+  })();
+  const hasAnswerText = Boolean(resolvedContent?.trim());
   const activeFromLog =
     message.activityLog && message.activityLog.length > 0
       ? message.activityLog[message.activityLog.length - 1]
@@ -240,7 +249,7 @@ function MessageBubble({
           (message.taskStatus ? statusLabel(message.taskStatus, t) : t("aiChat.working"));
 
   const hasActivityLog = (message.activityLog?.length ?? 0) > 0;
-  const showActivityToggle = (isDone || isFailed) && hasActivityLog;
+  const showActivityToggle = (isDone || isFailed || isCancelled) && hasActivityLog;
   const [activityLogOpen, setActivityLogOpen] = React.useState(false);
   const elapsed = useElapsedSeconds(!!isRunning);
 
@@ -262,7 +271,7 @@ function MessageBubble({
     "rounded-2xl px-4 py-3 text-sm leading-relaxed max-xl:px-3 max-xl:py-2.5 max-xl:text-[0.8125rem]",
     isUser
       ? "bg-foreground text-background"
-      : isFailed
+      : isFailed || isCancelled
         ? "border border-destructive/30 bg-destructive/5 text-foreground"
         : isClarification
           ? "border border-primary/30 bg-primary/5 text-foreground"
@@ -274,17 +283,17 @@ function MessageBubble({
   const answerBody = hasAnswerText ? (
     isRunning ? (
       <TypewriterMarkdown
-        text={message.content!}
+        text={resolvedContent!}
         enabled
         streaming
         className="break-words"
       />
     ) : (
-      <MarkdownLite text={message.content!} onOpenFile={onOpenFile} />
+      <MarkdownLite text={resolvedContent!} onOpenFile={onOpenFile} />
     )
   ) : null;
 
-  const taskReplyContent = hasAnswerText && (isDone || isFailed);
+  const taskReplyContent = hasAnswerText && (isDone || isFailed || isCancelled);
 
   return (
     <motion.div
@@ -340,7 +349,7 @@ function MessageBubble({
                 {t("aiChat.clarifyingHint")}
               </p>
             </div>
-          ) : hasAnswerText && (isRunning || isDone || isFailed) ? (
+          ) : hasAnswerText && (isRunning || isDone || isFailed || isCancelled) ? (
             <>
               {miniMeta ? (
                 <div className="mb-2 text-[0.7rem] leading-none text-muted-foreground">
@@ -466,6 +475,12 @@ function MessageBubble({
             <span>{t("aiChat.taskFailed")}</span>
           </div>
         )}
+        {isCancelled && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Square className="h-3 w-3 shrink-0 fill-current" />
+            <span>{t("aiChat.statusCancelled")}</span>
+          </div>
+        )}
       </div>
 
       {isUser && (
@@ -486,6 +501,7 @@ function statusLabel(status: TaskStatus, t: (key: string) => string): string {
     case "VERIFYING": return t("aiChat.statusVerifying");
     case "DONE": return t("aiChat.statusDone");
     case "FAILED": return t("aiChat.statusFailed");
+    case "CANCELLED": return t("aiChat.statusCancelled");
   }
 }
 
@@ -672,6 +688,7 @@ export function AnimatedAIChat({
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isAsking, setIsAsking] = React.useState(false);
+  const [isStopping, setIsStopping] = React.useState(false);
   const [runSuggestionDismissedFor, setRunSuggestionDismissedFor] = React.useState<string | null>(null);
   // Blocks the save effect from running until the localStorage restore has completed on mount,
   // preventing the initial empty messages array from overwriting previously saved history.
@@ -703,13 +720,21 @@ export function AnimatedAIChat({
       if (saved) {
         const restored = JSON.parse(saved) as Message[];
         setMessages(
-          restored.map((m) => ({
-            ...m,
-            playbackComplete:
-              isTerminalTaskStatus(m.taskStatus) || m.role === "user" || !m.taskId
-                ? true
-                : Boolean(m.playbackComplete),
-          })),
+          restored.map((m) => {
+            let content = m.content;
+            if (looksLikeMessageKey(content)) {
+              const translated = t(content);
+              content = translated !== content ? translated : m.taskStatus === "CANCELLED" ? t("aiChat.stopped") : content;
+            }
+            return {
+              ...m,
+              content,
+              playbackComplete:
+                isTerminalTaskStatus(m.taskStatus) || m.role === "user" || !m.taskId
+                  ? true
+                  : Boolean(m.playbackComplete),
+            };
+          }),
         );
         const running = [...restored]
           .reverse()
@@ -718,8 +743,7 @@ export function AnimatedAIChat({
               typeof m.taskId === "string" &&
               m.taskId.length > 0 &&
               m.taskStatus &&
-              m.taskStatus !== "DONE" &&
-              m.taskStatus !== "FAILED",
+              !isTerminalTaskStatus(m.taskStatus),
           );
         if (running?.taskId && running.id) {
           setIsSubmitting(true);
@@ -768,8 +792,7 @@ export function AnimatedAIChat({
       const streaming = messages.some(
         (m) =>
           m.taskStatus &&
-          m.taskStatus !== "DONE" &&
-          m.taskStatus !== "FAILED" &&
+          !isTerminalTaskStatus(m.taskStatus) &&
           Boolean(m.content?.trim()),
       );
       messagesEndRef.current?.scrollIntoView({ behavior: streaming ? "auto" : "smooth" });
@@ -876,14 +899,13 @@ export function AnimatedAIChat({
     if (!projectId) return;
     if (!activeTask?.taskId) return;
     if (activeTask.projectId !== projectId) return;
-    if (!activeTask.status || activeTask.status === "DONE" || activeTask.status === "FAILED") return;
+    if (!activeTask.status || isTerminalTaskStatus(activeTask.status)) return;
 
     const hasRunningMessage = messages.some(
       (m) =>
         m.taskId === activeTask.taskId &&
         m.taskStatus &&
-        m.taskStatus !== "DONE" &&
-        m.taskStatus !== "FAILED",
+        !isTerminalTaskStatus(m.taskStatus),
     );
     if (hasRunningMessage) return;
 
@@ -981,6 +1003,87 @@ export function AnimatedAIChat({
     },
     [projectId, projectSlug, setActiveTask, t],
   );
+
+  const handleStop = React.useCallback(async () => {
+    if (isStopping) return;
+
+    // Clarifying questions run before a task exists — stop locally.
+    if (isAsking && !isSubmitting) {
+      setIsAsking(false);
+      setPendingClarification(null);
+      return;
+    }
+
+    const taskId =
+      activeTask?.taskId ??
+      [...messages].reverse().find((m) => m.taskId && m.taskStatus && !isTerminalTaskStatus(m.taskStatus))
+        ?.taskId;
+    if (!taskId) {
+      setIsSubmitting(false);
+      setIsAsking(false);
+      return;
+    }
+
+    setIsStopping(true);
+    try {
+      const res = await fetch(`/api/ai-tasks/${encodeURIComponent(taskId)}/cancel`, {
+        method: "POST",
+      });
+      const data = (await res.json().catch(() => ({}))) as RemoteTask & { error?: string };
+      if (!res.ok) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.taskId === taskId
+              ? {
+                  ...m,
+                  content: data.error ?? t("aiChat.stopFailed"),
+                  taskStatus: "FAILED",
+                  taskError: data.error ?? t("aiChat.stopFailed"),
+                  playbackComplete: true,
+                }
+              : m,
+          ),
+        );
+        return;
+      }
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.taskId === taskId
+            ? {
+                ...m,
+                taskStatus: "CANCELLED",
+                taskProgress: null,
+                content: t("aiChat.stopped"),
+                taskError: null,
+                playbackComplete: true,
+                activityLog: appendActivityLine(m.activityLog ?? [], t("aiChat.statusCancelled")),
+              }
+            : m,
+        ),
+      );
+      setActiveTask(null);
+      setIsSubmitting(false);
+      setIsAsking(false);
+      setPendingClarification(null);
+    } catch {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.taskId === taskId
+            ? {
+                ...m,
+                content: t("aiChat.stopFailed"),
+                taskStatus: "FAILED",
+                taskError: t("aiChat.stopFailed"),
+                playbackComplete: true,
+              }
+            : m,
+        ),
+      );
+    } finally {
+      setIsStopping(false);
+    }
+  }, [activeTask?.taskId, isAsking, isStopping, isSubmitting, messages, setActiveTask, t]);
 
   const handleSend = React.useCallback(async (promptOverride?: string) => {
     const prompt = (promptOverride ?? value).trim();
@@ -1470,30 +1573,42 @@ export function AnimatedAIChat({
                 </DropdownMenu>
                 <motion.button
                   type="button"
-                  onClick={() => void handleSend(undefined)}
+                  onClick={() => {
+                    if (isBusy) {
+                      void handleStop();
+                      return;
+                    }
+                    void handleSend(undefined);
+                  }}
                   whileHover={{ scale: 1.01 }}
                   whileTap={{ scale: 0.98 }}
-                  disabled={isBusy || !value.trim()}
+                  disabled={isStopping || (!isBusy && !value.trim())}
                   aria-label={
-                    isAsking ? t("aiChat.thinking") : isSubmitting ? t("aiChat.building") : t("aiChat.sendMessage")
+                    isBusy
+                      ? t("aiChat.stopGeneration")
+                      : isAsking
+                        ? t("aiChat.thinking")
+                        : t("aiChat.sendMessage")
                   }
                   className={cn(
                     "inline-flex shrink-0 items-center justify-center rounded-[28%] transition",
                     "h-9 w-9 sm:h-10 sm:w-10 xl:h-10 xl:w-auto xl:min-w-[5.5rem] xl:rounded-2xl xl:gap-2 xl:px-4 xl:py-2 xl:text-sm xl:font-medium",
-                    value.trim() && !isBusy
-                      ? "bg-foreground text-background shadow-sm shadow-black/5"
-                      : "border border-border/70 bg-muted text-muted-foreground",
+                    isBusy
+                      ? "border border-border/70 bg-foreground text-background shadow-sm shadow-black/5"
+                      : value.trim()
+                        ? "bg-foreground text-background shadow-sm shadow-black/5"
+                        : "border border-border/70 bg-muted text-muted-foreground",
                   )}
                 >
-                  {isAsking ? (
+                  {isStopping ? (
                     <LoaderIcon className="h-4 w-4 animate-spin" />
-                  ) : isSubmitting ? (
-                    <LoaderIcon className="h-4 w-4 animate-spin" />
+                  ) : isBusy ? (
+                    <Square className="h-3.5 w-3.5 fill-current" />
                   ) : (
                     <SendIcon className="h-4 w-4" />
                   )}
                   <span className="hidden xl:inline">
-                    {isAsking ? t("aiChat.thinkingEllipsis") : isSubmitting ? t("aiChat.buildingEllipsis") : t("aiChat.send")}
+                    {isBusy ? t("aiChat.stop") : t("aiChat.send")}
                   </span>
                 </motion.button>
             </div>

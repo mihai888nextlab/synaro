@@ -92,6 +92,7 @@ function runPollFingerprint(run: AgentRun): string {
     run.startedAt ?? "",
     run.output?.length ?? 0,
     run.output?.slice(0, 120) ?? "",
+    JSON.stringify(run.artifacts ?? null).slice(0, 240),
     steps.length,
     lastTool,
     lastObs.length,
@@ -99,7 +100,7 @@ function runPollFingerprint(run: AgentRun): string {
   ].join("\x1e");
 }
 
-function useAgentLastRun(agentId: string | undefined, enabled: boolean) {
+export function useAgentLastRun(agentId: string | undefined, enabled: boolean) {
   const [run, setRun] = useState<AgentRun | null>(null);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);

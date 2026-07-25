@@ -43,6 +43,8 @@ export type AgentRun = {
   trigger: string;
   input?: string | null;
   output?: string | null;
+  /** Structured dashboard widgets from finish({ artifacts }). */
+  artifacts?: unknown;
   steps?: ReActStep[] | null;
   credentialRequest?: McpCredentialRequest | null;
   startedAt?: string | null;

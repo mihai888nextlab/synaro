@@ -12,6 +12,7 @@ import {
   ProjectsShowcaseWidget,
 } from "@/components/ui/dashboard/widgets/showcase-widgets";
 import { AgentLastRunWidget } from "@/components/ui/dashboard/widgets/agent-widgets";
+import { AgentLastRunGeneratedWidget } from "@/components/ui/dashboard/widgets/agent-last-run-generated-widget";
 import {
   AgentShortcutWidget,
   ApiKeysSummaryWidget,
@@ -33,6 +34,7 @@ const WIDGET_COMPONENTS: Record<WidgetType, ComponentType<DashboardWidgetRenderP
   project_shortcut: ProjectShortcutWidget,
   agent_shortcut: AgentShortcutWidget,
   agent_last_run: AgentLastRunWidget,
+  agent_last_run_generated: AgentLastRunGeneratedWidget,
   api_keys_summary: ApiKeysSummaryWidget,
 };
 

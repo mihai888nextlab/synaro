@@ -89,6 +89,28 @@ Rules:
     return reply.send(task)
   })
 
+  // POST /api/tasks/:id/cancel — cooperative stop (executeTask checks status between phases)
+  app.post('/:id/cancel', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const task = await prisma.task.findUnique({ where: { id } })
+    if (!task) return reply.status(404).send({ error: 'Task not found' })
+
+    if (task.status === 'DONE' || task.status === 'FAILED' || task.status === 'CANCELLED') {
+      return reply.send(task)
+    }
+
+    const updated = await prisma.task.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        progress: null,
+        streamContent: null,
+        errorMessage: null,
+      },
+    })
+    return reply.send(updated)
+  })
+
   // POST /api/tasks — create task and execute asynchronously
   app.post('/', async (req, reply) => {
     const result = createTaskSchema.safeParse(req.body)

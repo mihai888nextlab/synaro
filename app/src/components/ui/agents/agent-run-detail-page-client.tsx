@@ -6,10 +6,12 @@ import { ArrowLeft, Loader2, StopCircle } from "lucide-react";
 
 import { AgentRunSteps } from "@/components/ui/agents/agent-run-steps";
 import { AgentStatusBadge } from "@/components/ui/agents/agent-status-badge";
+import { RunArtifactsPanel } from "@/components/ui/agents/run-artifacts-panel";
 import { useAgentBackgroundRuns } from "@/components/ui/agent-background-runs";
 import { MarkdownLite } from "@/components/ui/markdown-lite";
 import { useTranslation } from "@/components/ui/locale-provider";
 import type { AgentRun, McpCredentialRequest } from "@/lib/agents/agent-types";
+import { normalizeRunArtifacts } from "@/lib/agents/run-artifacts";
 import { normalizeSteps, resolveRunOutputText } from "@/lib/agents/run-preview";
 import { cn } from "@/lib/utils";
 
@@ -169,6 +171,7 @@ export function AgentRunDetailPageClient({
   const displayName = initialAgentName?.trim() || t("agents.runDetailTitle");
   const steps = normalizeSteps(run?.steps);
   const displayOutput = run ? resolveRunOutputText(run) : null;
+  const artifacts = normalizeRunArtifacts(run?.artifacts);
   const finishedViaSteps = Boolean(
     run &&
       isActiveStatus(run.status) &&
@@ -316,6 +319,12 @@ export function AgentRunDetailPageClient({
               </div>
               <AgentRunSteps steps={steps} isLive={isLive} />
             </section>
+
+            {artifacts.length > 0 ? (
+              <section className="rounded-xl border border-border/70 bg-card p-5 sm:p-6">
+                <RunArtifactsPanel artifacts={artifacts} title={t("agents.runArtifacts")} />
+              </section>
+            ) : null}
 
             {displayOutput ? (
               <section

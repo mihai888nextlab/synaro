@@ -51,6 +51,8 @@ model AgentRun {
   trigger    String    @default("manual")
   input      String?
   output     String?
+  /// Structured dashboard widgets emitted by finish({ artifacts }).
+  artifacts  Json?
   steps      Json?
   credentialRequest Json?
   startedAt  DateTime?

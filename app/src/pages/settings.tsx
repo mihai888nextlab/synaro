@@ -1,5 +1,5 @@
 import type { GetServerSideProps } from "next";
-import { KeyRound, Shield, Sparkles, UserRound, Wrench } from "lucide-react";
+import { Shield, Sparkles, UserRound, Wrench } from "lucide-react";
 
 import {
   SettingsLayout,
@@ -35,12 +35,6 @@ export default function SettingsPage() {
       title: t("settings.security"),
       description: t("settings.securityCardDescription"),
       icon: Shield,
-    },
-    {
-      href: "/settings/api-keys",
-      title: t("nav.apiKeys"),
-      description: t("settings.apiKeysCardDescription"),
-      icon: KeyRound,
     },
   ] as const;
 

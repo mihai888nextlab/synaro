@@ -461,7 +461,7 @@ export const DOC_PAGES: Record<string, DocPage> = {
       {
         type: "ol",
         items: [
-          "Sign in to Synaro and open Settings → API keys (/settings/api-keys)",
+          "Sign in to Synaro and open Settings → Security → API keys (/settings/security#api-keys)",
           "Create a key, copy the secret immediately (it is shown only once)",
           "Send Authorization: Bearer <your_key> on every /api/v1 request",
           "Call GET /api/v1/me to verify the key works",

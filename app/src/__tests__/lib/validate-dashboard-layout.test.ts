@@ -70,6 +70,27 @@ describe("validate-dashboard-layout", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("accepts agent_last_run_generated with a valid agent", () => {
+    const result = validateDashboardLayout(
+      {
+        version: 1,
+        widgets: [
+          {
+            id: "last-run-gen",
+            type: "agent_last_run_generated",
+            x: 0,
+            y: 0,
+            w: 6,
+            h: 5,
+            config: { agentId: "a1" },
+          },
+        ],
+      },
+      ctx,
+    );
+    expect(result.ok).toBe(true);
+  });
+
   it("rejects agent_last_run without a valid agent", () => {
     const result = validateDashboardLayout(
       {

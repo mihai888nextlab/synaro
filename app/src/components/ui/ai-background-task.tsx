@@ -7,8 +7,10 @@ import { ChevronRight } from "lucide-react";
 
 import { taskPollFingerprint } from "@/lib/ai-task-message";
 import type { AiRemoteTask, AiTaskStatus } from "@/lib/ai-task-types";
+import { formatNotificationDescription } from "@/lib/notifications/format-notification-body";
 import { cn } from "@/lib/utils";
 import { showBrowserNotification, useNotifications, playNotificationSound } from "@/components/ui/notifications";
+import { useTranslation } from "@/components/ui/locale-provider";
 
 export type { AiRemoteTask, AiTaskStatus } from "@/lib/ai-task-types";
 
@@ -34,7 +36,7 @@ const TASK_POLL_MS = 700;
 const AiBackgroundTaskContext = React.createContext<Ctx | null>(null);
 
 function isTerminal(status: AiTaskStatus | undefined) {
-  return status === "DONE" || status === "FAILED";
+  return status === "DONE" || status === "FAILED" || status === "CANCELLED";
 }
 
 function safeJsonParse<T>(raw: string | null): T | null {
@@ -68,6 +70,7 @@ export function AiBackgroundTaskProvider({ children }: { children: React.ReactNo
   const lastPollFingerprintRef = React.useRef<string | null>(null);
   const lastNotifiedTaskIdRef = React.useRef<string | null>(null);
   const { push } = useNotifications();
+  const { t } = useTranslation();
 
   const setActiveTask = React.useCallback((task: ActiveAiTask | null) => {
     setActiveTaskState(task);
@@ -180,22 +183,29 @@ export function AiBackgroundTaskProvider({ children }: { children: React.ReactNo
         };
 
         if (isTerminal(task.status)) {
-          if (lastNotifiedTaskIdRef.current !== task.id) {
+          if (task.status !== "CANCELLED" && lastNotifiedTaskIdRef.current !== task.id) {
             lastNotifiedTaskIdRef.current = task.id;
             const href =
               current.projectSlug?.trim()
                 ? `/projects/${encodeURIComponent(current.projectSlug)}`
                 : undefined;
-            const title = task.status === "DONE" ? "AI finished your task" : "AI task failed";
-            const description =
+            const failed = task.status !== "DONE";
+            const title = failed
+              ? t("notifications.aiTaskFailed")
+              : t("notifications.aiTaskComplete");
+            const rawBody =
               task.status === "DONE"
                 ? typeof (task.result as { summary?: string })?.summary === "string"
                   ? ((task.result as { summary: string }).summary)
                   : current.progress ?? undefined
                 : task.errorMessage ?? current.progress ?? undefined;
+            const description = formatNotificationDescription(rawBody, {
+              failed,
+              t: (key) => t(`notifications.${key}`),
+            });
 
             push({
-              type: task.status === "DONE" ? "ai_task_done" : "ai_task_failed",
+              type: failed ? "ai_task_failed" : "ai_task_done",
               title,
               description,
               href,
@@ -230,7 +240,7 @@ export function AiBackgroundTaskProvider({ children }: { children: React.ReactNo
     };
   // Poll uses activeTask field deps intentionally — full object would re-subscribe on every progress tick.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- activeTask identity is tracked via projectId/taskId/status fields
-  }, [activeTask?.projectId, activeTask?.projectSlug, activeTask?.taskId, push, setActiveTask]);
+  }, [activeTask?.projectId, activeTask?.projectSlug, activeTask?.taskId, push, setActiveTask, t]);
 
   const ctx: Ctx = React.useMemo(
     () => ({ activeTask, setActiveTask, polledTask }),

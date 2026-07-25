@@ -27,7 +27,31 @@ import { mergeChanges } from './parse-changes.js'
 import type { Plan } from './types.js'
 import { prisma } from '../lib/prisma.js'
 
-type TaskStatus = 'PENDING' | 'ANALYZING' | 'GENERATING' | 'APPLYING' | 'VERIFYING' | 'DONE' | 'FAILED'
+type TaskStatus =
+  | 'PENDING'
+  | 'ANALYZING'
+  | 'GENERATING'
+  | 'APPLYING'
+  | 'VERIFYING'
+  | 'DONE'
+  | 'FAILED'
+  | 'CANCELLED'
+
+class TaskCancelledError extends Error {
+  constructor() {
+    super('Task cancelled by user')
+    this.name = 'TaskCancelledError'
+  }
+}
+
+async function isTaskCancelled(taskId: string): Promise<boolean> {
+  const row = await prisma.task.findUnique({ where: { id: taskId }, select: { status: true } })
+  return row?.status === 'CANCELLED'
+}
+
+async function assertNotCancelled(taskId: string): Promise<void> {
+  if (await isTaskCancelled(taskId)) throw new TaskCancelledError()
+}
 
 interface FileChange {
   path: string
@@ -68,6 +92,11 @@ interface TaskResult {
 }
 
 async function updateTask(id: string, status: TaskStatus, extra?: object) {
+  // Never overwrite a user cancel with DONE/FAILED from a still-running executeTask.
+  if (status === 'DONE' || status === 'FAILED') {
+    const row = await prisma.task.findUnique({ where: { id }, select: { status: true } })
+    if (row?.status === 'CANCELLED') return row
+  }
   return prisma.task.update({ where: { id }, data: { status, ...extra } })
 }
 
@@ -177,6 +206,7 @@ export async function executeTask(
     try {
       await updateTask(taskId, 'ANALYZING')
       await updateProgress(taskId, 'Reading repository context…')
+      await assertNotCancelled(taskId)
 
       const env = await getActiveEnvironment(task.projectId)
       if (!env) throw new Error('No active environment. Start the runtime to answer questions about this project.')
@@ -210,6 +240,7 @@ export async function executeTask(
 
       await updateTask(taskId, 'GENERATING', { streamContent: null })
       await updateProgress(taskId, 'Drafting answer…')
+      await assertNotCancelled(taskId)
 
       const context = existingFiles
         .slice(0, 10)
@@ -342,6 +373,7 @@ export async function executeTask(
         changes: [],
         meta: { exploredFiles, aiSteps },
       }
+      await assertNotCancelled(taskId)
       await updateTask(taskId, 'DONE', {
         result,
         progress: null,
@@ -352,6 +384,9 @@ export async function executeTask(
       })
       return
     } catch (err) {
+      if (err instanceof TaskCancelledError || (await isTaskCancelled(taskId))) {
+        return
+      }
       const msg = formatTaskError(err)
       await updateTask(taskId, 'FAILED', {
         errorMessage: msg,
@@ -500,10 +535,12 @@ export async function executeTask(
     const shouldGitAfterCode = intent.mode === 'code_then_git'
 
     const progress = async (msg: string) => {
+      await assertNotCancelled(taskId)
       await updateProgress(taskId, msg)
     }
 
     // ── Memory: replay recent tasks so follow-ups build on prior work ─────
+    await assertNotCancelled(taskId)
     const memory = await loadRecentTaskContext(task.projectId, taskId)
 
     // ── Scan workspace, then route by task complexity ────────────────────
@@ -539,6 +576,7 @@ export async function executeTask(
     }
 
     // ── Workers run in parallel on their owned files (a single worker on the fast path) ──
+    await assertNotCancelled(taskId)
     await updateTask(taskId, 'GENERATING', { streamContent: null })
     await progress(
       isSimple
@@ -554,6 +592,7 @@ export async function executeTask(
       totalOutputTokens += w.outputTokens
     }
 
+    await assertNotCancelled(taskId)
     const workerChanges = mergeChanges(workerOutputs.flatMap((w) => w.changes))
     if (workerChanges.length === 0) {
       throw new Error(
@@ -579,6 +618,7 @@ export async function executeTask(
     // A single worker already produced coherent, self-consistent files — skip the extra slow call.
     let finalChanges = workerChanges
     if (plan.workers.length > 1) {
+      await assertNotCancelled(taskId)
       await progress('Integrating modules...')
       aiSteps += 1
       const integration = await integrate(env.id, task.prompt, plan, [...changedPaths], allPathsAfter)
@@ -590,11 +630,12 @@ export async function executeTask(
         }
         await writeContainerFiles(env.id, integration.changes.map(({ path, content }) => ({ path, content })))
         integration.changes.forEach((c) => changedPaths.add(c.path))
+        finalChanges = mergeChanges([...integration.changes, ...workerChanges])
       }
-      finalChanges = mergeChanges([...integration.changes, ...workerChanges])
     }
 
     // ── Health check + self-heal loop ────────────────────────────────────
+    await assertNotCancelled(taskId)
     await updateTask(taskId, 'VERIFYING')
     await progress('Verifying the app runs...')
     let health = await runHealthCheck(env.id, progress)
@@ -610,9 +651,10 @@ export async function executeTask(
       healthIterations < maxHealthIterations &&
       Date.now() < healthDeadline
     ) {
+      await assertNotCancelled(taskId)
       healthIterations += 1
       await progress(
-        `Health check failed — self-healing (attempt ${healthIterations}/${ORCHESTRATION.MAX_HEALTH_ITERATIONS})...`,
+        `Health check failed — self-healing (attempt ${healthIterations}/${maxHealthIterations})...`,
       )
       const fix = await runFixPass(
         env.id,
@@ -632,6 +674,8 @@ export async function executeTask(
       finalChanges = mergeChanges([...fix.changes, ...finalChanges])
       health = await runHealthCheck(env.id, progress)
     }
+
+    await assertNotCancelled(taskId)
 
     // ── Assemble result ──────────────────────────────────────────────────
     exploredFiles = allPaths.length
@@ -706,6 +750,9 @@ export async function executeTask(
       outputTokens: totalOutputTokens,
     })
   } catch (err) {
+    if (err instanceof TaskCancelledError || (await isTaskCancelled(taskId))) {
+      return
+    }
     const errorMessage = formatTaskError(err)
     await updateTask(taskId, 'FAILED', {
       errorMessage,

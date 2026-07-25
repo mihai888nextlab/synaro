@@ -9,6 +9,8 @@ import {
   type McpRuntimeAuth,
 } from '../tools/mcp-credentials.js'
 import { Prisma, type Agent, type AgentRun } from '@prisma/client'
+import { normalizeRunArtifacts, type RunArtifact } from '../lib/run-artifacts.js'
+import { buildRuntimeContextMessage } from '../lib/runtime-context.js'
 
 export interface ReActLoopOptions {
   mcpRuntimeAuth?: McpRuntimeAuth
@@ -84,6 +86,7 @@ async function notifyComplete(
   output: string,
   steps: ReActStep[],
   log?: FastifyBaseLogger,
+  artifacts: RunArtifact[] = [],
 ): Promise<void> {
   if (await isRunCancelled(runId)) return
 
@@ -95,6 +98,8 @@ async function notifyComplete(
         status,
         output,
         steps: steps as unknown as Prisma.InputJsonValue,
+        artifacts:
+          artifacts.length > 0 ? (artifacts as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
         finishedAt: new Date(),
       },
     })
@@ -115,6 +120,7 @@ async function notifyComplete(
         runId,
         status,
         output,
+        artifacts,
         steps: steps.map((s) => ({
           step: s.step,
           tool: s.tool,
@@ -197,6 +203,7 @@ export async function runReActLoop(
 
     const messages: OpenAI.ChatCompletionMessageParam[] = [
       { role: 'system', content: agent.systemPrompt },
+      { role: 'system', content: buildRuntimeContextMessage() },
     ]
     const history = await buildHistoryContext(agent.id, run.id)
     if (history) messages.push({ role: 'system', content: history })
@@ -247,7 +254,15 @@ export async function runReActLoop(
         messages.push({ role: 'tool', tool_call_id: call.id, content: observation })
 
         if (call.function.name === 'finish') {
-          await notifyComplete(run.id, 'DONE', String(args.answer ?? observation), steps, log)
+          const artifacts = normalizeRunArtifacts(args.artifacts)
+          await notifyComplete(
+            run.id,
+            'DONE',
+            String(args.answer ?? observation),
+            steps,
+            log,
+            artifacts,
+          )
           return
         }
       }

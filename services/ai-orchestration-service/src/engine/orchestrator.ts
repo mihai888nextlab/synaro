@@ -19,10 +19,12 @@ import { streamKimiChatCompletion } from '../lib/kimi-stream.js'
 import { readWorkspaceFilesParallel } from '../lib/read-workspace-files.js'
 import { loadRecentTaskContext } from '../lib/memory.js'
 import { planWork } from './planner.js'
+import { triageTask } from './triage.js'
 import { runWorkersInParallel, runFixPass } from './worker.js'
 import { integrate } from './integrator.js'
 import { runHealthCheck } from './health-check.js'
 import { mergeChanges } from './parse-changes.js'
+import type { Plan } from './types.js'
 import { prisma } from '../lib/prisma.js'
 
 type TaskStatus = 'PENDING' | 'ANALYZING' | 'GENERATING' | 'APPLYING' | 'VERIFYING' | 'DONE' | 'FAILED'
@@ -423,6 +425,8 @@ export async function executeTask(
     }
   }
 
+  const startedAt = Date.now()
+
   try {
     // ── Step 1: Find the running environment ──────────────────────────────
     await updateTask(taskId, 'ANALYZING')
@@ -502,24 +506,46 @@ export async function executeTask(
     // ── Memory: replay recent tasks so follow-ups build on prior work ─────
     const memory = await loadRecentTaskContext(task.projectId, taskId)
 
-    // ── Scan workspace + plan the work into disjoint-ownership workers ────
+    // ── Scan workspace, then route by task complexity ────────────────────
     await progress('Scanning your repository...')
     const allPaths = await listContainerFiles(env.id)
     const repoTree = buildRepoTree(allPaths.map((p) => ({ path: p, size: 0 })))
 
-    await progress('Planning the work...')
+    // Triage first: most tasks are small and localized, and shouldn't pay the full
+    // planner → parallel-workers → integrator fan-out tax. Only genuinely large/greenfield
+    // builds take the multi-agent path; everything else runs a single targeted-edit pass.
+    await progress('Sizing up the task...')
     aiSteps += 1
-    const planned = await planWork(task.prompt, repoTree, memory)
-    totalInputTokens += planned.inputTokens
-    totalOutputTokens += planned.outputTokens
-    const plan = planned.plan
+    const triage = await triageTask(task.prompt, repoTree, memory)
+    totalInputTokens += triage.inputTokens
+    totalOutputTokens += triage.outputTokens
+    const isSimple = triage.complexity === 'simple'
 
-    // ── Workers run in parallel on their owned files ─────────────────────
+    let plan: Plan
+    if (isSimple) {
+      // Fast path: one unrestricted worker does the whole change. No planner call, no parallel
+      // fan-out, no integrator — just read the likely files and make the edit.
+      plan = {
+        summary: 'Implement the requested change.',
+        workers: [{ role: 'builder', goal: task.prompt, ownedFiles: [], filesToRead: triage.files }],
+      }
+    } else {
+      await progress('Planning the work...')
+      aiSteps += 1
+      const planned = await planWork(task.prompt, repoTree, memory)
+      totalInputTokens += planned.inputTokens
+      totalOutputTokens += planned.outputTokens
+      plan = planned.plan
+    }
+
+    // ── Workers run in parallel on their owned files (a single worker on the fast path) ──
     await updateTask(taskId, 'GENERATING', { streamContent: null })
     await progress(
-      `Dispatching ${plan.workers.length} worker${plan.workers.length === 1 ? '' : 's'} (${plan.workers
-        .map((w) => w.role)
-        .join(', ')})...`,
+      isSimple
+        ? 'Making the change...'
+        : `Dispatching ${plan.workers.length} worker${plan.workers.length === 1 ? '' : 's'} (${plan.workers
+            .map((w) => w.role)
+            .join(', ')})...`,
     )
     const workerOutputs = await runWorkersInParallel(env.id, plan.workers, task.prompt, memory, progress)
     aiSteps += plan.workers.length
@@ -549,26 +575,41 @@ export async function executeTask(
     const changedPaths = new Set(workerChanges.map((c) => c.path))
     const allPathsAfter = Array.from(new Set([...allPaths, ...changedPaths]))
 
-    await progress('Integrating modules...')
-    aiSteps += 1
-    const integration = await integrate(env.id, task.prompt, plan, [...changedPaths], allPathsAfter)
-    totalInputTokens += integration.inputTokens
-    totalOutputTokens += integration.outputTokens
-    if (integration.changes.length > 0) {
-      for (const f of await readWorkspaceFilesParallel(env.id, integration.changes.map((c) => c.path))) {
-        if (!priorContent.has(f.path)) priorContent.set(f.path, f.content)
+    // Integration only makes sense when multiple workers built disjoint modules that need wiring.
+    // A single worker already produced coherent, self-consistent files — skip the extra slow call.
+    let finalChanges = workerChanges
+    if (plan.workers.length > 1) {
+      await progress('Integrating modules...')
+      aiSteps += 1
+      const integration = await integrate(env.id, task.prompt, plan, [...changedPaths], allPathsAfter)
+      totalInputTokens += integration.inputTokens
+      totalOutputTokens += integration.outputTokens
+      if (integration.changes.length > 0) {
+        for (const f of await readWorkspaceFilesParallel(env.id, integration.changes.map((c) => c.path))) {
+          if (!priorContent.has(f.path)) priorContent.set(f.path, f.content)
+        }
+        await writeContainerFiles(env.id, integration.changes.map(({ path, content }) => ({ path, content })))
+        integration.changes.forEach((c) => changedPaths.add(c.path))
       }
-      await writeContainerFiles(env.id, integration.changes.map(({ path, content }) => ({ path, content })))
-      integration.changes.forEach((c) => changedPaths.add(c.path))
+      finalChanges = mergeChanges([...integration.changes, ...workerChanges])
     }
-    let finalChanges = mergeChanges([...integration.changes, ...workerChanges])
 
     // ── Health check + self-heal loop ────────────────────────────────────
     await updateTask(taskId, 'VERIFYING')
     await progress('Verifying the app runs...')
     let health = await runHealthCheck(env.id, progress)
     let healthIterations = 0
-    while (!health.healthy && healthIterations < ORCHESTRATION.MAX_HEALTH_ITERATIONS) {
+    // A simple change needs at most one corrective pass; complex builds get more. The wall-clock
+    // deadline is the hard backstop so a stubborn app can never grind the loop for tens of minutes.
+    const maxHealthIterations = isSimple
+      ? ORCHESTRATION.SIMPLE_MAX_HEALTH_ITERATIONS
+      : ORCHESTRATION.MAX_HEALTH_ITERATIONS
+    const healthDeadline = startedAt + ORCHESTRATION.MAX_TASK_MS
+    while (
+      !health.healthy &&
+      healthIterations < maxHealthIterations &&
+      Date.now() < healthDeadline
+    ) {
       healthIterations += 1
       await progress(
         `Health check failed — self-healing (attempt ${healthIterations}/${ORCHESTRATION.MAX_HEALTH_ITERATIONS})...`,

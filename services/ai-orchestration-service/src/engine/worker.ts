@@ -35,23 +35,57 @@ async function generateScopedChanges(args: {
       ? files.map((f) => `### ${f.path}\n\`\`\`\n${f.content}\n\`\`\``).join('\n\n')
       : '(no existing files to read)'
 
-  const response = await kimi.chat.completions.create({
-    model: MODELS.GENERATE,
-    max_tokens: ORCHESTRATION.WORKER_MAX_OUTPUT,
-    messages: [
-      { role: 'system', content: args.systemPrompt },
-      { role: 'user', content: `${args.userPrompt}\n\nRelevant files:\n\n${filesSection}` },
-    ],
-  })
+  const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+    { role: 'system', content: args.systemPrompt },
+    { role: 'user', content: `${args.userPrompt}\n\nRelevant files:\n\n${filesSection}` },
+  ]
 
-  const raw = response.choices[0]?.message?.content ?? '{}'
-  const finishReason = response.choices[0]?.finish_reason
-  const { changes } = parseChangesResponse(raw)
+  // Accumulate across continuations. When a response is cut off at the token cap we ask the model
+  // to resume exactly where it stopped and concatenate, rather than throwing away the whole task
+  // (which previously forced a full 40-minute rerun). The pieces join into one valid JSON payload.
+  let accumulated = ''
+  let inputTokens = 0
+  let outputTokens = 0
+  let finishReason: string | null | undefined
 
-  if (finishReason === 'length') {
-    throw new Error(
-      `Worker "${args.role}" response was cut off at ${ORCHESTRATION.WORKER_MAX_OUTPUT} tokens — its slice is too large.`,
-    )
+  for (let attempt = 0; attempt <= ORCHESTRATION.MAX_CONTINUATIONS; attempt++) {
+    const response = await kimi.chat.completions.create({
+      model: MODELS.GENERATE,
+      max_tokens: ORCHESTRATION.WORKER_MAX_OUTPUT,
+      messages,
+    })
+
+    const piece = response.choices[0]?.message?.content ?? ''
+    finishReason = response.choices[0]?.finish_reason
+    accumulated += piece
+    inputTokens += response.usage?.prompt_tokens ?? 0
+    outputTokens += response.usage?.completion_tokens ?? 0
+
+    if (finishReason !== 'length') break
+
+    // Cut off at the cap — feed the partial back and ask it to continue seamlessly.
+    messages.push({ role: 'assistant', content: piece })
+    messages.push({
+      role: 'user',
+      content:
+        'Your previous message was cut off at the token limit. Continue the JSON EXACTLY where you ' +
+        'stopped — output only the remaining characters, no repetition, no restart, no code fences.',
+    })
+  }
+
+  let changes: FileChange[]
+  try {
+    changes = parseChangesResponse(accumulated).changes
+  } catch (err) {
+    // Still truncated/unparseable after continuations. Surface a clear, actionable error instead of
+    // a raw JSON-parse failure — but only after having genuinely tried to complete the response.
+    if (finishReason === 'length') {
+      throw new Error(
+        `Worker "${args.role}" response was still cut off after ${ORCHESTRATION.MAX_CONTINUATIONS} ` +
+          `continuation(s) — its slice is too large. Try a more specific prompt or split the request.`,
+      )
+    }
+    throw err
   }
 
   // Keep the worker in its lane. If ownership filtering would drop everything (planner
@@ -62,8 +96,8 @@ async function generateScopedChanges(args: {
   return {
     role: args.role,
     changes: kept,
-    inputTokens: response.usage?.prompt_tokens ?? 0,
-    outputTokens: response.usage?.completion_tokens ?? 0,
+    inputTokens,
+    outputTokens,
   }
 }
 

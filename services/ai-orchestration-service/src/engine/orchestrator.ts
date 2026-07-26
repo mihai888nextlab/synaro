@@ -591,28 +591,42 @@ export async function executeTask(
       const manifest = await planFiles(task.prompt, repoTree, memory)
       totalInputTokens += manifest.inputTokens
       totalOutputTokens += manifest.outputTokens
-      if (manifest.files.length === 0) {
-        throw new Error('Could not plan any files for this task. Try rephrasing the request.')
-      }
 
-      await assertNotCancelled(taskId)
-      await progress(
-        `Generating ${manifest.files.length} file${manifest.files.length === 1 ? '' : 's'}...`,
-      )
-      const gen = await generateFilesInParallel(
-        env.id,
-        manifest.files,
-        task.prompt,
-        manifest,
-        memory,
-        progress,
-      )
-      aiSteps += gen.attempts
-      totalInputTokens += gen.inputTokens
-      totalOutputTokens += gen.outputTokens
-      generated = gen.files
-      filesFailed = gen.failed
-      summary = manifest.summary
+      if (manifest.files.length === 0) {
+        // Manifest planning came back empty (parse miss / sparse model). Rather than dead-end the
+        // user, fall back to a single whole-task generation pass — the same call the simple path uses.
+        await progress('Generating the project...')
+        aiSteps += 1
+        const single = await runWorker(
+          env.id,
+          { role: 'builder', goal: task.prompt, ownedFiles: [], filesToRead: triage.files },
+          task.prompt,
+          memory,
+        )
+        totalInputTokens += single.inputTokens
+        totalOutputTokens += single.outputTokens
+        generated = single.changes
+        summary = 'Build the requested project.'
+      } else {
+        await assertNotCancelled(taskId)
+        await progress(
+          `Generating ${manifest.files.length} file${manifest.files.length === 1 ? '' : 's'}...`,
+        )
+        const gen = await generateFilesInParallel(
+          env.id,
+          manifest.files,
+          task.prompt,
+          manifest,
+          memory,
+          progress,
+        )
+        aiSteps += gen.attempts
+        totalInputTokens += gen.inputTokens
+        totalOutputTokens += gen.outputTokens
+        generated = gen.files
+        filesFailed = gen.failed
+        summary = manifest.summary
+      }
     }
 
     await assertNotCancelled(taskId)

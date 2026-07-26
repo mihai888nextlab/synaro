@@ -8,6 +8,7 @@ import {
   FolderIcon,
   FolderOpenIcon,
   FolderPlus,
+  ImagePlus,
   Loader2,
   MessageSquareText,
   FolderTree,
@@ -801,6 +802,10 @@ export function ProjectWorkspace({
   const logPollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const logEndRef = React.useRef<HTMLDivElement>(null);
   const hasRestoredRunRef = React.useRef(false);
+  const uploadInputRef = React.useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadMsg, setUploadMsg] = React.useState<string | null>(null);
+  const [uploadDir, setUploadDir] = React.useState("public/uploads");
   const prevWorkspaceTabRef = React.useRef<ProjectWorkspaceTab | null>(null);
 
   React.useEffect(() => {
@@ -988,6 +993,49 @@ export function ProjectWorkspace({
       setRunError(t("workspace.couldNotReachServer"));
     }
   }, [projectId, t]);
+
+  const handleUploadFiles = React.useCallback(
+    async (files: FileList | null, dir?: string | null) => {
+      if (!projectId || !files || files.length === 0) return;
+      setUploading(true);
+      setUploadMsg(null);
+      const refs: string[] = [];
+      try {
+        for (const file of Array.from(files)) {
+          const dataBase64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+          });
+          const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/upload`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ filename: file.name, dataBase64, ...(dir ? { dir } : {}) }),
+          });
+          const data = (await res.json().catch(() => null)) as
+            | { url?: string | null; workspacePath?: string; error?: string }
+            | null;
+          if (!res.ok || !data?.workspacePath) {
+            throw new Error(data?.error ?? `Upload failed (${res.status})`);
+          }
+          // Prefer the web URL (public/); otherwise report the workspace path it landed at.
+          refs.push(data.url ?? data.workspacePath);
+        }
+        setTreeRefreshKey((k) => k + 1);
+        setUploadMsg(
+          refs.length === 1
+            ? `Uploaded — reference it as ${refs[0]}`
+            : `Uploaded ${refs.length} images to ${dir ?? "public/uploads"}`,
+        );
+      } catch (err) {
+        setUploadMsg(err instanceof Error ? err.message : "Upload failed");
+      } finally {
+        setUploading(false);
+      }
+    },
+    [projectId],
+  );
 
   const handleDockerPress = React.useCallback(
     async (action: "start" | "stop") => {
@@ -1212,6 +1260,20 @@ export function ProjectWorkspace({
                         {t("workspace.logs")}
                       </button>
                     ) : null}
+                    <button
+                      type="button"
+                      onClick={() => uploadInputRef.current?.click()}
+                      disabled={uploading}
+                      className={tabButtonClass(false)}
+                      aria-label="Upload image"
+                    >
+                      {uploading ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <ImagePlus className="size-4" />
+                      )}
+                      Image
+                    </button>
                   </>
                 ) : null}
               </div>
@@ -1226,6 +1288,32 @@ export function ProjectWorkspace({
                   showPreviewPanel && "border-t border-border/40 px-1 pt-2",
                 )}
               >
+                <input
+                  ref={uploadInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    void handleUploadFiles(e.target.files, uploadDir);
+                    e.target.value = "";
+                  }}
+                />
+                <div className="flex items-center gap-2 px-1">
+                  <span className="whitespace-nowrap text-xs text-muted-foreground">Upload to</span>
+                  <input
+                    type="text"
+                    value={uploadDir}
+                    onChange={(e) => setUploadDir(e.target.value)}
+                    placeholder="public/uploads"
+                    spellCheck={false}
+                    aria-label="Upload target directory"
+                    className="h-7 w-full max-w-[220px] rounded-lg border border-border/70 bg-card px-2 text-xs text-foreground outline-none focus:border-border"
+                  />
+                </div>
+                {uploadMsg ? (
+                  <p className="px-1 text-xs text-muted-foreground">{uploadMsg}</p>
+                ) : null}
                 {showPreviewPanel ? (
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -1251,6 +1339,20 @@ export function ProjectWorkspace({
                               {t("workspace.logs")}
                             </button>
                           ) : null}
+                          <button
+                            type="button"
+                            onClick={() => uploadInputRef.current?.click()}
+                            disabled={uploading}
+                            className={tabButtonClass(false)}
+                            aria-label="Upload image"
+                          >
+                            {uploading ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <ImagePlus className="size-4" />
+                            )}
+                            Image
+                          </button>
                         </>
                       ) : null}
                     </div>

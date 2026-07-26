@@ -766,7 +766,12 @@ export async function getWorkspaceSelection(environmentId: string, relativePath:
  * Write a file into the container workspace. Content is base64-encoded via env var to avoid
  * shell escaping issues. Max content size is limited by Docker env var limits (~1 MB in practice).
  */
-export async function writeWorkspaceFile(environmentId: string, relativePath: string, content: string): Promise<void> {
+export async function writeWorkspaceFile(
+  environmentId: string,
+  relativePath: string,
+  content: string,
+  encoding: 'utf8' | 'base64' = 'utf8',
+): Promise<void> {
   const safe = sanitizeWorkspaceRelativePath(relativePath)
   if (!safe) throw new Error('Invalid path')
 
@@ -777,7 +782,9 @@ export async function writeWorkspaceFile(environmentId: string, relativePath: st
   }
 
   const fullPath = `${WORKSPACE_ROOT}/${safe}`
-  const b64 = Buffer.from(content, 'utf8').toString('base64')
+  // For binary uploads the client already sends base64 of the raw bytes; for text we base64-encode
+  // here. Either way the container decodes with `base64 -d`, so the bytes land intact.
+  const b64 = encoding === 'base64' ? content : Buffer.from(content, 'utf8').toString('base64')
 
   await execShellInContainer(
     environment.containerId,

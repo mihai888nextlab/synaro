@@ -229,6 +229,25 @@ export async function remoteWriteWorkspaceFile(envId: string, relativePath: stri
   }
 }
 
+/** Write raw bytes (e.g. an uploaded image) into the workspace. `base64` is base64 of the file bytes. */
+export async function remoteWriteWorkspaceFileBinary(
+  envId: string,
+  relativePath: string,
+  base64: string,
+): Promise<void> {
+  const base = environmentServiceBaseUrl();
+  const res = await fetch(`${base}/api/environments/${encodeURIComponent(envId)}/workspace-file`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: relativePath, content: base64, encoding: "base64" }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(t || `Write workspace file failed (${res.status})`);
+  }
+}
+
 export async function remoteDeleteWorkspacePath(envId: string, relativePath: string): Promise<void> {
   const base = environmentServiceBaseUrl();
   const res = await fetch(`${base}/api/environments/${encodeURIComponent(envId)}/workspace-delete`, {

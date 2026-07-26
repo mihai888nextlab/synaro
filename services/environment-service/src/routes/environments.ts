@@ -241,12 +241,14 @@ export const environmentRoutes: FastifyPluginAsync = async (app) => {
     const { id } = req.params as { id: string }
     const writeFileSchema = z.object({
       path: z.string().min(1).max(4096),
-      content: z.string().max(2_000_000),
+      // Base64 payloads (binary uploads like images) are larger than text; allow up to ~8MB encoded.
+      content: z.string().max(8_000_000),
+      encoding: z.enum(['utf8', 'base64']).optional(),
     })
     const body = writeFileSchema.safeParse(req.body)
     if (!body.success) return reply.status(400).send({ error: 'Invalid request body' })
     try {
-      await writeWorkspaceFile(id, body.data.path, body.data.content)
+      await writeWorkspaceFile(id, body.data.path, body.data.content, body.data.encoding ?? 'utf8')
       return reply.send({ ok: true })
     } catch (err) {
       const msg = String(err)

@@ -9,4 +9,9 @@ export const DESIGN_GUIDE = `DESIGN BAR — the UI must look polished, modern an
 - Polish & depth: subtle shadows, rounded corners, considered borders, visible hover/focus states, and smooth subtle transitions. Ensure accessible contrast. A tasteful dark or light theme is fine — just make it intentional and consistent.
 - Fully responsive from mobile to desktop (flex/grid, relative units, sensible breakpoints).
 - Real, sensible content and copy — no "lorem ipsum", no empty placeholder boxes.
-- If using plain HTML/CSS, ship a COMPLETE stylesheet with CSS custom properties for the palette; if using a framework, style every component consistently. Do not ship unstyled markup.`
+- If using plain HTML/CSS, ship a COMPLETE stylesheet with CSS custom properties for the palette; if using a framework, style every component consistently. Do not ship unstyled markup.
+
+IMAGES — never reference image files that don't exist (that produces broken images). Use, in this order:
+- Icons, logos, decorative shapes, backgrounds, patterns → inline SVG or CSS gradients you write directly. Prefer these; they always render and look crisp.
+- Photographs / rich imagery → the free Lorem Picsum service by URL: https://picsum.photos/seed/<keyword>/<width>/<height> (e.g. https://picsum.photos/seed/coffee/1200/800). Pick a stable keyword per image so it stays consistent. Never invent other remote image URLs.
+- The user's own / brand assets → reference local files under /uploads/<name> (served from public/uploads). Only use a /uploads path when that file actually exists; otherwise fall back to the options above.`

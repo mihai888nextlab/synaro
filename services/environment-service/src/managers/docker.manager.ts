@@ -786,11 +786,42 @@ export async function writeWorkspaceFile(
   // here. Either way the container decodes with `base64 -d`, so the bytes land intact.
   const b64 = encoding === 'base64' ? content : Buffer.from(content, 'utf8').toString('base64')
 
-  await execShellInContainer(
-    environment.containerId,
-    `mkdir -p "$(dirname "$SYNARO_PATH")" && printf '%s' "$SYNARO_B64" | base64 -d > "$SYNARO_PATH"`,
-    [`SYNARO_PATH=${fullPath}`, `SYNARO_B64=${b64}`],
-  )
+  // Stream the base64 via STDIN — NOT a shell env var. A large image as `printf "$VAR"` blows past
+  // ARG_MAX and the write silently produces no file; stdin has no such limit. The path is passed as
+  // an argument ($1), which is small and safe.
+  await writeBytesViaStdin(environment.containerId, fullPath, b64)
+}
+
+/**
+ * Write base64-encoded bytes to `fullPath` inside a container by piping the base64 to `base64 -d`
+ * over STDIN. Verifies the exec exit code so a failed write throws instead of silently "succeeding".
+ */
+async function writeBytesViaStdin(containerId: string, fullPath: string, base64: string): Promise<void> {
+  const container = docker.getContainer(containerId)
+  const exec = await container.exec({
+    // $1 is the destination path (small, safe as an arg); the base64 payload arrives on stdin.
+    Cmd: ['sh', '-c', 'mkdir -p "$(dirname "$1")" && base64 -d > "$1"', 'sh', fullPath],
+    AttachStdin: true,
+    AttachStdout: true,
+    AttachStderr: true,
+    Tty: false,
+  })
+
+  const stream = await exec.start({ hijack: true, stdin: true })
+  await new Promise<void>((resolve, reject) => {
+    stream.on('error', reject)
+    stream.on('end', resolve)
+    stream.on('close', resolve)
+    // Discard any framed stdout/stderr; we only care about the exit code.
+    stream.on('data', () => {})
+    stream.write(Buffer.from(base64, 'utf8'))
+    stream.end()
+  })
+
+  const info = await exec.inspect()
+  if (typeof info.ExitCode === 'number' && info.ExitCode !== 0) {
+    throw new Error(`File write failed inside container (exit ${info.ExitCode})`)
+  }
 }
 
 export async function createWorkspaceDirectory(environmentId: string, relativePath: string): Promise<void> {

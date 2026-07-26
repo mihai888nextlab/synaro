@@ -144,8 +144,28 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./services/environment-service/src:/app/src
       - ./services/environment-service/prisma:/app/prisma
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-net"
+      # Expose ONLY the token-authenticated terminal WebSocket publicly. The rest of the
+      # environment-service REST API is unauthenticated and MUST stay internal-only, so this
+      # router is scoped to the exact /terminal/ws path (Traefik v2 named-regex path matcher).
+      # HTTPS (Cloudflare "Full" → Traefik :443).
+      - "traefik.http.routers.synaro-terminal.rule=Host(`synaro.tech`) && Path(`/api/environments/{id:[^/]+}/terminal/ws`)"
+      - "traefik.http.routers.synaro-terminal.entrypoints=websecure"
+      - "traefik.http.routers.synaro-terminal.tls=true"
+      - "traefik.http.routers.synaro-terminal.tls.options=default"
+      - "traefik.http.routers.synaro-terminal.priority=100"
+      - "traefik.http.routers.synaro-terminal.service=synaro-terminal"
+      # HTTP (in case Cloudflare reaches the origin on :80) — same scoped path.
+      - "traefik.http.routers.synaro-terminal-http.rule=Host(`synaro.tech`) && Path(`/api/environments/{id:[^/]+}/terminal/ws`)"
+      - "traefik.http.routers.synaro-terminal-http.entrypoints=web"
+      - "traefik.http.routers.synaro-terminal-http.priority=100"
+      - "traefik.http.routers.synaro-terminal-http.service=synaro-terminal"
+      - "traefik.http.services.synaro-terminal.loadbalancer.server.port=3002"
     networks:
       - synaro-internal
+      - traefik-net
     depends_on:
       postgresql:
         condition: service_healthy

@@ -9,8 +9,8 @@ Return ONLY valid JSON: { "changes": [ { "path": "relative/path", "content": "FU
 
 Rules:
 - Emit ONLY the glue needed: fix/add imports, register routes, mount components, update entry points (index/app/router), and add missing dependencies to package.json.
-- Do NOT rewrite the workers' feature code. Prefer editing entry points and config over rewriting modules.
-- Return FULL file content for any file you change. If nothing needs wiring, return { "changes": [] }.
+- You are given the FULL content of entry/config files (edit these) and short PREVIEWS of the worker files (imports/exports/signatures — for reference only). Do NOT rewrite worker files; wire them from the entry points.
+- Only return changes for entry/config files. Return FULL file content for each file you change. If nothing needs wiring, return { "changes": [] }.
 - For Next.js: never set distDir; ensure a "next dev" script exists; bind to process.env.PORT.
 - Return ONLY the JSON.`
 
@@ -39,6 +39,11 @@ const ENTRY_CANDIDATES = [
 /**
  * Single wiring pass over the merged worker output. `changedPaths` is every path the workers
  * created/modified this task; `allPaths` is the full post-write file list.
+ *
+ * Deliberately kept lightweight: the integrator only edits entry/config files, so it gets those in
+ * FULL but sees worker files only as short signature PREVIEWS. Sending the full body of every changed
+ * file was the main reason this call ballooned and timed out. It also fails soft — any error (timeout,
+ * bad JSON) returns "no wiring" so the task ships the worker output instead of dying here.
  */
 export async function integrate(
   envId: string,
@@ -47,11 +52,32 @@ export async function integrate(
   changedPaths: string[],
   allPaths: string[],
 ): Promise<{ changes: FileChange[]; inputTokens: number; outputTokens: number }> {
-  const readSet = Array.from(
-    new Set([...changedPaths, ...ENTRY_CANDIDATES.filter((p) => allPaths.includes(p))]),
-  )
-  const files = await readWorkspaceFilesParallel(envId, readSet)
-  const filesSection = files.map((f) => `### ${f.path}\n\`\`\`\n${f.content}\n\`\`\``).join('\n\n')
+  const entryPaths = ENTRY_CANDIDATES.filter((p) => allPaths.includes(p))
+  const entrySet = new Set(entryPaths)
+  const previewPaths = changedPaths
+    .filter((p) => !entrySet.has(p))
+    .slice(0, ORCHESTRATION.INTEGRATOR_MAX_PREVIEW_FILES)
+
+  // Read entry/config files (full) and worker files (truncated to signatures) in one batch.
+  const files = await readWorkspaceFilesParallel(envId, [...entryPaths, ...previewPaths])
+  const byPath = new Map(files.map((f) => [f.path, f.content]))
+
+  const entrySection = entryPaths
+    .filter((p) => byPath.has(p))
+    .map((p) => `### ${p}\n\`\`\`\n${byPath.get(p)}\n\`\`\``)
+    .join('\n\n')
+
+  const previewSection = previewPaths
+    .filter((p) => byPath.has(p))
+    .map((p) => {
+      const content = byPath.get(p) ?? ''
+      const preview =
+        content.length > ORCHESTRATION.INTEGRATOR_PREVIEW_CHARS
+          ? `${content.slice(0, ORCHESTRATION.INTEGRATOR_PREVIEW_CHARS)}\n… (truncated)`
+          : content
+      return `### ${p}\n\`\`\`\n${preview}\n\`\`\``
+    })
+    .join('\n\n')
 
   const userPrompt = [
     `Task: ${prompt}`,
@@ -60,21 +86,30 @@ export async function integrate(
     'Files created/modified by the workers this task:',
     changedPaths.map((p) => `- ${p}`).join('\n'),
     '',
-    'All files currently in the project:',
-    allPaths.join('\n'),
+    'Entry/config files — EDIT THESE to wire the app together (full content):',
+    entrySection || '(none)',
     '',
-    'Relevant file contents:',
-    filesSection || '(none)',
+    'Worker files — reference only, for their imports/exports (previews, do NOT rewrite):',
+    previewSection || '(none)',
   ].join('\n')
 
-  const response = await kimi.chat.completions.create({
-    model: MODELS.GENERATE,
-    max_tokens: ORCHESTRATION.WORKER_MAX_OUTPUT,
-    messages: [
-      { role: 'system', content: INTEGRATOR_SYSTEM },
-      { role: 'user', content: userPrompt },
-    ],
-  })
+  let response
+  try {
+    response = await kimi.chat.completions.create(
+      {
+        model: MODELS.GENERATE,
+        max_tokens: ORCHESTRATION.INTEGRATOR_MAX_OUTPUT,
+        messages: [
+          { role: 'system', content: INTEGRATOR_SYSTEM },
+          { role: 'user', content: userPrompt },
+        ],
+      },
+      { timeout: ORCHESTRATION.INTEGRATOR_TIMEOUT_MS, maxRetries: 0 },
+    )
+  } catch {
+    // Timeout / network error — integration is best-effort glue. Skip it rather than fail the task.
+    return { changes: [], inputTokens: 0, outputTokens: 0 }
+  }
 
   const raw = response.choices[0]?.message?.content ?? '{"changes":[]}'
   let changes: FileChange[] = []
@@ -85,8 +120,13 @@ export async function integrate(
     changes = []
   }
 
+  // Guard: the integrator should only touch entry/config files. Drop any attempt to rewrite a worker
+  // file (keeps a stray full-file rewrite from clobbering good worker output).
+  const allowed = new Set([...entryPaths])
+  const glueOnly = changes.filter((c) => allowed.has(c.path) || !changedPaths.includes(c.path))
+
   return {
-    changes,
+    changes: glueOnly,
     inputTokens: response.usage?.prompt_tokens ?? 0,
     outputTokens: response.usage?.completion_tokens ?? 0,
   }

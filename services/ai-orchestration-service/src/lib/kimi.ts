@@ -36,6 +36,14 @@ export const ORCHESTRATION = {
   WORKER_CONCURRENCY: 3,
   /** Per-worker output budget (each owns a slice of the app, so smaller than a full-app pass). */
   WORKER_MAX_OUTPUT: 16_000,
+  /** Integrator emits only glue edits to entry/config files — a much smaller budget than a worker. */
+  INTEGRATOR_MAX_OUTPUT: 6_000,
+  /** Per-request timeout for the integrator. It fails soft (skips wiring), so keep it short. */
+  INTEGRATOR_TIMEOUT_MS: 90_000,
+  /** Longest slice of a worker file shown to the integrator (imports/exports/signatures only). */
+  INTEGRATOR_PREVIEW_CHARS: 1_400,
+  /** Cap how many worker-file previews the integrator context includes. */
+  INTEGRATOR_MAX_PREVIEW_FILES: 40,
   /** Self-heal attempts before giving up (complex, multi-worker tasks). */
   MAX_HEALTH_ITERATIONS: 3,
   /** Self-heal attempts for a simple single-edit task — one corrective pass is plenty. */

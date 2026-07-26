@@ -9,6 +9,7 @@ import {
   fetchEnvironmentsForProject,
   pickActiveRuntimeEnvironment,
   remoteWriteWorkspaceFileBinary,
+  remoteWorkspaceSelection,
 } from "@/lib/environment-service-api";
 
 // Allow a larger JSON body — an image arrives base64-encoded (~1.33× its byte size).
@@ -29,6 +30,25 @@ function safeDir(raw: unknown): string {
     .filter((s) => s && s !== "." && s !== "..")
     .join("/");
   return cleaned || "public/uploads";
+}
+
+/** Find a non-colliding path under `dir`: name.ext → name-1.ext → name-2.ext … (falls back to random). */
+async function freeWorkspacePath(envId: string, dir: string, name: string): Promise<string> {
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : ""; // includes leading "."
+  for (let i = 0; i <= 50; i++) {
+    const candidate = i === 0 ? name : `${stem}-${i}${ext}`;
+    const path = `${dir}/${candidate}`;
+    try {
+      const sel = await remoteWorkspaceSelection(envId, path);
+      if (sel.kind !== "file" && sel.kind !== "directory") return path; // free
+    } catch {
+      return path; // couldn't stat — assume free (write will still validate the path)
+    }
+  }
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `${dir}/${stem}-${rand}${ext}`;
 }
 
 /** Strip directories and unsafe characters; keep a single safe filename with an image extension. */
@@ -93,7 +113,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Default target is public/uploads (web-referenceable); a caller may target any workspace dir.
   const targetDir = safeDir(dir);
-  const workspacePath = `${targetDir}/${name}`;
+
+  // Never silently overwrite: if the target name already exists, append -1, -2, … so each upload
+  // produces a NEW file (uploading two images that happen to share a filename was clobbering one).
+  const workspacePath = await freeWorkspacePath(env.id, targetDir, name);
   try {
     await remoteWriteWorkspaceFileBinary(env.id, workspacePath, b64);
   } catch (err) {

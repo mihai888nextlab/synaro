@@ -241,8 +241,9 @@ export const environmentRoutes: FastifyPluginAsync = async (app) => {
     const { id } = req.params as { id: string }
     const writeFileSchema = z.object({
       path: z.string().min(1).max(4096),
-      // Base64 payloads (binary uploads like images) are larger than text; allow up to ~8MB encoded.
-      content: z.string().max(8_000_000),
+      // Base64 payloads (binary uploads like images) are ~1.33× the raw bytes. 9M chars comfortably
+      // covers the app's 6MB image cap (6MB base64 ≈ 8.39M chars), so that 6MB limit is the real one.
+      content: z.string().max(9_000_000),
       encoding: z.enum(['utf8', 'base64']).optional(),
     })
     const body = writeFileSchema.safeParse(req.body)

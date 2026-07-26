@@ -24,6 +24,7 @@ import { generateFilesInParallel } from './file-generator.js'
 import { runWorker, runFixPass } from './worker.js'
 import { runHealthCheck } from './health-check.js'
 import { mergeChanges } from './parse-changes.js'
+import type { HealthResult } from './types.js'
 import { prisma } from '../lib/prisma.js'
 
 type TaskStatus =
@@ -664,45 +665,46 @@ export async function executeTask(
     const changedPaths = new Set(finalChangesInit.map((c) => c.path))
     let finalChanges = finalChangesInit
 
-    // ── Health check + self-heal loop ────────────────────────────────────
-    await assertNotCancelled(taskId)
-    await updateTask(taskId, 'VERIFYING')
-    await progress('Verifying the app runs...')
-    let health = await runHealthCheck(env.id, progress)
+    // ── Verify + self-heal ────────────────────────────────────────────────
+    // Skip verification for a simple edit: the app is (usually) already running and a small change
+    // hot-reloads in place. Restarting it + running the full health/self-heal loop is disruptive,
+    // slow, and — worse — a false-negative health check would "self-heal" a perfectly working app.
+    let health: HealthResult = { healthy: true, portOpen: true, httpStatus: null, log: '', error: null }
     let healthIterations = 0
-    // A simple change needs at most one corrective pass; complex builds get more. The wall-clock
-    // deadline is the hard backstop so a stubborn app can never grind the loop for tens of minutes.
-    const maxHealthIterations = isSimple
-      ? ORCHESTRATION.SIMPLE_MAX_HEALTH_ITERATIONS
-      : ORCHESTRATION.MAX_HEALTH_ITERATIONS
-    const healthDeadline = startedAt + ORCHESTRATION.MAX_TASK_MS
-    while (
-      !health.healthy &&
-      healthIterations < maxHealthIterations &&
-      Date.now() < healthDeadline
-    ) {
+    if (!isSimple) {
       await assertNotCancelled(taskId)
-      healthIterations += 1
-      await progress(
-        `Health check failed — self-healing (attempt ${healthIterations}/${maxHealthIterations})...`,
-      )
-      const fix = await runFixPass(
-        env.id,
-        task.prompt,
-        { error: health.error ?? 'unknown error', log: health.log },
-        [...changedPaths],
-      )
-      totalInputTokens += fix.inputTokens
-      totalOutputTokens += fix.outputTokens
-      aiSteps += 1
-      if (fix.changes.length === 0) break
-      for (const f of await readWorkspaceFilesParallel(env.id, fix.changes.map((c) => c.path))) {
-        if (!priorContent.has(f.path)) priorContent.set(f.path, f.content)
-      }
-      await writeContainerFiles(env.id, fix.changes.map(({ path, content }) => ({ path, content })))
-      fix.changes.forEach((c) => changedPaths.add(c.path))
-      finalChanges = mergeChanges([...fix.changes, ...finalChanges])
+      await updateTask(taskId, 'VERIFYING')
+      await progress('Verifying the app runs...')
       health = await runHealthCheck(env.id, progress)
+      const healthDeadline = startedAt + ORCHESTRATION.MAX_TASK_MS
+      while (
+        !health.healthy &&
+        healthIterations < ORCHESTRATION.MAX_HEALTH_ITERATIONS &&
+        Date.now() < healthDeadline
+      ) {
+        await assertNotCancelled(taskId)
+        healthIterations += 1
+        await progress(
+          `Health check failed — self-healing (attempt ${healthIterations}/${ORCHESTRATION.MAX_HEALTH_ITERATIONS})...`,
+        )
+        const fix = await runFixPass(
+          env.id,
+          task.prompt,
+          { error: health.error ?? 'unknown error', log: health.log },
+          [...changedPaths],
+        )
+        totalInputTokens += fix.inputTokens
+        totalOutputTokens += fix.outputTokens
+        aiSteps += 1
+        if (fix.changes.length === 0) break
+        for (const f of await readWorkspaceFilesParallel(env.id, fix.changes.map((c) => c.path))) {
+          if (!priorContent.has(f.path)) priorContent.set(f.path, f.content)
+        }
+        await writeContainerFiles(env.id, fix.changes.map(({ path, content }) => ({ path, content })))
+        fix.changes.forEach((c) => changedPaths.add(c.path))
+        finalChanges = mergeChanges([...fix.changes, ...finalChanges])
+        health = await runHealthCheck(env.id, progress)
+      }
     }
 
     await assertNotCancelled(taskId)

@@ -7,9 +7,11 @@ type PackageJson = { scripts?: Record<string, string>; main?: string }
 const PORT_CHECK_CMD =
   "grep -q ':0BB8 ' /proc/net/tcp /proc/net/tcp6 2>/dev/null && echo SYNARO_READY || echo SYNARO_WAIT"
 
-// Log signatures that mean a *server* is broken (not just noisy).
+// Log signatures that mean the server process genuinely CANNOT come up (not just noisy dev output).
+// Deliberately narrow: things like "Error:", "TypeError:", "Failed to compile", "Module not found"
+// appear transiently in Next.js/Vite dev logs and then resolve, so they must NOT fail a live app.
 const FATAL_LOG_RE =
-  /(Error:|Cannot find module|MODULE_NOT_FOUND|SyntaxError|ReferenceError|TypeError:|Failed to compile|EADDRINUSE|listen EACCES|Unhandled|address already in use|command not found|Module not found)/i
+  /(Cannot find module|MODULE_NOT_FOUND|EADDRINUSE|address already in use|listen EACCES|command not found|npm ERR!)/i
 
 // A Python traceback / import error means a run-to-completion script actually crashed.
 const PY_FATAL_RE =
@@ -290,10 +292,11 @@ export async function runHealthCheck(
 
   await onProgress?.('Checking the app responds…')
   const httpStatus = await probeHttp(envId)
-  const httpOk = httpStatus !== null && httpStatus >= 200 && httpStatus < 400
-  const logFatal = FATAL_LOG_RE.test(log)
 
-  if (httpOk && !logFatal) {
+  // HTTP is authoritative. If the server answers with anything below 500 it is up and serving
+  // requests (a 200/301/404/401 all mean "the process is alive and handling HTTP") — do NOT fail it
+  // over scary-but-transient lines in the dev log. Only a 5xx or no response at all is unhealthy.
+  if (httpStatus !== null && httpStatus < 500) {
     return { healthy: true, portOpen: true, httpStatus, log, error: null }
   }
 
@@ -302,9 +305,10 @@ export async function runHealthCheck(
     portOpen: true,
     httpStatus,
     log,
-    error: logFatal
-      ? firstFatalLine(log)
-      : `The app responded with HTTP ${httpStatus ?? 'no response'} instead of a success status.`,
+    error:
+      httpStatus === null
+        ? 'The app is listening on port 3000 but did not respond to an HTTP request.'
+        : `The app responded with HTTP ${httpStatus} (server error).`,
   }
 }
 

@@ -922,12 +922,41 @@ export function ProjectWorkspace({
       const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/run`, {
         method: "POST",
       });
-      const data = (await res.json()) as { previewUrl?: string; command?: string; error?: string };
+      const data = (await res.json()) as {
+        previewUrl?: string;
+        command?: string;
+        error?: string;
+        kind?: "server" | "script";
+        language?: string;
+        output?: string;
+        exitCode?: number | null;
+      };
       if (!res.ok) {
         setRunStatus("error");
         setRunError(data.error ?? t("workspace.runFailed", { status: res.status }));
         return;
       }
+
+      // Run-to-completion script (e.g. `python hello.py`): there is no web server or preview — show
+      // the program's output in the logs panel instead of waiting for a port that never opens.
+      if (data.kind === "script") {
+        if (runPollRef.current) {
+          clearInterval(runPollRef.current);
+          runPollRef.current = null;
+        }
+        setPreviewUrl(null);
+        const lines = (data.output ?? "").split("\n");
+        setLogLines(lines.length > 0 && data.output ? lines : ["(no output)"]);
+        setShowLogs(true);
+        if (typeof data.exitCode === "number" && data.exitCode !== 0) {
+          setRunStatus("error");
+          setRunError(`${data.command ?? "Script"} exited with code ${data.exitCode}`);
+        } else {
+          setRunStatus("running");
+        }
+        return;
+      }
+
       const url = data.previewUrl ?? null;
 
       // Poll until port 3000 is open in the container (max 180s — a cold `npm install` plus the

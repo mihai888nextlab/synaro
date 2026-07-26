@@ -32,6 +32,57 @@ function detectRunCommand(pkg: PackageJson | null): string {
 const PORT_CHECK_CMD =
   "grep -q ':0BB8 ' /proc/net/tcp /proc/net/tcp6 2>/dev/null && echo SYNARO_READY || echo SYNARO_WAIT";
 
+// Enter the project root the same way the workspace does (a project may live under app/).
+const WORKSPACE_CD =
+  "cd /tmp/synaro-workspace/app 2>/dev/null || cd /tmp/synaro-workspace 2>/dev/null";
+
+// Resolve a Python interpreter into $PY, installing one on demand — the runtime image
+// (node:20-alpine) ships without Python, so a generated .py project has nothing to run otherwise.
+const ENSURE_PYTHON = [
+  "PY=$(command -v python3 || command -v python || true)",
+  'if [ -z "$PY" ]; then apk add --no-cache python3 >/dev/null 2>&1 || true; PY=$(command -v python3 || true); fi',
+].join("\n");
+
+// Best-effort pip install when a requirements.txt is present.
+const PIP_INSTALL =
+  '[ -f requirements.txt ] && { command -v pip3 >/dev/null 2>&1 || apk add --no-cache py3-pip >/dev/null 2>&1 || true; pip3 install -r requirements.txt >> /tmp/app.log 2>&1 || true; }';
+
+// Any top-level .py that opens a port ⇒ a long-running server, not a run-to-completion script.
+const PY_SERVER_RE =
+  "flask|fastapi|django|uvicorn|gunicorn|http\\.server|socketserver|bottle|aiohttp|serve_forever|socket\\(|app\\.run\\(|run_server|\\.listen\\(";
+
+// Shell that resolves the Python entry file into $ENTRY (same order as the health check).
+const PY_ENTRY_SCAN = [
+  'ENTRY=""',
+  'for f in main.py app.py hello.py index.py run.py server.py __main__.py; do [ -f "$f" ] && ENTRY="$f" && break; done',
+  '[ -z "$ENTRY" ] && ENTRY=$(ls *.py 2>/dev/null | head -n1)',
+].join("\n");
+
+type Runtime =
+  | { language: "node"; kind: "server"; runCommand: string; hasPackageJson: boolean }
+  | { language: "python"; kind: "server" | "script"; entry: string };
+
+/** Detect a Python project + whether it's a long-running server or a run-to-completion script. */
+async function detectPythonRuntime(
+  envId: string,
+): Promise<{ kind: "server" | "script"; entry: string } | null> {
+  const script = [
+    WORKSPACE_CD,
+    PY_ENTRY_SCAN,
+    'if [ -z "$ENTRY" ]; then echo "SYNARO_ENTRY:"; exit 0; fi',
+    'echo "SYNARO_ENTRY:$ENTRY"',
+    `if ls *.py >/dev/null 2>&1 && grep -lE '${PY_SERVER_RE}' *.py >/dev/null 2>&1; then echo SYNARO_SERVER; else echo SYNARO_SCRIPT; fi`,
+  ].join("\n");
+  try {
+    const { output } = await remoteExecTerminal(envId, script);
+    const entry = (output.match(/SYNARO_ENTRY:(.*)/)?.[1] ?? "").trim();
+    if (!entry) return null;
+    return { kind: output.includes("SYNARO_SERVER") ? "server" : "script", entry };
+  } catch {
+    return null;
+  }
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getServerSession(req, res, authOptions);
   if (!session?.user?.id) return res.status(401).json({ error: "Unauthorized" });
@@ -87,6 +138,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // POST — start the app
   if (req.method === "POST") {
     touchProjectActivity(projectId);
+
+    // Detect the runtime: Node (package.json) vs Python, and long-running server vs run-to-completion
+    // script. Without this every project is launched as `node index.js`, which errors on a .py file.
     let pkg: PackageJson | null = null;
     try {
       const sel = await remoteWorkspaceSelection(env.id, "package.json");
@@ -97,26 +151,85 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       pkg = null;
     }
 
-    const runCommand = detectRunCommand(pkg);
-    const hasPackageJson = pkg !== null;
+    let runtime: Runtime;
+    if (pkg) {
+      runtime = { language: "node", kind: "server", runCommand: detectRunCommand(pkg), hasPackageJson: true };
+    } else {
+      const py = await detectPythonRuntime(env.id);
+      runtime = py
+        ? { language: "python", kind: py.kind, entry: py.entry }
+        : { language: "node", kind: "server", runCommand: detectRunCommand(null), hasPackageJson: false };
+    }
 
-    // Install dependencies to completion and record a marker BEFORE starting the dev server.
-    // Gating on a marker (not `[ -d node_modules ]`, which is already true mid-install) is what
-    // stops a second Run click from launching the app against a half-populated node_modules.
-    // Reinstall when package.json is newer than the marker (e.g. the AI added a dependency).
-    const installGuard = hasPackageJson
-      ? [
-          "if [ ! -d node_modules ] || [ ! -f /tmp/app.deps-ok ] || [ package.json -nt /tmp/app.deps-ok ]; then",
-          '  echo "[synaro] Installing dependencies..." >> /tmp/app.log',
-          "  if npm install --loglevel=warn >> /tmp/app.log 2>&1; then",
-          "    touch /tmp/app.deps-ok",
-          "  else",
-          '    echo "[synaro] npm install failed" >> /tmp/app.log',
-          "    exit 1",
-          "  fi",
-          "fi",
-        ].join("\n")
-      : "true";
+    // ── Run-to-completion script (e.g. `python hello.py`): execute it and return its output. There
+    //    is no web server and no preview — success is a clean exit, and the output feeds the logs panel.
+    if (runtime.language === "python" && runtime.kind === "script") {
+      const scriptRun = [
+        WORKSPACE_CD,
+        ENSURE_PYTHON,
+        "rm -f /tmp/app.log",
+        PY_ENTRY_SCAN,
+        'echo "[synaro] Running: python $ENTRY" >> /tmp/app.log',
+        'if [ -z "$PY" ]; then echo "SYNARO_NOPYTHON"; echo "[synaro] No Python runtime available" >> /tmp/app.log; exit 0; fi',
+        PIP_INSTALL,
+        'OUT=$("$PY" "$ENTRY" 2>&1)',
+        "CODE=$?",
+        "printf '%s\\n' \"$OUT\" >> /tmp/app.log",
+        'echo "SYNARO_OUT_START"',
+        "printf '%s\\n' \"$OUT\"",
+        'echo "SYNARO_EXIT:$CODE"',
+      ].join("\n");
+
+      let out = "";
+      try {
+        const result = await remoteExecTerminal(env.id, scriptRun);
+        out = result.output ?? "";
+      } catch (err) {
+        return res.status(500).json({ error: String(err) });
+      }
+
+      if (out.includes("SYNARO_NOPYTHON")) {
+        return res.status(500).json({ error: "No Python runtime is available in the environment." });
+      }
+      const output = (out.split("SYNARO_OUT_START").pop() ?? out)
+        .replace(/\s*SYNARO_EXIT:\d+\s*$/, "")
+        .replace(/^\n/, "");
+      const exitParsed = Number(out.match(/SYNARO_EXIT:(\d+)/)?.[1] ?? "NaN");
+
+      return res.json({
+        kind: "script",
+        language: "python",
+        command: `python ${runtime.entry}`,
+        output,
+        exitCode: Number.isNaN(exitParsed) ? null : exitParsed,
+      });
+    }
+
+    // ── Long-running server (Node or Python) — background start + port-based readiness ─────────────
+    const isPython = runtime.language === "python";
+    const startLabel = runtime.language === "python" ? `python ${runtime.entry}` : runtime.runCommand;
+    const runCommand = runtime.language === "python" ? `"$PY" "${runtime.entry}"` : runtime.runCommand;
+    const hasPackageJson = runtime.language === "python" ? false : runtime.hasPackageJson;
+
+    // Language-specific setup run inside the launch subshell.
+    // Node: install deps to completion and record a marker BEFORE starting (gating on a marker, not
+    // `[ -d node_modules ]` which is already true mid-install, stops a second Run click from launching
+    // against a half-populated node_modules). Python: ensure an interpreter + optional pip install.
+    const langSetup = isPython
+      ? [ENSURE_PYTHON, PIP_INSTALL].join("\n")
+      : hasPackageJson
+        ? [
+            "if [ ! -d node_modules ] || [ ! -f /tmp/app.deps-ok ] || [ package.json -nt /tmp/app.deps-ok ]; then",
+            '  echo "[synaro] Installing dependencies..." >> /tmp/app.log',
+            "  if npm install --loglevel=warn >> /tmp/app.log 2>&1; then",
+            "    touch /tmp/app.deps-ok",
+            "  else",
+            '    echo "[synaro] npm install failed" >> /tmp/app.log',
+            "    exit 1",
+            "  fi",
+            "fi",
+          ].join("\n")
+        : "true";
 
     // Kill any process using port 3000 via inode lookup (/proc/net).
     // fuser is unreliable in Docker, and pkill -f matches the script itself.
@@ -159,10 +272,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // so a crash frees it for a later retry while a healthy run keeps it held.
       "(",
       "  trap 'rmdir /tmp/app.starting 2>/dev/null' EXIT",
-      "  cd /tmp/synaro-workspace/app 2>/dev/null || cd /tmp/synaro-workspace 2>/dev/null",
+      `  ${WORKSPACE_CD}`,
       patchNextConfig,
-      installGuard,
-      `  echo "[synaro] Starting: ${runCommand}" >> /tmp/app.log`,
+      langSetup,
+      `  echo "[synaro] Starting: ${startLabel}" >> /tmp/app.log`,
       `  PORT=3000 ${runCommand} >> /tmp/app.log 2>&1`,
       ") &",
       "APP_PID=$!",
@@ -186,8 +299,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         : "started";
 
     return res.json({
+      kind: "server",
+      language: runtime.language,
       previewUrl,
-      command: runCommand,
+      command: startLabel,
       installing: hasPackageJson && state === "started",
       state,
     });

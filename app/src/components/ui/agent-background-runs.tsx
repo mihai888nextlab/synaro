@@ -11,6 +11,7 @@ import {
   showBrowserNotification,
   useNotifications,
 } from "@/components/ui/notifications";
+import { formatNotificationDescription } from "@/lib/notifications/format-notification-body";
 import { useSpeechOutput } from "@/lib/speech/speech-output-provider";
 import { consumeVoiceTriggeredRun } from "@/lib/speech/voice-triggered-runs";
 import { cn } from "@/lib/utils";
@@ -101,9 +102,15 @@ export function AgentBackgroundRunsProvider({ children }: { children: React.Reac
       const title = failed
         ? t("notifications.agentRunFailed", { name: agentName })
         : t("notifications.agentRunComplete", { name: agentName });
-      const description =
-        run.output?.trim()?.slice(0, 160) ||
-        (failed ? undefined : t("notifications.agentRunCompleteBody"));
+      const description = failed
+        ? formatNotificationDescription(run.output, {
+            failed: true,
+            t: (key) => t(`notifications.${key}`),
+          })
+        : formatNotificationDescription(run.output, {
+            failed: false,
+            t: (key) => t(`notifications.${key}`),
+          }) || t("notifications.agentRunCompleteBody");
 
       push({
         type: failed ? "agent_run_failed" : "agent_run_done",

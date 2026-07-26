@@ -43,7 +43,7 @@ const roBase: Messages = {
     billing: "Facturare",
     integrations: "Integrări",
     manageApiKeys: "Gestionează cheile API",
-    navAriaLabel: "Secțiuni setări",
+    backToSettings: "Setări",
     profileCardDescription: "Nume, email și conturi conectate.",
     preferencesCardDescription: "Temă și limbă pentru interfața Synaro.",
     workspaceCardDescription: "Oprire automată la inactivitate, valori implicite agenți și panou.",

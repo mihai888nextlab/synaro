@@ -116,6 +116,15 @@ function validateWidgetConfig(
     return null;
   }
 
+  if (widget.type === "agent_last_run_generated") {
+    const agentId = (widget.config as { agentId?: string } | undefined)?.agentId;
+    if (!agentId) return "agent_last_run_generated requires a valid agent";
+    if (!ctx.skipAgentOwnershipCheck && !ctx.agentIds.has(agentId)) {
+      return "agent_last_run_generated requires a valid agent";
+    }
+    return null;
+  }
+
   if (widget.type === "kpi_cluster") {
     const layout = (widget.config as { layout?: string } | undefined)?.layout;
     if (layout && !["row", "grid", "column"].includes(layout)) {

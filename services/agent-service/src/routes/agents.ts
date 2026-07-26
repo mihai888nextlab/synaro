@@ -244,6 +244,7 @@ const WebhookSchema = z.object({
   status: z.enum(['DONE', 'FAILED', 'CANCELLED']),
   output: z.string().optional(),
   steps: z.array(z.unknown()).optional(),
+  artifacts: z.array(z.unknown()).optional(),
 })
 
 const CANCEL_OUTPUT = 'Cancelled by user'
@@ -601,7 +602,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     const parsed = WebhookSchema.safeParse(req.body)
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() })
 
-    const { runId, status, output, steps } = parsed.data
+    const { runId, status, output, steps, artifacts } = parsed.data
     const finishedAt = new Date()
 
     try {
@@ -619,6 +620,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
           status,
           output: output ?? null,
           steps: steps ? (steps as object[]) : undefined,
+          artifacts: artifacts ? (artifacts as object[]) : undefined,
           finishedAt,
         },
       })

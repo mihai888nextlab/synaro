@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { KeyRound, Loader2, LogOut, Shield, Trash2 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import type { GetServerSideProps } from "next";
 
+import { ApiKeysSettingsPanel } from "@/components/ui/settings/api-keys-settings-panel";
 import {
   SettingsLayout,
   SettingsSection,
@@ -131,13 +131,7 @@ export default function SecuritySettingsPage({ hasPassword, email }: SecurityPag
           title={t("nav.apiKeys")}
           description={t("settings.apiKeysSectionDescription")}
         >
-          <Link
-            href="/settings/api-keys"
-            className="inline-flex items-center gap-2 rounded-xl border border-border/70 px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted"
-          >
-            <KeyRound className="size-4" aria-hidden />
-            {t("settings.manageApiKeys")}
-          </Link>
+          <ApiKeysSettingsPanel />
         </SettingsSection>
 
         <SettingsSection

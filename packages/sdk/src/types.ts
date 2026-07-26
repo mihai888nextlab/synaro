@@ -188,6 +188,8 @@ export type AgentRun = {
   trigger?: string;
   input?: string | null;
   output?: string | null;
+  /** Structured dashboard artifacts from finish({ artifacts }). */
+  artifacts?: unknown;
   steps?: unknown[];
   startedAt?: string | null;
   finishedAt?: string | null;

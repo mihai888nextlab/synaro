@@ -5,7 +5,8 @@ export type AiTaskStatus =
   | "APPLYING"
   | "VERIFYING"
   | "DONE"
-  | "FAILED";
+  | "FAILED"
+  | "CANCELLED";
 
 export type AiRemoteTask = {
   id: string;

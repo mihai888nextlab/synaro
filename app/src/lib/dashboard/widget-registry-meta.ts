@@ -240,6 +240,29 @@ export const WIDGET_REGISTRY_META_BASE: WidgetRegistryMetaBase[] = [
     requiresConfig: true,
   },
   {
+    type: "agent_last_run_generated",
+    titleKey: "widgets.types.agent_last_run_generated.title",
+    subtitleKey: "widgets.types.agent_last_run_generated.subtitle",
+    descriptionKey: "widgets.types.agent_last_run_generated.description",
+    category: "agents",
+    categoryKey: "widgets.categories.agents",
+    keywords: ["agent", "run", "last", "generated", "chart", "kpi", "artifact", "stock", "preview"],
+    allowedSizes: [
+      { w: 6, h: 4 },
+      { w: 6, h: 6 },
+      { w: 12, h: 5 },
+      { w: 12, h: 7 },
+    ],
+    sizeConstraints: { minW: 4, maxW: 12, minH: 4, maxH: 12 },
+    sizePresets: [
+      { id: "grid2x2", labelKey: "widgets.sizePresets.grid2x2", w: 6, h: 5 },
+      { id: "full", labelKey: "widgets.sizePresets.full", w: 12, h: 6 },
+    ],
+    maxInstances: 8,
+    defaultSize: { w: 6, h: 5 },
+    requiresConfig: true,
+  },
+  {
     type: "agent_shortcut",
     titleKey: "widgets.types.agent_shortcut.title",
     subtitleKey: "widgets.types.agent_shortcut.subtitle",
@@ -310,7 +333,7 @@ export const PAGE_SHORTCUT_OPTION_DEFS = [
   { route: "agents" as const, labelKey: "nav.agents", href: "/agents" },
   { route: "logs" as const, labelKey: "nav.logs", href: "/logs" },
   { route: "settings" as const, labelKey: "nav.settings", href: "/settings" },
-  { route: "api_keys" as const, labelKey: "nav.apiKeys", href: "/settings/api-keys" },
+  { route: "api_keys" as const, labelKey: "nav.apiKeys", href: "/settings/security#api-keys" },
   { route: "documentation" as const, labelKey: "nav.documentation", href: "/documentation" },
 ];
 

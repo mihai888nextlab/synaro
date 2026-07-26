@@ -69,7 +69,6 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
       "/settings/profile": t("nav.profile"),
       "/settings/workspace": t("settings.workspace"),
       "/settings/security": t("settings.security"),
-      "/settings/api-keys": t("nav.apiKeys"),
     };
 
     if (path === "/dashboard") {

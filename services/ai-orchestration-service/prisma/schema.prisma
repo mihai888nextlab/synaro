@@ -32,4 +32,5 @@ enum TaskStatus {
   VERIFYING
   DONE
   FAILED
+  CANCELLED
 }

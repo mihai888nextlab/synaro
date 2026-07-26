@@ -43,7 +43,7 @@ const enBase: Messages = {
     billing: "Billing",
     integrations: "Integrations",
     manageApiKeys: "Manage API keys",
-    navAriaLabel: "Settings sections",
+    backToSettings: "Settings",
     profileCardDescription: "Name, email, and connected accounts.",
     preferencesCardDescription: "Theme and language for the Synaro interface.",
     workspaceCardDescription: "Idle auto-stop, agent defaults, and dashboard layout.",

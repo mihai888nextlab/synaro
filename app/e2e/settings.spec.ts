@@ -22,7 +22,7 @@ test.describe("Settings", () => {
   });
 
   test("API keys — create, show secret once, list prefix", async ({ page }) => {
-    await page.goto("/settings/api-keys");
+    await page.goto("/settings/security#api-keys");
 
     await page.getByLabel("Key name").fill("Playwright E2E Key");
     await page.getByRole("button", { name: "Create key" }).click();

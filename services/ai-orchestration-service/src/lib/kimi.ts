@@ -50,6 +50,17 @@ export const ORCHESTRATION = {
   SIMPLE_MAX_HEALTH_ITERATIONS: 1,
   /** How many recent tasks to replay as memory. */
   MEMORY_TASKS: 5,
+  // ── File-by-file generation (robust replacement for parallel full-file workers) ──
+  /** Max files a manifest may contain (bounds cost for a whole-app build). */
+  MAX_FILES: 40,
+  /** How many files are generated concurrently. */
+  FILE_CONCURRENCY: 4,
+  /** Output budget for a single file — one file is far smaller than a whole worker slice. */
+  FILE_MAX_OUTPUT: 8_000,
+  /** Per-file request timeout. Fails that one file (then retried), never the whole task. */
+  FILE_TIMEOUT_MS: 90_000,
+  /** Extra attempts for a file that came back empty/invalid/cut-off before giving up on it. */
+  FILE_MAX_RETRIES: 1,
   /**
    * Overall wall-clock budget for the code-generation phase. Once exceeded, the self-heal loop
    * stops and the task returns whatever it has (with a health note) rather than grinding for

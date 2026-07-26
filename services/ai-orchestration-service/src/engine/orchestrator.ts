@@ -18,13 +18,12 @@ import {
 import { streamKimiChatCompletion } from '../lib/kimi-stream.js'
 import { readWorkspaceFilesParallel } from '../lib/read-workspace-files.js'
 import { loadRecentTaskContext } from '../lib/memory.js'
-import { planWork } from './planner.js'
 import { triageTask } from './triage.js'
-import { runWorkersInParallel, runFixPass } from './worker.js'
-import { integrate } from './integrator.js'
+import { planFiles } from './file-planner.js'
+import { generateFilesInParallel } from './file-generator.js'
+import { runWorker, runFixPass } from './worker.js'
 import { runHealthCheck } from './health-check.js'
 import { mergeChanges } from './parse-changes.js'
-import type { Plan } from './types.js'
 import { prisma } from '../lib/prisma.js'
 
 type TaskStatus =
@@ -79,8 +78,12 @@ interface TaskResult {
     exploredFiles: number
     /** Approximate number of AI calls made (plan + workers + integrator + fixes). */
     aiSteps: number
-    /** Role-workers dispatched by the planner. */
+    /** Role-workers dispatched by the planner (legacy multi-worker path). */
     workers?: number
+    /** Files touched for this task (file-by-file generation path). */
+    filesGenerated?: number
+    /** Files that failed to generate after retries (surfaced, not silently dropped). */
+    filesFailed?: number
     /** Self-heal iterations run by the health loop. */
     healthIterations?: number
     /** Whether the app passed the health check. */
@@ -558,81 +561,88 @@ export async function executeTask(
     totalOutputTokens += triage.outputTokens
     const isSimple = triage.complexity === 'simple'
 
-    let plan: Plan
-    if (isSimple) {
-      // Fast path: one unrestricted worker does the whole change. No planner call, no parallel
-      // fan-out, no integrator — just read the likely files and make the edit.
-      plan = {
-        summary: 'Implement the requested change.',
-        workers: [{ role: 'builder', goal: task.prompt, ownedFiles: [], filesToRead: triage.files }],
-      }
-    } else {
-      await progress('Planning the work...')
-      aiSteps += 1
-      const planned = await planWork(task.prompt, repoTree, memory)
-      totalInputTokens += planned.inputTokens
-      totalOutputTokens += planned.outputTokens
-      plan = planned.plan
-    }
-
-    // ── Workers run in parallel on their owned files (a single worker on the fast path) ──
     await assertNotCancelled(taskId)
     await updateTask(taskId, 'GENERATING', { streamContent: null })
-    await progress(
-      isSimple
-        ? 'Making the change...'
-        : `Dispatching ${plan.workers.length} worker${plan.workers.length === 1 ? '' : 's'} (${plan.workers
-            .map((w) => w.role)
-            .join(', ')})...`,
-    )
-    const workerOutputs = await runWorkersInParallel(env.id, plan.workers, task.prompt, memory, progress)
-    aiSteps += plan.workers.length
-    for (const w of workerOutputs) {
-      totalInputTokens += w.inputTokens
-      totalOutputTokens += w.outputTokens
+
+    let summary: string
+    let generated: FileChange[]
+    let filesFailed: string[] = []
+
+    if (isSimple) {
+      // Fast path: one targeted edit pass over the likely files — no manifest, no per-file fan-out.
+      await progress('Making the change...')
+      aiSteps += 1
+      const single = await runWorker(
+        env.id,
+        { role: 'builder', goal: task.prompt, ownedFiles: [], filesToRead: triage.files },
+        task.prompt,
+        memory,
+      )
+      totalInputTokens += single.inputTokens
+      totalOutputTokens += single.outputTokens
+      generated = single.changes
+      summary = 'Implement the requested change.'
+    } else {
+      // Robust path: plan a file manifest, then generate each file on its own — small, validated,
+      // retried outputs. This replaces the parallel full-file workers, whose big blobs hit the token
+      // cap / returned invalid JSON and were silently discarded (leaving only the tiny files).
+      await progress('Planning the files...')
+      aiSteps += 1
+      const manifest = await planFiles(task.prompt, repoTree, memory)
+      totalInputTokens += manifest.inputTokens
+      totalOutputTokens += manifest.outputTokens
+      if (manifest.files.length === 0) {
+        throw new Error('Could not plan any files for this task. Try rephrasing the request.')
+      }
+
+      await assertNotCancelled(taskId)
+      await progress(
+        `Generating ${manifest.files.length} file${manifest.files.length === 1 ? '' : 's'}...`,
+      )
+      const gen = await generateFilesInParallel(
+        env.id,
+        manifest.files,
+        task.prompt,
+        manifest,
+        memory,
+        progress,
+      )
+      aiSteps += gen.attempts
+      totalInputTokens += gen.inputTokens
+      totalOutputTokens += gen.outputTokens
+      generated = gen.files
+      filesFailed = gen.failed
+      summary = manifest.summary
     }
 
     await assertNotCancelled(taskId)
-    const workerChanges = mergeChanges(workerOutputs.flatMap((w) => w.changes))
-    if (workerChanges.length === 0) {
+    const finalChangesInit = mergeChanges(generated)
+    if (finalChangesInit.length === 0) {
       throw new Error(
-        'The workers did not produce any file changes. The response may have been empty or malformed. ' +
-          'Please try again with a more specific prompt.',
+        'No files were generated — the model returned empty or invalid output. Please try again.',
       )
     }
+    if (filesFailed.length > 0) {
+      summary += ` ⚠ ${filesFailed.length} file${filesFailed.length === 1 ? '' : 's'} failed to generate (${filesFailed.join(', ')}).`
+    }
 
-    // ── Apply worker output, then integrate (wire the modules together) ──
+    // ── Apply generated files ─────────────────────────────────────────────
     await updateTask(taskId, 'APPLYING')
     // Snapshot pre-task content of changed files for diffing before overwriting.
     const priorContent = new Map<string, string>()
-    for (const f of await readWorkspaceFilesParallel(env.id, workerChanges.map((c) => c.path))) {
+    for (const f of await readWorkspaceFilesParallel(env.id, finalChangesInit.map((c) => c.path))) {
       priorContent.set(f.path, f.content)
     }
-    await progress(`Writing ${workerChanges.length} file${workerChanges.length === 1 ? '' : 's'}...`)
-    await writeContainerFiles(env.id, workerChanges.map(({ path, content }) => ({ path, content })))
+    await progress(
+      `Writing ${finalChangesInit.length} file${finalChangesInit.length === 1 ? '' : 's'}...`,
+    )
+    await writeContainerFiles(
+      env.id,
+      finalChangesInit.map(({ path, content }) => ({ path, content })),
+    )
 
-    const changedPaths = new Set(workerChanges.map((c) => c.path))
-    const allPathsAfter = Array.from(new Set([...allPaths, ...changedPaths]))
-
-    // Integration only makes sense when multiple workers built disjoint modules that need wiring.
-    // A single worker already produced coherent, self-consistent files — skip the extra slow call.
-    let finalChanges = workerChanges
-    if (plan.workers.length > 1) {
-      await assertNotCancelled(taskId)
-      await progress('Integrating modules...')
-      aiSteps += 1
-      const integration = await integrate(env.id, task.prompt, plan, [...changedPaths], allPathsAfter)
-      totalInputTokens += integration.inputTokens
-      totalOutputTokens += integration.outputTokens
-      if (integration.changes.length > 0) {
-        for (const f of await readWorkspaceFilesParallel(env.id, integration.changes.map((c) => c.path))) {
-          if (!priorContent.has(f.path)) priorContent.set(f.path, f.content)
-        }
-        await writeContainerFiles(env.id, integration.changes.map(({ path, content }) => ({ path, content })))
-        integration.changes.forEach((c) => changedPaths.add(c.path))
-        finalChanges = mergeChanges([...integration.changes, ...workerChanges])
-      }
-    }
+    const changedPaths = new Set(finalChangesInit.map((c) => c.path))
+    let finalChanges = finalChangesInit
 
     // ── Health check + self-heal loop ────────────────────────────────────
     await assertNotCancelled(taskId)
@@ -687,12 +697,13 @@ export async function executeTask(
       ? ''
       : ` ⚠ The app did not pass the health check after ${healthIterations} fix attempt${healthIterations === 1 ? '' : 's'}: ${health.error ?? 'unknown error'}`
     const result: TaskResult = {
-      summary: `${plan.summary}${healthNote}`,
+      summary: `${summary}${healthNote}`,
       changes: enrichedChanges,
       meta: {
         exploredFiles,
         aiSteps,
-        workers: plan.workers.length,
+        filesGenerated: finalChanges.length,
+        filesFailed: filesFailed.length,
         healthIterations,
         healthy: health.healthy,
       },

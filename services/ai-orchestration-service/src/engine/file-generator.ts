@@ -39,7 +39,11 @@ interface OneFileResult {
   attempts: number
   inputTokens: number
   outputTokens: number
+  /** Why the last attempt failed (for logging), or null on success. */
+  reason: string | null
 }
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 async function generateOneFile(
   spec: FileSpec,
@@ -67,6 +71,7 @@ async function generateOneFile(
   let attempts = 0
   let inputTokens = 0
   let outputTokens = 0
+  let reason: string | null = null
 
   for (let attempt = 0; attempt <= ORCHESTRATION.FILE_MAX_RETRIES; attempt++) {
     attempts += 1
@@ -86,16 +91,32 @@ async function generateOneFile(
       outputTokens += resp.usage?.completion_tokens ?? 0
 
       const content = stripFences(resp.choices[0]?.message?.content ?? '')
-      const cutOff = resp.choices[0]?.finish_reason === 'length'
-      if (!cutOff && isValidContent(spec, content)) {
-        return { ok: true, content, attempts, inputTokens, outputTokens }
+      const finish = resp.choices[0]?.finish_reason
+      if (finish === 'length') {
+        reason = 'cut off at token limit'
+      } else if (!content.trim()) {
+        reason = 'empty response'
+      } else if (!isValidContent(spec, content)) {
+        reason = 'invalid content (JSON parse failed)'
+      } else {
+        return { ok: true, content, attempts, inputTokens, outputTokens, reason: null }
       }
-    } catch {
-      // Timeout / network / provider error — fall through and retry (bounded).
+    } catch (err) {
+      const status = (err as { status?: number })?.status
+      reason = status
+        ? `HTTP ${status}${status === 429 ? ' (rate limited)' : ''}`
+        : err instanceof Error
+          ? err.message.slice(0, 120)
+          : 'request failed'
+      // Rate limits / transient errors benefit from a longer pause before retrying.
+      if (status === 429) await sleep(2_000 * (attempt + 1))
     }
+
+    // Backoff between attempts (skip after the final one).
+    if (attempt < ORCHESTRATION.FILE_MAX_RETRIES) await sleep(500 * (attempt + 1))
   }
 
-  return { ok: false, content: '', attempts, inputTokens, outputTokens }
+  return { ok: false, content: '', attempts, inputTokens, outputTokens, reason }
 }
 
 export interface GenerateFilesResult {
@@ -144,8 +165,10 @@ export async function generateFilesInParallel(
         files.push({ path: spec.path, content: r.content })
       } else {
         failed.push(spec.path)
-        // Visibility: the old pipeline dropped failed workers with no trace. Log it.
-        console.warn(`[orchestrator] file generation failed after retries: ${spec.path}`)
+        // Visibility: the old pipeline dropped failed workers with no trace. Log path + reason.
+        console.warn(
+          `[file-generator] failed after ${r.attempts} attempt(s): ${spec.path} — ${r.reason ?? 'unknown'}`,
+        )
       }
       done += 1
       await onProgress?.(

@@ -53,14 +53,15 @@ export const ORCHESTRATION = {
   // ── File-by-file generation (robust replacement for parallel full-file workers) ──
   /** Max files a manifest may contain (bounds cost for a whole-app build). */
   MAX_FILES: 40,
-  /** How many files are generated concurrently. */
-  FILE_CONCURRENCY: 4,
+  /** How many files are generated concurrently. Tier1 allows concurrency 50 / 200 RPM, so 5 is safe
+   *  and much faster than the Tier0-era value of 2 — still far under the account's limits. */
+  FILE_CONCURRENCY: 5,
   /** Output budget for a single file — one file is far smaller than a whole worker slice. */
   FILE_MAX_OUTPUT: 8_000,
   /** Per-file request timeout. Fails that one file (then retried), never the whole task. */
   FILE_TIMEOUT_MS: 90_000,
-  /** Extra attempts for a file that came back empty/invalid/cut-off before giving up on it. */
-  FILE_MAX_RETRIES: 1,
+  /** Extra attempts for a file that came back empty/invalid/cut-off/rate-limited before giving up. */
+  FILE_MAX_RETRIES: 3,
   /**
    * Overall wall-clock budget for the code-generation phase. Once exceeded, the self-heal loop
    * stops and the task returns whatever it has (with a health note) rather than grinding for

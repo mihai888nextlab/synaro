@@ -1,5 +1,6 @@
 import { kimi, MODELS, ORCHESTRATION } from '../lib/kimi.js'
 import { readWorkspaceFilesParallel } from '../lib/read-workspace-files.js'
+import { DESIGN_GUIDE } from './design-guide.js'
 import type { FileChange } from './types.js'
 import type { FileManifest, FileSpec } from './file-planner.js'
 
@@ -10,7 +11,10 @@ Output ONLY the raw, complete contents of the file — no markdown code fences, 
 Rules:
 - Write the COMPLETE file. It must be syntactically valid and consistent with the manifest.
 - Import from other project files using the exact paths in the manifest.
-- For Next.js: never set distDir; ensure package.json has a "dev" script; bind to process.env.PORT (default 3000).`
+- For Next.js: never set distDir; ensure package.json has a "dev" script; bind to process.env.PORT (default 3000).
+- When this file is UI (markup, components, or styles), hold it to the design bar below.
+
+${DESIGN_GUIDE}`
 
 /** Strip a stray markdown code fence the model may wrap the file in, despite instructions. */
 function stripFences(raw: string): string {

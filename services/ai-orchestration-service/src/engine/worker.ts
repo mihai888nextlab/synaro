@@ -2,6 +2,7 @@ import { kimi, MODELS, ORCHESTRATION } from '../lib/kimi.js'
 import { readWorkspaceFilesParallel } from '../lib/read-workspace-files.js'
 import { parseChangesResponse } from './parse-changes.js'
 import { isOwned } from './ownership.js'
+import { DESIGN_GUIDE } from './design-guide.js'
 import type { FileChange, WorkerOutput, WorkerSpec } from './types.js'
 
 const WORKER_SYSTEM = `You are an expert software engineer working as one member of a parallel team. You are responsible ONLY for the files assigned to you.
@@ -14,7 +15,10 @@ Rules:
 - Always return the FULL file content for every changed/created file (never null, never a diff).
 - Other workers are building the rest of the app in parallel — you will not see their files. Do your part well; a separate integration step wires everything together afterward.
 - For Next.js: never set distDir in next.config.*; never use output: 'export' or 'standalone'; include a "next dev" script; the app must bind to process.env.PORT (default 3000).
-- Return ONLY the JSON, no prose.`
+- When your files are UI (markup, components, or styles), hold them to the design bar below.
+- Return ONLY the JSON, no prose.
+
+${DESIGN_GUIDE}`
 
 /** Read the concrete files a worker needs for context (globs/prefixes are skipped). */
 function concretePaths(paths: string[]): string[] {

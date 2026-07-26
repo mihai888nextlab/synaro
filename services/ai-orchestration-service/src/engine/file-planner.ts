@@ -1,4 +1,5 @@
 import { kimi, MODELS, ORCHESTRATION } from '../lib/kimi.js'
+import { DESIGN_GUIDE } from './design-guide.js'
 
 export interface FileSpec {
   path: string
@@ -23,7 +24,10 @@ Rules:
 - Paths are relative to the project root. Use a conventional structure for the stack you choose.
 - For a Node/Next.js app, include a package.json whose "dev" script starts a server that binds to process.env.PORT (default 3000). Never set distDir.
 - Keep files small and single-purpose — split large modules into several files. Each "purpose" should name the file's key exports so other files can import them correctly.
-- Return ONLY the JSON, no prose.`
+- For any app with a UI, plan a real design system: include a global stylesheet / theme file (color tokens, typography, spacing) and structure the UI into styled, reusable components.
+- Return ONLY the JSON, no prose.
+
+${DESIGN_GUIDE}`
 
 /**
  * Plan the project as a flat list of files with purposes. This replaces role-worker planning: instead

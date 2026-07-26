@@ -559,7 +559,13 @@ export async function executeTask(
     const triage = await triageTask(task.prompt, repoTree, memory)
     totalInputTokens += triage.inputTokens
     totalOutputTokens += triage.outputTokens
-    const isSimple = triage.complexity === 'simple'
+
+    // A brand-new / near-empty workspace means a build-from-scratch, which is inherently multi-file.
+    // Never route that through the single-pass "simple" edit — it produces one giant slow blob and
+    // stalls. Force the robust file-by-file path whenever the repo has essentially no code yet.
+    const codeFileCount = allPaths.filter((p) => !p.split('/').pop()?.startsWith('.')).length
+    const isNewProject = codeFileCount <= 2
+    const isSimple = triage.complexity === 'simple' && !isNewProject
 
     await assertNotCancelled(taskId)
     await updateTask(taskId, 'GENERATING', { streamContent: null })

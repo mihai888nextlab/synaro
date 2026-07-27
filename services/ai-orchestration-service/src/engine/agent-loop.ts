@@ -13,9 +13,41 @@ Rules:
 - Do NOT ask the user questions — the framework, language, and styling are already fixed (see context). Proceed with sensible defaults.
 - For Next.js: never set distDir in next.config.*; never use output: 'export' or 'standalone'; keep a "next dev" script; the app must bind to process.env.PORT (default 3000).
 - When your files are UI (markup, components, styles), hold them to the design bar below.
-- Be efficient — you have a limited number of steps. When the change is complete, call finish with a one-sentence summary. Do not call finish before the change is done.
+- VERIFY before finishing: after any change that could break the app (editing code, not just copy/text), run a fast check with run_command — \`npx tsc --noEmit\` for a TypeScript project, otherwise \`npm run build\` — read the output, fix any errors, and re-check until it passes. Skip verification only for trivial content/copy edits.
+- Be efficient — you have a limited number of steps. When the change is complete AND verified, call finish with a one-sentence summary. Do not call finish before the change is done.
 
 ${DESIGN_GUIDE}`
+
+/**
+ * Bound context growth: keep only the most recent tool outputs at full size and stub out older ones.
+ * Later steps otherwise re-send every file read + command output, ballooning the prompt and slowing
+ * (and eventually timing out) each call. The model can re-read anything it stubbed with read_file.
+ */
+/** Files a typecheck/build would validate — used to decide whether a verify step is warranted. */
+const CODE_FILE_RE = /\.(tsx?|jsx?|mjs|cjs|vue|svelte|astro|py)$/i
+/** A run_command that plausibly verifies the app (so we don't nag the model after it already checked). */
+const VERIFY_CMD_RE = /\b(tsc|type-?check|build|test|lint|vitest|jest|pytest|eslint|check)\b/i
+
+function commandArg(rawArgs: string): string {
+  try {
+    const v = JSON.parse(rawArgs || '{}') as { command?: unknown }
+    return typeof v.command === 'string' ? v.command : ''
+  } catch {
+    return ''
+  }
+}
+
+function pruneToolHistory(messages: OpenAI.Chat.ChatCompletionMessageParam[], keepLast = 8): void {
+  const toolIdx: number[] = []
+  for (let i = 0; i < messages.length; i++) if (messages[i]!.role === 'tool') toolIdx.push(i)
+  const trimCount = toolIdx.length - keepLast
+  for (let k = 0; k < trimCount; k++) {
+    const m = messages[toolIdx[k]!] as { content?: unknown }
+    if (typeof m.content === 'string' && m.content.length > 120) {
+      m.content = '[earlier tool output trimmed to save context — re-read the file if you need it]'
+    }
+  }
+}
 
 export type AgentLoopResult = {
   summary: string
@@ -37,15 +69,24 @@ export async function runAgentLoop(args: {
   envId: string
   prompt: string
   memory: string | null
+  /** The workspace is empty/near-empty → scaffold a whole app, with a larger step budget. */
+  newProject?: boolean
   /** Progress line per tool call (e.g. "Editing src/App.tsx"). */
   onActivity?: (msg: string) => void | Promise<void>
   /** Live assistant text (per step) → Task.streamContent. */
   onStream?: (text: string) => void
   assertNotCancelled?: () => Promise<void>
 }): Promise<AgentLoopResult> {
+  const scaffoldNote = args.newProject
+    ? '\n\nThe workspace is EMPTY — scaffold a COMPLETE, runnable project from scratch for this request: ' +
+      'create package.json (with a working dev/start script), the entry/config files, and the source. ' +
+      'If the request does not name a stack, default to Next.js (Pages Router) + TypeScript + Tailwind. ' +
+      'Install dependencies and verify it starts before finishing.'
+    : ''
+  const maxSteps = args.newProject ? ORCHESTRATION.AGENT_MAX_STEPS * 2 : ORCHESTRATION.AGENT_MAX_STEPS
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: 'system', content: `${AGENT_SYSTEM}${args.memory ? `\n\n${args.memory}` : ''}` },
-    { role: 'user', content: args.prompt },
+    { role: 'user', content: `${args.prompt}${scaffoldNote}` },
   ]
 
   const prior = new Map<string, string | null>()
@@ -53,17 +94,37 @@ export async function runAgentLoop(args: {
   let inputTokens = 0
   let outputTokens = 0
   let summary = 'Completed the requested change.'
+  // Self-verify backstop: block the first `finish` if code was edited but never checked.
+  let codeEditedSinceVerify = false
+  let verifyNudged = false
   const deadline = Date.now() + ORCHESTRATION.MAX_TASK_MS
 
   let step = 0
-  for (; step < ORCHESTRATION.AGENT_MAX_STEPS; step++) {
-    if (Date.now() > deadline) break
+  let stopNote = ''
+  for (; step < maxSteps; step++) {
+    if (Date.now() > deadline) {
+      stopNote = ' (stopped early: hit the time budget)'
+      break
+    }
     await args.assertNotCancelled?.()
+    pruneToolHistory(messages)
 
-    const resp = await chatWithTools(
-      { model: MODELS.GENERATE, max_tokens: ORCHESTRATION.AGENT_MAX_OUTPUT, messages, tools: AGENT_TOOLS },
-      { timeout: 120_000, maxRetries: 1 },
-    )
+    let resp
+    try {
+      resp = await chatWithTools(
+        { model: MODELS.GENERATE, max_tokens: ORCHESTRATION.AGENT_MAX_OUTPUT, messages, tools: AGENT_TOOLS },
+        // No SDK auto-retry: a retried timeout doubles the wait before failing. One slow step must not
+        // kill the whole task — we catch below and keep whatever was already applied.
+        { timeout: 180_000, maxRetries: 0 },
+      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[agent-loop] step ${step} model call failed — ${msg}`)
+      // Nothing applied yet → surface the real failure. Otherwise keep the partial work and stop.
+      if (touched.size === 0) throw err
+      stopNote = ` (stopped early after a model error: ${msg})`
+      break
+    }
     inputTokens += resp.inputTokens
     outputTokens += resp.outputTokens
     if (resp.content.trim()) args.onStream?.(resp.content)
@@ -93,10 +154,29 @@ export async function runAgentLoop(args: {
     let finished = false
     for (const tc of resp.toolCalls) {
       await args.onActivity?.(toolActivityLabel(tc.name, tc.arguments))
+
+      // Backstop: refuse the FIRST finish if code was edited but never verified — bounce it back once
+      // to run a check. Prompt-driven verification handles the rest; this just stops silent breakage.
+      if (tc.name === 'finish' && codeEditedSinceVerify && !verifyNudged) {
+        verifyNudged = true
+        messages.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content:
+            'Not finishing yet: you changed code but have not verified it. Run a check with run_command ' +
+            '(`npx tsc --noEmit`, or `npm run build`), fix any errors it reports, then call finish again.',
+        })
+        continue
+      }
+
       const out = await executeAgentTool(args.envId, tc.name, tc.arguments)
       if (out.touched) {
         touched.add(out.touched)
         if (!prior.has(out.touched)) prior.set(out.touched, out.prior ?? null)
+        if (CODE_FILE_RE.test(out.touched)) codeEditedSinceVerify = true
+      }
+      if (tc.name === 'run_command' && VERIFY_CMD_RE.test(commandArg(tc.arguments))) {
+        codeEditedSinceVerify = false // they ran a verification-like command
       }
       messages.push({ role: 'tool', tool_call_id: tc.id, content: out.result })
       if (out.done) {
@@ -108,7 +188,7 @@ export async function runAgentLoop(args: {
   }
 
   return {
-    summary,
+    summary: `${summary}${stopNote}`,
     touched: [...touched],
     prior,
     inputTokens,

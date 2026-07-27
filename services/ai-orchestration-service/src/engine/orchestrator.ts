@@ -598,11 +598,16 @@ export async function executeTask(
     // ORCHESTRATOR_MODE=agent runs the task as a tool-using agent that reads/edits/writes/runs commands
     // in the container directly until done. Flag off = byte-for-byte the existing pipeline below.
     if (process.env.ORCHESTRATOR_MODE === 'agent') {
-      await progress('Working on it...')
+      // A near-empty workspace = build-from-scratch: the agent must scaffold a whole app, which needs
+      // scaffolding guidance and a larger step budget than a localized edit.
+      const codeFileCount = allPaths.filter((p) => !p.split('/').pop()?.startsWith('.')).length
+      const newProject = codeFileCount <= 2
+      await progress(newProject ? 'Setting up the project...' : 'Working on it...')
       const agent = await runAgentLoop({
         envId: env.id,
         prompt: task.prompt,
         memory,
+        newProject,
         onActivity: progress,
         onStream: streamOut,
         assertNotCancelled: () => assertNotCancelled(taskId),

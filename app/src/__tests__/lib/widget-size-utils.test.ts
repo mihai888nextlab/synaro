@@ -10,8 +10,8 @@ describe("widget-size-utils", () => {
   it("validates sizes within constraints", () => {
     expect(isWidgetSizeValid("single_kpi", 3, 2)).toBe(true);
     expect(isWidgetSizeValid("single_kpi", 1, 2)).toBe(false);
-    expect(isWidgetSizeValid("agent_last_run", 8, 8)).toBe(true);
-    expect(isWidgetSizeValid("agent_last_run", 3, 3)).toBe(false);
+    expect(isWidgetSizeValid("agent_last_run_generated", 8, 8)).toBe(true);
+    expect(isWidgetSizeValid("agent_last_run_generated", 3, 3)).toBe(false);
   });
 
   it("clamps width to grid columns", () => {

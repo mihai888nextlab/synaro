@@ -451,11 +451,14 @@ export function RunArtifactsPanel({
   emptyLabel,
   className,
   title,
+  dense = false,
 }: {
   artifacts: unknown;
   emptyLabel?: string;
   className?: string;
   title?: string;
+  /** Tighter spacing for dashboard widget cells. */
+  dense?: boolean;
 }) {
   const artifacts = normalizeRunArtifacts(rawArtifacts);
 
@@ -477,9 +480,14 @@ export function RunArtifactsPanel({
   const leadIndex = heroIndex >= 0 ? heroIndex : 0;
 
   return (
-    <div className={cn("flex min-h-0 flex-col gap-4", className)}>
+    <div className={cn("flex min-h-0 flex-col", dense ? "gap-3" : "gap-4", className)}>
       {title ? <h2 className="text-sm font-medium text-foreground">{title}</h2> : null}
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto pr-0.5">
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col overflow-auto pr-0.5",
+          dense ? "gap-3" : "gap-5",
+        )}
+      >
         {artifacts.map((artifact, index) => (
           <div
             key={artifact.id}

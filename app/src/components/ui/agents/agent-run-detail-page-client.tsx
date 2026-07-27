@@ -8,7 +8,6 @@ import { AgentRunSteps } from "@/components/ui/agents/agent-run-steps";
 import { AgentStatusBadge } from "@/components/ui/agents/agent-status-badge";
 import { RunArtifactsPanel } from "@/components/ui/agents/run-artifacts-panel";
 import { useAgentBackgroundRuns } from "@/components/ui/agent-background-runs";
-import { MarkdownLite } from "@/components/ui/markdown-lite";
 import { useTranslation } from "@/components/ui/locale-provider";
 import type { AgentRun, McpCredentialRequest } from "@/lib/agents/agent-types";
 import { normalizeRunArtifacts } from "@/lib/agents/run-artifacts";
@@ -304,6 +303,34 @@ export function AgentRunDetailPageClient({
               </section>
             ) : null}
 
+            {artifacts.length > 0 ? (
+              <section className="rounded-xl border border-border/70 bg-card p-5 sm:p-6">
+                <RunArtifactsPanel artifacts={artifacts} title={t("agents.runArtifacts")} />
+              </section>
+            ) : null}
+
+            {displayOutput && (run.status === "FAILED" || run.status === "CANCELLED") ? (
+              <section
+                className={cn(
+                  "rounded-xl border p-5 sm:p-6",
+                  run.status === "FAILED"
+                    ? "border-red-500/30 bg-red-500/5"
+                    : "border-border/70 bg-muted/30",
+                )}
+              >
+                <h2 className="text-sm font-medium text-foreground">
+                  {run.status === "FAILED" ? t("agents.runError") : t("agents.statusCancelled")}
+                </h2>
+                {run.status === "FAILED" ? (
+                  <p className="mt-3 max-h-[32rem] overflow-auto whitespace-pre-wrap break-words text-sm leading-relaxed text-red-400 [overflow-wrap:anywhere]">
+                    {displayOutput}
+                  </p>
+                ) : (
+                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{displayOutput}</p>
+                )}
+              </section>
+            ) : null}
+
             <section className="rounded-xl border border-border/70 bg-card p-5 sm:p-6">
               <div className="mb-4 flex items-center justify-between gap-2">
                 <h2 className="text-sm font-medium text-foreground">{t("agents.runSteps")}</h2>
@@ -319,45 +346,6 @@ export function AgentRunDetailPageClient({
               </div>
               <AgentRunSteps steps={steps} isLive={isLive} />
             </section>
-
-            {artifacts.length > 0 ? (
-              <section className="rounded-xl border border-border/70 bg-card p-5 sm:p-6">
-                <RunArtifactsPanel artifacts={artifacts} title={t("agents.runArtifacts")} />
-              </section>
-            ) : null}
-
-            {displayOutput ? (
-              <section
-                className={cn(
-                  "rounded-xl border p-5 sm:p-6",
-                  run.status === "FAILED"
-                    ? "border-red-500/30 bg-red-500/5"
-                    : run.status === "CANCELLED"
-                      ? "border-border/70 bg-muted/30"
-                      : "border-border/70 bg-card",
-                )}
-              >
-                <h2 className="text-sm font-medium text-foreground">
-                  {run.status === "FAILED"
-                    ? t("agents.runError")
-                    : run.status === "CANCELLED"
-                      ? t("agents.statusCancelled")
-                      : t("agents.runOutput")}
-                </h2>
-                {run.status === "FAILED" ? (
-                  <p className="mt-3 max-h-[32rem] overflow-auto whitespace-pre-wrap break-words text-sm leading-relaxed text-red-400 [overflow-wrap:anywhere]">
-                    {displayOutput}
-                  </p>
-                ) : run.status === "CANCELLED" ? (
-                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{displayOutput}</p>
-                ) : (
-                  <MarkdownLite
-                    text={displayOutput}
-                    className="mt-3 max-h-[32rem] min-w-0 overflow-auto break-words [overflow-wrap:anywhere]"
-                  />
-                )}
-              </section>
-            ) : null}
           </div>
         ) : null}
       </div>

@@ -29,13 +29,13 @@ const agents = [
 ];
 
 describe("resolveMobileLastRunAgents", () => {
-  it("prefers agents from agent_last_run widgets in layout order", () => {
+  it("prefers agents from agent_last_run_generated widgets in layout order", () => {
     const layout: DashboardLayout = {
       version: 1,
       widgets: [
         {
           id: "w2",
-          type: "agent_last_run",
+          type: "agent_last_run_generated",
           x: 0,
           y: 2,
           w: 6,
@@ -44,7 +44,7 @@ describe("resolveMobileLastRunAgents", () => {
         },
         {
           id: "w1",
-          type: "agent_last_run",
+          type: "agent_last_run_generated",
           x: 0,
           y: 0,
           w: 6,

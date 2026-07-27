@@ -4,7 +4,7 @@ export type LayoutTemplateInput = {
   agentId?: string;
 };
 
-/** Agent last run (left) + KPI cluster 2×2 (right) — same 6×4 height. */
+/** Agent last-run visuals (left) + KPI cluster 2×2 (right) — same 6×4 height. */
 export function buildAgentMetricsSidebarTemplate(
   layout: DashboardLayout,
   input: LayoutTemplateInput,
@@ -15,7 +15,7 @@ export function buildAgentMetricsSidebarTemplate(
   const widgets: DashboardWidgetInstance[] = [
     {
       id: createWidgetId(),
-      type: "agent_last_run",
+      type: "agent_last_run_generated",
       x: 0,
       y: maxY,
       w: 6,

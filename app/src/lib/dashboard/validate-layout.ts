@@ -24,15 +24,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseWidget(raw: unknown): DashboardWidgetInstance | null {
-  if (!isRecord(raw)) return null;
+type ParseWidgetResult =
+  | { kind: "ok"; widget: DashboardWidgetInstance }
+  | { kind: "skip" }
+  | { kind: "invalid" };
+
+function parseWidget(raw: unknown): ParseWidgetResult {
+  if (!isRecord(raw)) return { kind: "invalid" };
   const { id, type, x, y, w, h, config } = raw;
-  if (typeof id !== "string" || !id.trim()) return null;
-  if (typeof type !== "string" || !isWidgetType(type)) return null;
+  // Removed / unknown types are dropped so layouts survive widget deprecations.
+  if (typeof type === "string" && !isWidgetType(type)) return { kind: "skip" };
+  if (typeof id !== "string" || !id.trim()) return { kind: "invalid" };
+  if (typeof type !== "string" || !isWidgetType(type)) return { kind: "invalid" };
   if (typeof x !== "number" || typeof y !== "number" || typeof w !== "number" || typeof h !== "number") {
-    return null;
+    return { kind: "invalid" };
   }
-  if (![x, y, w, h].every((n) => Number.isFinite(n))) return null;
+  if (![x, y, w, h].every((n) => Number.isFinite(n))) return { kind: "invalid" };
   const widget: DashboardWidgetInstance = {
     id: id.trim(),
     type,
@@ -42,10 +49,10 @@ function parseWidget(raw: unknown): DashboardWidgetInstance | null {
     h: Math.floor(h),
   };
   if (config !== undefined) {
-    if (!isRecord(config)) return null;
+    if (!isRecord(config)) return { kind: "invalid" };
     widget.config = config as DashboardWidgetInstance["config"];
   }
-  return widget;
+  return { kind: "ok", widget };
 }
 
 function sizeAllowed(
@@ -107,15 +114,6 @@ function validateWidgetConfig(
     return null;
   }
 
-  if (widget.type === "agent_last_run") {
-    const agentId = (widget.config as { agentId?: string } | undefined)?.agentId;
-    if (!agentId) return "agent_last_run requires a valid agent";
-    if (!ctx.skipAgentOwnershipCheck && !ctx.agentIds.has(agentId)) {
-      return "agent_last_run requires a valid agent";
-    }
-    return null;
-  }
-
   if (widget.type === "agent_last_run_generated") {
     const agentId = (widget.config as { agentId?: string } | undefined)?.agentId;
     if (!agentId) return "agent_last_run_generated requires a valid agent";
@@ -148,8 +146,9 @@ export function parseDashboardLayout(raw: unknown): DashboardLayout | null {
   const widgets: DashboardWidgetInstance[] = [];
   for (const item of raw.widgets) {
     const parsed = parseWidget(item);
-    if (!parsed) return null;
-    widgets.push(parsed);
+    if (parsed.kind === "skip") continue;
+    if (parsed.kind === "invalid") return null;
+    widgets.push(parsed.widget);
   }
 
   return { version: DASHBOARD_LAYOUT_VERSION, widgets };

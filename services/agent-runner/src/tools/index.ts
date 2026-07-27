@@ -76,15 +76,19 @@ const builtinTools: AgentTool[] = [
       function: {
         name: 'finish',
         description:
-          'Signal that you have completed the task. Optionally attach structured artifacts for the Synaro dashboard and run page. Design a short visual story: pick ~1–3 artifacts that best fit (not a fixed KPI+chart+table template), order them hero-first, and ground all numbers in tool results.',
+          'Signal that you have completed the task. Always attach structured artifacts — they are the primary UI on the Synaro dashboard and run page. Keep answer as a short internal summary for the API (not shown as the main product result). Design a short visual story: pick ~1–3 artifacts that best fit (not a fixed KPI+chart+table template), order them hero-first, and ground all numbers in tool results.',
         parameters: {
           type: 'object',
           properties: {
-            answer: { type: 'string', description: 'The final answer or result to return to the user' },
+            answer: {
+              type: 'string',
+              description:
+                'Short internal summary (1–2 sentences) for the API, notifications, and voice. Do not write a long report here — put the story in artifacts.',
+            },
             artifacts: {
               type: 'array',
               description:
-                'Optional widgets (prefer 1–3 that tell the story; max 12). Array order = display order (hero first). Optional emphasis: "hero"|"supporting" on any artifact. Types: ranking ({ id, type, title?, emphasis?, items:[{ label, value?, hint?, rank? }] }); timeline ({ id, type, title?, emphasis?, items:[{ t, title, description?, status?: done|current|upcoming }] }); comparison ({ id, type, title?, emphasis?, options:[{ label, subtitle?, metrics:[{ label, value }] }] }); funnel ({ id, type, title?, emphasis?, stages:[{ label, value:number, hint? }] }); timeseries_chart ({ id, type, title, description?, emphasis?, series:[{ name, points:[{ t, v }] }] }); kpi_row ({ id, type, title?, emphasis?, items:[{ label, value, hint?, trend?: up|down|flat }] }); data_table ({ id, type, title?, emphasis?, columns:string[], rows:string[][] }); news_list ({ id, type, title?, emphasis?, items:[{ title, source?, publishedAt?, url?, sentiment?: positive|negative|neutral }] }); markdown ({ id, type, title?, emphasis?, body }).',
+                'Primary product output: widgets shown on the dashboard and run page (prefer 1–3 that tell the story; max 12). Array order = display order (hero first). Optional emphasis: "hero"|"supporting" on any artifact. Types: ranking ({ id, type, title?, emphasis?, items:[{ label, value?, hint?, rank? }] }); timeline ({ id, type, title?, emphasis?, items:[{ t, title, description?, status?: done|current|upcoming }] }); comparison ({ id, type, title?, emphasis?, options:[{ label, subtitle?, metrics:[{ label, value }] }] }); funnel ({ id, type, title?, emphasis?, stages:[{ label, value:number, hint? }] }); timeseries_chart ({ id, type, title, description?, emphasis?, series:[{ name, points:[{ t, v }] }] }); kpi_row ({ id, type, title?, emphasis?, items:[{ label, value, hint?, trend?: up|down|flat }] }); data_table ({ id, type, title?, emphasis?, columns:string[], rows:string[][] }); news_list ({ id, type, title?, emphasis?, items:[{ title, source?, publishedAt?, url?, sentiment?: positive|negative|neutral }] }); markdown ({ id, type, title?, emphasis?, body }).',
               items: { type: 'object' },
             },
           },

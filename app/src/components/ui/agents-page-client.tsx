@@ -70,6 +70,7 @@ export function AgentsPageClient() {
   const [runsLoading, setRunsLoading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const highlightHandledRef = useRef<string | null>(null);
+  const runHandledRef = useRef<string | null>(null);
 
   const fetchAgents = useCallback(async () => {
     try {
@@ -130,6 +131,31 @@ export function AgentsPageClient() {
     setCreateOpen(true);
     void router.replace("/agents", undefined, { shallow: true });
   }, [loading, router, router.query.create]);
+
+  useEffect(() => {
+    const raw = router.query.run;
+    const runId = typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : undefined;
+    if (!runId || loading) return;
+    if (runHandledRef.current === runId) return;
+    const agent = agents.find((a) => a.id === runId);
+    if (!agent) return;
+
+    runHandledRef.current = runId;
+    setHighlightedAgentId(runId);
+    if (agent.enabled) {
+      setTriggerTarget(agent);
+      setTriggerOpen(true);
+    }
+    requestAnimationFrame(() => {
+      document.getElementById(`agent-card-${runId}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+    void router.replace("/agents", undefined, { shallow: true });
+    const timer = window.setTimeout(() => setHighlightedAgentId(null), 2500);
+    return () => window.clearTimeout(timer);
+  }, [agents, loading, router, router.query.run]);
 
   const fetchRuns = useCallback(async (agentId: string) => {
     setRunsLoading(true);

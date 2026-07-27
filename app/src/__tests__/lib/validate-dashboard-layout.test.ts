@@ -49,14 +49,14 @@ describe("validate-dashboard-layout", () => {
     expect(added?.y).toBe(16);
   });
 
-  it("accepts agent_last_run with a valid agent", () => {
+  it("accepts agent_last_run_generated with a valid agent", () => {
     const result = validateDashboardLayout(
       {
         version: 1,
         widgets: [
           {
-            id: "last-run",
-            type: "agent_last_run",
+            id: "last-run-gen",
+            type: "agent_last_run_generated",
             x: 0,
             y: 0,
             w: 6,
@@ -70,7 +70,7 @@ describe("validate-dashboard-layout", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("accepts agent_last_run_generated with a valid agent", () => {
+  it("rejects agent_last_run_generated without a valid agent", () => {
     const result = validateDashboardLayout(
       {
         version: 1,
@@ -78,27 +78,6 @@ describe("validate-dashboard-layout", () => {
           {
             id: "last-run-gen",
             type: "agent_last_run_generated",
-            x: 0,
-            y: 0,
-            w: 6,
-            h: 5,
-            config: { agentId: "a1" },
-          },
-        ],
-      },
-      ctx,
-    );
-    expect(result.ok).toBe(true);
-  });
-
-  it("rejects agent_last_run without a valid agent", () => {
-    const result = validateDashboardLayout(
-      {
-        version: 1,
-        widgets: [
-          {
-            id: "last-run",
-            type: "agent_last_run",
             x: 0,
             y: 0,
             w: 6,
@@ -112,14 +91,14 @@ describe("validate-dashboard-layout", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("accepts resized agent_last_run and kpi_cluster side by side", () => {
+  it("accepts resized agent_last_run_generated and kpi_cluster side by side", () => {
     const result = validateDashboardLayout(
       {
         version: 1,
         widgets: [
           {
-            id: "last-run",
-            type: "agent_last_run",
+            id: "last-run-gen",
+            type: "agent_last_run_generated",
             x: 0,
             y: 0,
             w: 6,

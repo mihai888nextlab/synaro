@@ -1,6 +1,7 @@
 /**
  * Structured dashboard artifacts agents emit via finish({ answer, artifacts }).
  * Keep in sync with services/agent-runner/src/lib/run-artifacts.ts
+ * Product UI shows artifacts as the primary result; answer is a short API summary.
  */
 
 export const RUN_ARTIFACT_TYPES = [

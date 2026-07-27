@@ -1,19 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/router";
 import { Loader2 } from "lucide-react";
 
 import { AgentCard } from "@/components/ui/agents/agent-card";
 import { AgentEditDialog } from "@/components/ui/agents/agent-edit-dialog";
-import { AgentRunCard } from "@/components/ui/agents/agent-run-card";
 import { AgentTriggerDialog } from "@/components/ui/agents/agent-trigger-dialog";
 import type { DashboardWidgetRenderProps } from "@/components/ui/dashboard/widget-render-props";
 import { widgetRootClass } from "@/components/ui/dashboard/widget-layout-utils";
 import { useTranslation } from "@/components/ui/locale-provider";
 import type { Agent, AgentRun } from "@/lib/agents/agent-types";
-import { getWidgetDensity } from "@/lib/dashboard/widget-size-utils";
 import { cn } from "@/lib/utils";
 
 const PREVIEW_AGENT: Agent = {
@@ -294,118 +291,5 @@ export function InteractiveAgentCardWidget({
         </>
       ) : null}
     </div>
-  );
-}
-
-/** Static gallery tile — never mounts run polling or MarkdownLite. */
-function AgentLastRunPreviewTile({ agentName }: { agentName: string }) {
-  return (
-    <section
-      className={cn(
-        "flex h-full min-h-0 flex-col rounded-2xl border border-border/60 bg-card p-3 shadow-sm pointer-events-none",
-        "dark:border-border/50 dark:bg-card/90",
-      )}
-    >
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="truncate text-xs font-semibold text-foreground">{agentName}</p>
-        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-          DONE
-        </span>
-      </div>
-      <div className="space-y-1.5 text-[11px] leading-snug text-muted-foreground">
-        <p className="font-mono text-[10px] text-muted-foreground/80">web_search · …</p>
-        <p className="font-mono text-[10px] text-muted-foreground/80">http_get · …</p>
-        <p className="line-clamp-3 text-foreground/90">## Deployment review</p>
-        <p className="line-clamp-2">Reviewed the latest deployment logs…</p>
-      </div>
-    </section>
-  );
-}
-
-/** Latest run preview for a selected agent. */
-export function AgentLastRunWidget({ data, widget, variant, layoutMode = "grid" }: DashboardWidgetRenderProps) {
-  const { t } = useTranslation();
-  const agentId = (widget.config as { agentId?: string } | undefined)?.agentId;
-  const agent =
-    variant === "preview"
-      ? data.agents[0] ?? { id: "preview-agent", name: t("widgets.types.agent_last_run.previewAgentName") }
-      : data.agents.find((entry) => entry.id === agentId) ?? null;
-
-  const liveFetch = useAgentLastRun(agentId, variant === "live");
-
-  if (variant === "preview") {
-    return (
-      <AgentLastRunPreviewTile
-        agentName={agent?.name ?? t("widgets.types.agent_last_run.previewAgentName")}
-      />
-    );
-  }
-
-  const run = liveFetch.run;
-  const loading = liveFetch.loading;
-  const agentMissing = Boolean(agentId) && !agent;
-  const agentNotFound = liveFetch.notFound;
-
-  if (!agentId) {
-    return (
-      <div className={widgetRootClass(layoutMode)}>
-        <div className={emptyStateClass(layoutMode)}>{t("widgets.types.agent_last_run.noAgentSelected")}</div>
-      </div>
-    );
-  }
-
-  if (agentMissing || agentNotFound) {
-    return (
-      <div className={widgetRootClass(layoutMode)}>
-        <div className={emptyStateClass(layoutMode)}>{t("widgets.types.agent_last_run.agentNotFound")}</div>
-      </div>
-    );
-  }
-
-  const resolvedAgentId = agent?.id ?? agentId;
-  const agentHref = `/agents?highlight=${encodeURIComponent(resolvedAgentId)}`;
-  const density = getWidgetDensity(widget.w, widget.h);
-  const compactHeader = density === "compact" || widget.w <= 5;
-
-  return (
-    <section
-      className={cn(
-        "flex h-full max-h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm",
-        "dark:border-border/50 dark:bg-card/90",
-      )}
-    >
-      <div
-        className={cn(
-          "flex shrink-0 items-center justify-between gap-3 border-b border-border/50 px-4 sm:px-5",
-          compactHeader ? "py-2" : "py-3",
-        )}
-      >
-        <div className="min-w-0">
-          <h3 className={cn("truncate font-semibold text-foreground", compactHeader ? "text-xs" : "text-sm")}>
-            {agent?.name}
-          </h3>
-          {!compactHeader ? (
-            <p className="text-xs text-muted-foreground">{t("widgets.types.agent_last_run.subtitle")}</p>
-          ) : null}
-        </div>
-        <Link href={agentHref} className="shrink-0 text-xs text-muted-foreground hover:text-foreground">
-          {t("widgets.types.agent_last_run.openAgent")}
-        </Link>
-      </div>
-
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
-        {loading && !run ? (
-          <div className="flex flex-1 items-center justify-center py-6">
-            <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden />
-          </div>
-        ) : !run ? (
-          <div className="flex flex-1 items-center justify-center py-6 text-center text-sm text-muted-foreground">
-            {t("widgets.types.agent_last_run.noRunsYet")}
-          </div>
-        ) : (
-          <AgentRunCard run={run} agentId={resolvedAgentId} variant="embedded" />
-        )}
-      </div>
-    </section>
   );
 }

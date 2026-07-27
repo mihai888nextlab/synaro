@@ -95,9 +95,6 @@ function defaultConfig(meta: WidgetRegistryMeta, data: DashboardPageData): Widge
   if (meta.type === "agent_shortcut" && data.agents[0]) {
     return { agentId: data.agents[0].id };
   }
-  if (meta.type === "agent_last_run" && data.agents[0]) {
-    return { agentId: data.agents[0].id };
-  }
   if (meta.type === "agent_last_run_generated" && data.agents[0]) {
     return { agentId: data.agents[0].id };
   }
@@ -334,8 +331,7 @@ export function DashboardWidgetPicker({
               </div>
             ) : null}
 
-            {configStep.meta.type === "agent_last_run" ||
-            configStep.meta.type === "agent_last_run_generated" ? (
+            {configStep.meta.type === "agent_last_run_generated" ? (
               <div className="grid max-h-56 gap-2 overflow-auto">
                 {data.agents.length === 0 ? (
                   <p className="text-sm text-muted-foreground">{t("widgets.createAgentFirst")}</p>
@@ -373,9 +369,7 @@ export function DashboardWidgetPicker({
                 disabled={
                   (configStep.meta.type === "project_shortcut" && data.projects.length === 0) ||
                   (configStep.meta.type === "agent_shortcut" && data.agents.length === 0) ||
-                  ((configStep.meta.type === "agent_last_run" ||
-                    configStep.meta.type === "agent_last_run_generated") &&
-                    data.agents.length === 0)
+                  (configStep.meta.type === "agent_last_run_generated" && data.agents.length === 0)
                 }
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
               >

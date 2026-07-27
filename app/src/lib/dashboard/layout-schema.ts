@@ -18,7 +18,6 @@ export const WIDGET_TYPES = [
   "page_shortcut",
   "project_shortcut",
   "agent_shortcut",
-  "agent_last_run",
   "agent_last_run_generated",
   "api_keys_summary",
 ] as const;

@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 
-import { AgentLastRunWidget } from "@/components/ui/dashboard/widgets/agent-widgets";
+import { AgentLastRunGeneratedWidget } from "@/components/ui/dashboard/widgets/agent-last-run-generated-widget";
 import { DashboardKpiStrip, type DashboardKpiItem } from "@/components/ui/dashboard-kpi-strip";
 import { useTranslation } from "@/components/ui/locale-provider";
 import type {
@@ -23,7 +23,7 @@ const KPI_LABEL_KEYS: Record<KpiMetricKey, string> = {
 function syntheticLastRunWidget(agentId: string): DashboardWidgetInstance {
   return {
     id: `mobile-last-run-${agentId}`,
-    type: "agent_last_run",
+    type: "agent_last_run_generated",
     x: 0,
     y: 0,
     w: 12,
@@ -61,7 +61,7 @@ export function DashboardMobileMonitor({ layout, data }: DashboardMobileMonitorP
 
       {lastRunAgents.map(({ agentId }) => (
         <div key={agentId} className="h-[min(70vh,28rem)] min-h-[16rem]">
-          <AgentLastRunWidget
+          <AgentLastRunGeneratedWidget
             variant="live"
             layoutMode="grid"
             widget={syntheticLastRunWidget(agentId)}

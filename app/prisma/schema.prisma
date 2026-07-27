@@ -96,6 +96,10 @@ model Project {
   cloneRepositoryUrl String?
   repositoryLocation String?
   environmentStatus  EnvironmentStatus @default(INACTIVE)
+  /// Mirror of the production deployment state (source of truth is the environment-service Deployment row).
+  deploymentStatus   DeploymentStatus  @default(INACTIVE)
+  /// Public URL of the live production deployment, when running.
+  deploymentUrl      String?
   lastActivityAt     DateTime?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
@@ -171,6 +175,14 @@ model ProjectInvite {
 enum EnvironmentStatus {
   INACTIVE
   PROVISIONING
+  RUNNING
+  STOPPED
+  ERROR
+}
+
+enum DeploymentStatus {
+  INACTIVE
+  BUILDING
   RUNNING
   STOPPED
   ERROR

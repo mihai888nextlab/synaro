@@ -3,6 +3,7 @@ import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import websocket from '@fastify/websocket'
 import { environmentRoutes } from './routes/environments.js'
+import { deploymentRoutes } from './routes/deployments.js'
 import { terminalWsRoutes } from './routes/terminal-ws.js'
 import { healthRoutes } from './routes/health.js'
 import { prisma } from './lib/prisma.js'
@@ -20,6 +21,7 @@ await app.register(healthRoutes, { prefix: '/health' })
 await app.register(websocket)
 await app.register(terminalWsRoutes, { prefix: '/api/environments' })
 await app.register(environmentRoutes, { prefix: '/api/environments' })
+await app.register(deploymentRoutes, { prefix: '/api/deployments' })
 
 const shutdown = async () => {
   app.log.info('Shutting down...')

@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
 
 import { applyDynamicApiNoCacheHeaders } from "@/lib/apply-dynamic-api-no-cache";
-import { destroyAllRemoteEnvironmentsForProject } from "@/lib/environment-service-api";
+import { destroyAllRemoteEnvironmentsForProject, remoteDestroyDeployment } from "@/lib/environment-service-api";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/next-auth-options";
 
@@ -40,6 +40,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     }
 
     await destroyAllRemoteEnvironmentsForProject(projectId);
+    // Also tear down the production deployment (container + snapshot volume), best-effort.
+    await remoteDestroyDeployment(projectId).catch(() => {});
     await prisma.project.delete({ where: { id: projectId } });
     res.status(204).end();
   } catch (err) {

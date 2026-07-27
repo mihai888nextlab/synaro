@@ -34,3 +34,34 @@ enum EnvironmentStatus {
   STOPPED
   ERROR
 }
+
+/// A production deployment: an always-up, isolated snapshot of a project's workspace, built and
+/// run in its own container (separate from the ephemeral editing/preview environment). One per project.
+model Deployment {
+  id           String           @id @default(uuid())
+  projectId    String           @unique
+  containerId  String?
+  image        String           @default("node:20-alpine")
+  status       DeploymentStatus @default(INACTIVE)
+  /// Stable public subdomain via Traefik (e.g. "my-app" → my-app.synaro.tech). Set when SYNARO_DOMAIN is configured.
+  subdomain    String?          @unique
+  /// Optional custom domain connected by the user (e.g. "myapp.com").
+  customDomain String?
+  /// Git commit the deployment was built from, if known.
+  commitSha    String?
+  /// Resolved production start command (for diagnostics/UI).
+  runCommand   String?
+  deployedAt   DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([projectId])
+}
+
+enum DeploymentStatus {
+  INACTIVE
+  BUILDING
+  RUNNING
+  STOPPED
+  ERROR
+}

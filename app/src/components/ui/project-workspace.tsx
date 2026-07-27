@@ -13,9 +13,13 @@ import {
   MessageSquareText,
   FolderTree,
   PlayIcon,
+  Power,
+  RotateCw,
   Rocket,
   ScrollText,
+  Square,
   TerminalSquare,
+  Trash2,
   X,
 } from "lucide-react";
 import type { TreeState, Updater } from "@headless-tree/core";
@@ -808,6 +812,16 @@ export function ProjectWorkspace({
   const [uploadDir, setUploadDir] = React.useState("public/uploads");
   const prevWorkspaceTabRef = React.useRef<ProjectWorkspaceTab | null>(null);
 
+  // Production deployment (always-up snapshot, separate from the temporary preview).
+  type DeployStatus = "INACTIVE" | "BUILDING" | "RUNNING" | "STOPPED" | "ERROR";
+  const [deployStatus, setDeployStatus] = React.useState<DeployStatus>("INACTIVE");
+  const [deployUrl, setDeployUrl] = React.useState<string | null>(null);
+  const [deployBusy, setDeployBusy] = React.useState(false);
+  const [deployError, setDeployError] = React.useState<string | null>(null);
+  const [deployLogs, setDeployLogs] = React.useState<string[]>([]);
+  const [showDeployLogs, setShowDeployLogs] = React.useState(false);
+  const deployPollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+
   React.useEffect(() => {
     setEnvironmentStatus(initialEnvironmentStatus);
   }, [initialEnvironmentStatus]);
@@ -1106,6 +1120,101 @@ export function ProjectWorkspace({
       setDownloadBusy(false);
     }
   }, [projectId, projectSlug, environmentStatus, t]);
+
+  // ── Production deployment ──────────────────────────────────────────────────────────────────────
+  const applyDeployment = React.useCallback(
+    (dep: { status?: string; publicUrl?: string | null } | null) => {
+      const status = (dep?.status as DeployStatus) ?? "INACTIVE";
+      setDeployStatus(["INACTIVE", "BUILDING", "RUNNING", "STOPPED", "ERROR"].includes(status) ? status : "INACTIVE");
+      setDeployUrl(dep?.status === "RUNNING" ? dep.publicUrl ?? null : null);
+    },
+    [],
+  );
+
+  const refreshDeployment = React.useCallback(async () => {
+    if (!projectId) return;
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/deployment`);
+      if (!res.ok) return;
+      const data = (await res.json()) as { deployment?: { status?: string; publicUrl?: string | null } | null };
+      applyDeployment(data.deployment ?? null);
+    } catch {
+      // ignore — transient
+    }
+  }, [projectId, applyDeployment]);
+
+  const fetchDeployLogs = React.useCallback(async () => {
+    if (!projectId) return;
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/deployment?action=logs`);
+      const data = (await res.json()) as { lines?: string[] };
+      setDeployLogs(Array.isArray(data.lines) ? data.lines : []);
+    } catch {
+      setDeployLogs(["(could not fetch deployment logs)"]);
+    }
+  }, [projectId]);
+
+  const handleDeploy = React.useCallback(async () => {
+    if (!projectId || deployBusy) return;
+    setDeployBusy(true);
+    setDeployError(null);
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/deployment`, { method: "POST" });
+      const data = (await res.json().catch(() => null)) as
+        | { deployment?: { status?: string; publicUrl?: string | null }; error?: string }
+        | null;
+      if (!res.ok) throw new Error(data?.error ?? `Deploy failed (${res.status})`);
+      applyDeployment(data?.deployment ?? { status: "BUILDING" });
+    } catch (err) {
+      setDeployError(err instanceof Error ? err.message : "Deploy failed");
+    } finally {
+      setDeployBusy(false);
+    }
+  }, [projectId, deployBusy, applyDeployment]);
+
+  const handleDeployLifecycle = React.useCallback(
+    async (kind: "start" | "stop" | "destroy") => {
+      if (!projectId || deployBusy) return;
+      setDeployBusy(true);
+      setDeployError(null);
+      try {
+        const res = await fetch(
+          `/api/projects/${encodeURIComponent(projectId)}/deployment${kind === "start" ? "" : kind === "stop" ? "?action=stop" : ""}`,
+          { method: kind === "start" ? "POST" : "DELETE" },
+        );
+        if (!res.ok && res.status !== 204) {
+          const data = (await res.json().catch(() => null)) as { error?: string } | null;
+          throw new Error(data?.error ?? `Request failed (${res.status})`);
+        }
+        if (kind === "destroy") applyDeployment(null);
+        else await refreshDeployment();
+      } catch (err) {
+        setDeployError(err instanceof Error ? err.message : "Request failed");
+      } finally {
+        setDeployBusy(false);
+      }
+    },
+    [projectId, deployBusy, applyDeployment, refreshDeployment],
+  );
+
+  // Load deployment status when the deployments tab opens; poll while BUILDING.
+  React.useEffect(() => {
+    if (tab !== "deployments" || !projectId) return;
+    void refreshDeployment();
+  }, [tab, projectId, refreshDeployment]);
+
+  React.useEffect(() => {
+    if (deployPollRef.current) {
+      clearInterval(deployPollRef.current);
+      deployPollRef.current = null;
+    }
+    if (tab === "deployments" && deployStatus === "BUILDING") {
+      deployPollRef.current = setInterval(() => void refreshDeployment(), 3000);
+    }
+    return () => {
+      if (deployPollRef.current) clearInterval(deployPollRef.current);
+    };
+  }, [tab, deployStatus, refreshDeployment]);
 
   const showPreviewPanel = runStatus === "running" && Boolean(previewUrl);
 
@@ -1539,20 +1648,129 @@ export function ProjectWorkspace({
                 <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-3">
                   <div className="flex items-center gap-2">
                     <Rocket className="size-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">{t("workspace.deployments")}</span>
-                    <span className="ml-auto rounded-full bg-violet-500/10 px-2 py-0.5 text-[0.7rem] text-violet-500">{t("common.comingSoon")}</span>
+                    <span className="text-sm font-medium">{t("workspace.deployToProduction")}</span>
+                    <span
+                      className={cn(
+                        "ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.7rem]",
+                        deployStatus === "RUNNING"
+                          ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                          : deployStatus === "BUILDING"
+                            ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                            : deployStatus === "ERROR"
+                              ? "bg-destructive/10 text-destructive"
+                              : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {deployStatus === "BUILDING" ? <Loader2 className="size-3 animate-spin" /> : null}
+                      {deployStatus === "RUNNING"
+                        ? "Live"
+                        : deployStatus === "BUILDING"
+                          ? "Building…"
+                          : deployStatus === "ERROR"
+                            ? "Failed"
+                            : deployStatus === "STOPPED"
+                              ? "Stopped"
+                              : "Not deployed"}
+                    </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {t("workspace.deployDescription", { slug: projectSlug ?? "project" })}
                   </p>
-                  <button
-                    type="button"
-                    disabled
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-border/40 bg-muted px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed"
-                  >
-                    <Rocket className="size-3.5" />
-                    {t("workspace.deployToProduction")}
-                  </button>
+
+                  {deployStatus === "RUNNING" && deployUrl ? (
+                    <a
+                      href={deployUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-border/60 bg-muted px-3 py-2 text-xs text-foreground transition hover:bg-accent"
+                    >
+                      <ExternalLink className="size-3.5" />
+                      {deployUrl.replace(/^https?:\/\//, "")}
+                    </a>
+                  ) : null}
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {deployStatus === "INACTIVE" || deployStatus === "ERROR" ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleDeploy()}
+                        disabled={deployBusy || !projectId}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-foreground px-3 py-2 text-xs font-medium text-background transition hover:opacity-90 disabled:opacity-50"
+                      >
+                        {deployBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Rocket className="size-3.5" />}
+                        {deployStatus === "ERROR" ? "Retry deploy" : t("workspace.deployToProduction")}
+                      </button>
+                    ) : null}
+
+                    {deployStatus === "RUNNING" || deployStatus === "STOPPED" ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleDeploy()}
+                        disabled={deployBusy}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-border/70 bg-card px-3 py-2 text-xs text-foreground transition hover:bg-muted disabled:opacity-50"
+                      >
+                        {deployBusy ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCw className="size-3.5" />}
+                        Redeploy
+                      </button>
+                    ) : null}
+
+                    {deployStatus === "RUNNING" ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleDeployLifecycle("stop")}
+                        disabled={deployBusy}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-border/70 bg-card px-3 py-2 text-xs text-foreground transition hover:bg-muted disabled:opacity-50"
+                      >
+                        <Square className="size-3.5" />
+                        Stop
+                      </button>
+                    ) : null}
+
+                    {deployStatus === "STOPPED" ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleDeployLifecycle("start")}
+                        disabled={deployBusy}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-border/70 bg-card px-3 py-2 text-xs text-foreground transition hover:bg-muted disabled:opacity-50"
+                      >
+                        <Power className="size-3.5" />
+                        Start
+                      </button>
+                    ) : null}
+
+                    {deployStatus !== "INACTIVE" ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowDeployLogs((v) => !v);
+                            if (!showDeployLogs) void fetchDeployLogs();
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-border/70 bg-card px-3 py-2 text-xs text-muted-foreground transition hover:bg-muted"
+                        >
+                          <ScrollText className="size-3.5" />
+                          Logs
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeployLifecycle("destroy")}
+                          disabled={deployBusy}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-border/70 bg-card px-3 py-2 text-xs text-destructive transition hover:bg-destructive/10 disabled:opacity-50"
+                        >
+                          <Trash2 className="size-3.5" />
+                          Remove
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+
+                  {deployError ? <p className="text-xs text-destructive">{deployError}</p> : null}
+
+                  {showDeployLogs ? (
+                    <pre className="max-h-40 overflow-auto rounded-xl border border-border/60 bg-muted/50 p-3 text-[0.7rem] leading-relaxed text-muted-foreground whitespace-pre-wrap">
+                      {deployLogs.length > 0 ? deployLogs.join("\n") : "(no logs yet)"}
+                    </pre>
+                  ) : null}
                 </div>
                 </div>
               </div>

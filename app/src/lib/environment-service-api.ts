@@ -368,6 +368,113 @@ export async function remoteExecTerminal(
   };
 }
 
+// ─── Production deployments (always-up, isolated snapshot of the project) ──────────────────────────
+
+export type RemoteDeployment = {
+  id: string;
+  projectId: string;
+  status: string; // INACTIVE | BUILDING | RUNNING | STOPPED | ERROR
+  containerId: string | null;
+  subdomain?: string | null;
+  customDomain?: string | null;
+  commitSha?: string | null;
+  runCommand?: string | null;
+  deployedAt?: string | null;
+  publicUrl?: string | null;
+};
+
+function deploymentBaseUrl(): string {
+  return `${environmentServiceBaseUrl()}/api/deployments`;
+}
+
+async function parseDeploymentResponse(res: Response): Promise<RemoteDeployment> {
+  const text = await res.text();
+  let parsed: unknown;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    parsed = null;
+  }
+  if (!res.ok) {
+    const detail =
+      parsed && typeof parsed === "object" && parsed !== null && "detail" in parsed
+        ? String((parsed as { detail?: unknown }).detail)
+        : parsed && typeof parsed === "object" && parsed !== null && "error" in parsed
+          ? String((parsed as { error?: unknown }).error)
+          : text;
+    const err = new Error(detail || `Deployment request failed (${res.status})`);
+    (err as Error & { status?: number }).status = res.status;
+    throw err;
+  }
+  if (!parsed || typeof parsed !== "object") throw new Error("Invalid deployment response");
+  return parsed as RemoteDeployment;
+}
+
+/** Start (or re-run) a production deployment. Returns immediately with the row in BUILDING. */
+export async function remoteDeployProject(
+  projectId: string,
+  opts: { projectSlug: string; commitSha?: string | null },
+): Promise<RemoteDeployment> {
+  const payload: Record<string, unknown> = { projectId, projectSlug: opts.projectSlug };
+  if (opts.commitSha) payload.commitSha = opts.commitSha;
+  const res = await fetch(deploymentBaseUrl(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(30_000),
+  });
+  return parseDeploymentResponse(res);
+}
+
+/** Current deployment status, or null when the project has never been deployed. */
+export async function remoteGetDeployment(projectId: string): Promise<RemoteDeployment | null> {
+  const res = await fetch(`${deploymentBaseUrl()}/${encodeURIComponent(projectId)}`, {
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (res.status === 404) return null;
+  return parseDeploymentResponse(res);
+}
+
+export async function remoteStopDeployment(projectId: string): Promise<RemoteDeployment> {
+  const res = await fetch(`${deploymentBaseUrl()}/${encodeURIComponent(projectId)}/stop`, {
+    method: "POST",
+    signal: AbortSignal.timeout(120_000),
+  });
+  return parseDeploymentResponse(res);
+}
+
+export async function remoteStartDeployment(projectId: string): Promise<RemoteDeployment> {
+  const res = await fetch(`${deploymentBaseUrl()}/${encodeURIComponent(projectId)}/start`, {
+    method: "POST",
+    signal: AbortSignal.timeout(300_000),
+  });
+  return parseDeploymentResponse(res);
+}
+
+export async function remoteDestroyDeployment(projectId: string): Promise<void> {
+  const res = await fetch(`${deploymentBaseUrl()}/${encodeURIComponent(projectId)}`, {
+    method: "DELETE",
+    signal: AbortSignal.timeout(120_000),
+  });
+  if (!res.ok && res.status !== 204) {
+    const t = await res.text().catch(() => "");
+    throw new Error(t || `Destroy deployment failed (${res.status})`);
+  }
+}
+
+export async function remoteDeploymentLogs(projectId: string): Promise<string[]> {
+  try {
+    const res = await fetch(`${deploymentBaseUrl()}/${encodeURIComponent(projectId)}/logs`, {
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) return ["(could not fetch deployment logs)"];
+    const json = (await res.json()) as { lines?: unknown };
+    return Array.isArray(json.lines) ? json.lines.map((l) => String(l)) : [];
+  } catch {
+    return ["(could not fetch deployment logs)"];
+  }
+}
+
 export function parseRemoteStatus(s: string): EnvironmentStatus | null {
   const allowed: EnvironmentStatus[] = [
     "INACTIVE",

@@ -19,11 +19,48 @@ const MAX_PORT = 4999
  * `{subdomain}.{SYNARO_DOMAIN}` instead of `localhost:{port}`.
  * Leave unset for local development (port-binding mode).
  */
-const SYNARO_DOMAIN = process.env.SYNARO_DOMAIN?.trim() ?? ''
-const TRAEFIK_NETWORK = process.env.TRAEFIK_NETWORK?.trim() || 'traefik-net'
+export const SYNARO_DOMAIN = process.env.SYNARO_DOMAIN?.trim() ?? ''
+export const TRAEFIK_NETWORK = process.env.TRAEFIK_NETWORK?.trim() || 'traefik-net'
 // Empty by default: only pin an ACME certresolver on env routers when one is actually configured
 // in Traefik. Referencing a resolver Traefik doesn't have makes it drop the whole router (404).
-const ACME_RESOLVER = process.env.ACME_RESOLVER?.trim() || ''
+export const ACME_RESOLVER = process.env.ACME_RESOLVER?.trim() || ''
+
+/**
+ * Build the Traefik docker-provider labels that expose a container at `{subdomain}.{SYNARO_DOMAIN}`.
+ * Shared by environment previews and production deployments. Preserves two hard-won prod gotchas:
+ *  - emit BOTH a `websecure`+`tls=true` router AND a `-http` router on `web`/:80, so Cloudflare works
+ *    in either "Full" (origin :443) or "Flexible" (origin :80) SSL mode;
+ *  - set `tls.certresolver` ONLY when ACME_RESOLVER is configured — referencing a resolver Traefik
+ *    doesn't have makes it drop the whole router (public 404).
+ * The container is assumed to listen on port 3000.
+ */
+export function buildTraefikLabels(
+  routerName: string,
+  subdomain: string,
+  extra?: Record<string, string>,
+): Record<string, string> {
+  const hostRule = `Host(\`${subdomain}.${SYNARO_DOMAIN}\`)`
+  const labels: Record<string, string> = {
+    ...extra,
+    'traefik.enable': 'true',
+    [`traefik.http.services.${routerName}.loadbalancer.server.port`]: '3000',
+    // HTTPS router (direct TLS, or Cloudflare "Full" mode): serve on websecure with the file cert.
+    [`traefik.http.routers.${routerName}.rule`]: hostRule,
+    [`traefik.http.routers.${routerName}.entrypoints`]: 'websecure',
+    [`traefik.http.routers.${routerName}.tls`]: 'true',
+    [`traefik.http.routers.${routerName}.service`]: routerName,
+    // HTTP router (plain :80): Cloudflare "Flexible" mode connects to the origin over HTTP.
+    // Without this, subdomains 404 whenever Cloudflare terminates TLS and forwards on port 80.
+    [`traefik.http.routers.${routerName}-http.rule`]: hostRule,
+    [`traefik.http.routers.${routerName}-http.entrypoints`]: 'web',
+    [`traefik.http.routers.${routerName}-http.service`]: routerName,
+  }
+  // Only reference a certresolver when Traefik actually has one — otherwise it drops the router.
+  if (ACME_RESOLVER) {
+    labels[`traefik.http.routers.${routerName}.tls.certresolver`] = ACME_RESOLVER
+  }
+  return labels
+}
 
 /** Build a URL-safe subdomain from a project slug + first 6 chars of env UUID. */
 function buildSubdomain(projectSlug: string, envId: string): string {
@@ -113,7 +150,7 @@ async function updateStatus(
   })
 }
 
-async function execShellInContainer(containerId: string, script: string, env: string[] = []): Promise<string> {
+export async function execShellInContainer(containerId: string, script: string, env: string[] = []): Promise<string> {
   const container = docker.getContainer(containerId)
   const exec = await container.exec({
     Cmd: ['sh', '-c', script],
@@ -133,7 +170,7 @@ async function execShellInContainer(containerId: string, script: string, env: st
 }
 
 /** Wait until Docker reports the main process is running (PID 1 alive). */
-async function waitUntilContainerRunning(containerId: string, timeoutMs: number): Promise<boolean> {
+export async function waitUntilContainerRunning(containerId: string, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
   const container = docker.getContainer(containerId)
   while (Date.now() < deadline) {
@@ -266,30 +303,14 @@ export async function createEnvironment(
     }
 
     // Build Traefik labels when running behind the proxy (VPS / production mode).
-    const labels: Record<string, string> = {
+    const ownerLabels = {
       'synaro.environment.id': environment.id,
       'synaro.project.id': projectId,
     }
-    if (useTraefik && subdomain) {
-      const routerName = `synaro-env-${environment.id}`
-      const hostRule = `Host(\`${subdomain}.${SYNARO_DOMAIN}\`)`
-      labels['traefik.enable'] = 'true'
-      labels[`traefik.http.services.${routerName}.loadbalancer.server.port`] = '3000'
-      // HTTPS router (direct TLS, or Cloudflare "Full" mode): serve on websecure with the file cert.
-      labels[`traefik.http.routers.${routerName}.rule`] = hostRule
-      labels[`traefik.http.routers.${routerName}.entrypoints`] = 'websecure'
-      labels[`traefik.http.routers.${routerName}.tls`] = 'true'
-      labels[`traefik.http.routers.${routerName}.service`] = routerName
-      // Only reference a certresolver when Traefik actually has one — otherwise it drops the router.
-      if (ACME_RESOLVER) {
-        labels[`traefik.http.routers.${routerName}.tls.certresolver`] = ACME_RESOLVER
-      }
-      // HTTP router (plain :80): Cloudflare "Flexible" mode connects to the origin over HTTP.
-      // Without this, subdomains 404 whenever Cloudflare terminates TLS and forwards on port 80.
-      labels[`traefik.http.routers.${routerName}-http.rule`] = hostRule
-      labels[`traefik.http.routers.${routerName}-http.entrypoints`] = 'web'
-      labels[`traefik.http.routers.${routerName}-http.service`] = routerName
-    }
+    const labels: Record<string, string> =
+      useTraefik && subdomain
+        ? buildTraefikLabels(`synaro-env-${environment.id}`, subdomain, ownerLabels)
+        : { ...ownerLabels }
 
     const hostConfig: Record<string, unknown> = {
       Memory: 512 * 1024 * 1024, // 512 MB

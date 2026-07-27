@@ -67,6 +67,11 @@ async function generateScopedChanges(args: {
 
     if (finishReason !== 'length') break
 
+    // Length-capped but EMPTY content: there's nothing to continue from, and feeding an empty
+    // assistant turn back makes the next request 400 ("message at position N with role 'assistant'
+    // must not be empty"). Stop here and let the parse below surface a clear error.
+    if (!piece.trim()) break
+
     // Cut off at the cap — feed the partial back and ask it to continue seamlessly.
     messages.push({ role: 'assistant', content: piece })
     messages.push({
@@ -75,6 +80,10 @@ async function generateScopedChanges(args: {
         'Your previous message was cut off at the token limit. Continue the JSON EXACTLY where you ' +
         'stopped — output only the remaining characters, no repetition, no restart, no code fences.',
     })
+  }
+
+  if (!accumulated.trim()) {
+    throw new Error(`Worker "${args.role}" got an empty response from the model — retrying usually fixes it.`)
   }
 
   let changes: FileChange[]

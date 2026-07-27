@@ -188,6 +188,8 @@ services:
       KIMI_API_KEY: ${KIMI_API_KEY}
       PROJECTS_PATH: /projects
       ENVIRONMENT_SERVICE_URL: http://environment-service:3002
+      # Set ORCHESTRATOR_MODE=agent in .env to run the agentic tool-loop; empty = the classic pipeline.
+      ORCHESTRATOR_MODE: ${ORCHESTRATOR_MODE:-}
     volumes:
       - projects_data:/projects
       - ./services/ai-orchestration-service/src:/app/src

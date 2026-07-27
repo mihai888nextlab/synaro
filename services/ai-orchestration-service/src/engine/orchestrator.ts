@@ -24,6 +24,7 @@ import { planFiles } from './file-planner.js'
 import { generateFilesInParallel } from './file-generator.js'
 import { runEditPass } from './edit-pass.js'
 import { runWorker, runFixPass } from './worker.js'
+import { runAgentLoop } from './agent-loop.js'
 import { runHealthCheck } from './health-check.js'
 import { mergeChanges } from './parse-changes.js'
 import type { HealthResult } from './types.js'
@@ -575,26 +576,9 @@ export async function executeTask(
     ])
     const memory = [projectContext, recentContext].filter(Boolean).join('\n\n') || null
 
-    // ── Scan workspace, then route by task complexity ────────────────────
+    // ── Scan workspace ───────────────────────────────────────────────────
     await progress('Scanning your repository...')
     const allPaths = await listContainerFiles(env.id)
-    const repoTree = buildRepoTree(allPaths.map((p) => ({ path: p, size: 0 })))
-
-    // Triage first: most tasks are small and localized, and shouldn't pay the full
-    // planner → parallel-workers → integrator fan-out tax. Only genuinely large/greenfield
-    // builds take the multi-agent path; everything else runs a single targeted-edit pass.
-    await progress('Sizing up the task...')
-    aiSteps += 1
-    const triage = await triageTask(task.prompt, repoTree, memory)
-    totalInputTokens += triage.inputTokens
-    totalOutputTokens += triage.outputTokens
-
-    // A brand-new / near-empty workspace means a build-from-scratch, which is inherently multi-file.
-    // Never route that through the single-pass "simple" edit — it produces one giant slow blob and
-    // stalls. Force the robust file-by-file path whenever the repo has essentially no code yet.
-    const codeFileCount = allPaths.filter((p) => !p.split('/').pop()?.startsWith('.')).length
-    const isNewProject = codeFileCount <= 2
-    const isSimple = triage.complexity === 'simple' && !isNewProject
 
     await assertNotCancelled(taskId)
     await updateTask(taskId, 'GENERATING', { streamContent: null })
@@ -602,11 +586,55 @@ export async function executeTask(
     let summary: string
     let generated: FileChange[]
     let filesFailed: string[] = []
+    // Controls the verify/self-heal tail below (skipped for simple edits and — for now — the agent path).
+    let isSimple = false
+    // Content of each touched file BEFORE the task, for accurate diffs (agent path fills this in).
+    let agentPrior: Map<string, string | null> | null = null
 
     // Live "what the AI is producing" stream → Task.streamContent → chat UI.
     const streamOut = makeStreamWriter(taskId)
 
-    if (isSimple) {
+    // ── Agentic tool-loop (flag-gated) vs. the one-shot pipeline ──────────
+    // ORCHESTRATOR_MODE=agent runs the task as a tool-using agent that reads/edits/writes/runs commands
+    // in the container directly until done. Flag off = byte-for-byte the existing pipeline below.
+    if (process.env.ORCHESTRATOR_MODE === 'agent') {
+      await progress('Working on it...')
+      const agent = await runAgentLoop({
+        envId: env.id,
+        prompt: task.prompt,
+        memory,
+        onActivity: progress,
+        onStream: streamOut,
+        assertNotCancelled: () => assertNotCancelled(taskId),
+      })
+      totalInputTokens += agent.inputTokens
+      totalOutputTokens += agent.outputTokens
+      aiSteps += agent.steps
+      summary = agent.summary
+      agentPrior = agent.prior
+      isSimple = true // Phase 1: agent self-verifies via run_command; no separate verify tail.
+      const finals = await readWorkspaceFilesParallel(env.id, agent.touched)
+      generated = finals.map((f) => ({ path: f.path, content: f.content }))
+    } else {
+      const repoTree = buildRepoTree(allPaths.map((p) => ({ path: p, size: 0 })))
+
+      // Triage first: most tasks are small and localized, and shouldn't pay the full
+      // planner → parallel-workers → integrator fan-out tax. Only genuinely large/greenfield
+      // builds take the multi-agent path; everything else runs a single targeted-edit pass.
+      await progress('Sizing up the task...')
+      aiSteps += 1
+      const triage = await triageTask(task.prompt, repoTree, memory)
+      totalInputTokens += triage.inputTokens
+      totalOutputTokens += triage.outputTokens
+
+      // A brand-new / near-empty workspace means a build-from-scratch, which is inherently multi-file.
+      // Never route that through the single-pass "simple" edit — it produces one giant slow blob and
+      // stalls. Force the robust file-by-file path whenever the repo has essentially no code yet.
+      const codeFileCount = allPaths.filter((p) => !p.split('/').pop()?.startsWith('.')).length
+      const isNewProject = codeFileCount <= 2
+      isSimple = triage.complexity === 'simple' && !isNewProject
+
+      if (isSimple) {
       // Fast path. First try a targeted search/replace edit (tiny output → quick); only if that
       // can't be applied cleanly do we fall back to a full-file rewrite (correct but slower).
       await progress('Making the change...')
@@ -691,10 +719,13 @@ export async function executeTask(
         summary = manifest.summary
       }
     }
+    }
 
     await assertNotCancelled(taskId)
     const finalChangesInit = mergeChanges(generated)
-    if (finalChangesInit.length === 0) {
+    // The agent path applies files as it goes and may legitimately finish with no file changes; only
+    // the one-shot pipeline (agentPrior === null) treats "nothing generated" as a failure.
+    if (finalChangesInit.length === 0 && agentPrior === null) {
       throw new Error(
         'No files were generated — the model returned empty or invalid output. Please try again.',
       )
@@ -705,18 +736,23 @@ export async function executeTask(
 
     // ── Apply generated files ─────────────────────────────────────────────
     await updateTask(taskId, 'APPLYING')
-    // Snapshot pre-task content of changed files for diffing before overwriting.
+    // Snapshot pre-task content of changed files for diffing. The agent already wrote its files (and
+    // captured their pre-edit content in agentPrior), so reuse that and skip a redundant overwrite.
     const priorContent = new Map<string, string>()
-    for (const f of await readWorkspaceFilesParallel(env.id, finalChangesInit.map((c) => c.path))) {
-      priorContent.set(f.path, f.content)
+    if (agentPrior) {
+      for (const [p, c] of agentPrior) if (c !== null) priorContent.set(p, c)
+    } else {
+      for (const f of await readWorkspaceFilesParallel(env.id, finalChangesInit.map((c) => c.path))) {
+        priorContent.set(f.path, f.content)
+      }
+      await progress(
+        `Writing ${finalChangesInit.length} file${finalChangesInit.length === 1 ? '' : 's'}...`,
+      )
+      await writeContainerFiles(
+        env.id,
+        finalChangesInit.map(({ path, content }) => ({ path, content })),
+      )
     }
-    await progress(
-      `Writing ${finalChangesInit.length} file${finalChangesInit.length === 1 ? '' : 's'}...`,
-    )
-    await writeContainerFiles(
-      env.id,
-      finalChangesInit.map(({ path, content }) => ({ path, content })),
-    )
 
     const changedPaths = new Set(finalChangesInit.map((c) => c.path))
     let finalChanges = finalChangesInit

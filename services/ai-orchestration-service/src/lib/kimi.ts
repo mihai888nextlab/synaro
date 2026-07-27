@@ -83,6 +83,54 @@ export async function streamChat(
   return { content, inputTokens, outputTokens, finishReason }
 }
 
+export type AgentToolCall = { id: string; name: string; arguments: string }
+
+export type ChatWithToolsResult = {
+  content: string
+  toolCalls: AgentToolCall[]
+  inputTokens: number
+  outputTokens: number
+  finishReason: string | null
+}
+
+/**
+ * One non-streaming step of a tool-using agent: the model sees the running message history + the tool
+ * schemas and replies with assistant text and/or tool calls. Kept non-streaming so tool-call arguments
+ * arrive whole (streamed tool_calls come fragmented and must be reassembled — a later refinement).
+ */
+export async function chatWithTools(
+  params: {
+    model: string
+    max_tokens?: number
+    messages: OpenAI.Chat.ChatCompletionMessageParam[]
+    tools: OpenAI.Chat.ChatCompletionTool[]
+  },
+  requestOpts: { timeout?: number; maxRetries?: number } | undefined,
+): Promise<ChatWithToolsResult> {
+  const resp = await kimi.chat.completions.create(
+    {
+      model: params.model,
+      max_tokens: params.max_tokens,
+      messages: params.messages,
+      tools: params.tools,
+      tool_choice: 'auto',
+      stream: false,
+    },
+    requestOpts,
+  )
+  const msg = resp.choices[0]?.message
+  const toolCalls: AgentToolCall[] = (msg?.tool_calls ?? [])
+    .filter((tc): tc is OpenAI.Chat.ChatCompletionMessageToolCall => tc.type === 'function')
+    .map((tc) => ({ id: tc.id, name: tc.function.name, arguments: tc.function.arguments }))
+  return {
+    content: msg?.content ?? '',
+    toolCalls,
+    inputTokens: resp.usage?.prompt_tokens ?? 0,
+    outputTokens: resp.usage?.completion_tokens ?? 0,
+    finishReason: resp.choices[0]?.finish_reason ?? null,
+  }
+}
+
 export const MODELS = {
   // Fast model for file analysis (repo scanning, relevance filtering)
   ANALYZE: 'moonshot-v1-8k',
@@ -143,4 +191,8 @@ export const ORCHESTRATION = {
   MAX_TASK_MS: 12 * 60_000,
   /** Max times a worker will ask the model to continue when a response is cut off at the token cap. */
   MAX_CONTINUATIONS: 2,
+  /** Agentic tool-loop: max model steps (tool round-trips) before the loop stops. */
+  AGENT_MAX_STEPS: 24,
+  /** Agentic tool-loop: per-step model output budget (tool args can include full file contents). */
+  AGENT_MAX_OUTPUT: 16_000,
 } as const

@@ -18,6 +18,7 @@ import {
 import { streamKimiChatCompletion } from '../lib/kimi-stream.js'
 import { readWorkspaceFilesParallel } from '../lib/read-workspace-files.js'
 import { loadRecentTaskContext } from '../lib/memory.js'
+import { detectProjectContext } from '../lib/project-context.js'
 import { triageTask } from './triage.js'
 import { planFiles } from './file-planner.js'
 import { generateFilesInParallel } from './file-generator.js'
@@ -544,9 +545,15 @@ export async function executeTask(
       await updateProgress(taskId, msg)
     }
 
-    // ── Memory: replay recent tasks so follow-ups build on prior work ─────
+    // ── Context: existing project stack + recent-task memory ─────────────
+    // The stack context grounds every stage (triage, planning, edits, generation) so the AI builds
+    // ON the existing app instead of re-scaffolding or switching frameworks.
     await assertNotCancelled(taskId)
-    const memory = await loadRecentTaskContext(task.projectId, taskId)
+    const [projectContext, recentContext] = await Promise.all([
+      detectProjectContext(env.id),
+      loadRecentTaskContext(task.projectId, taskId),
+    ])
+    const memory = [projectContext, recentContext].filter(Boolean).join('\n\n') || null
 
     // ── Scan workspace, then route by task complexity ────────────────────
     await progress('Scanning your repository...')

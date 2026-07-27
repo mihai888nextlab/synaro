@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
 import { executeTask } from '../engine/orchestrator.js'
 import { kimi, MODELS } from '../lib/kimi.js'
+import { getActiveEnvironment } from '../lib/environment-client.js'
+import { detectProjectContext } from '../lib/project-context.js'
 import type { TaskGitContext } from '../lib/task-intent.js'
 
 const createTaskSchema = z.object({
@@ -24,9 +26,17 @@ export const taskRoutes: FastifyPluginAsync = async (app) => {
   // POST /api/tasks/clarify — ask clarifying questions before generation
   // Defined before /:id routes so Fastify resolves the literal path first
   app.post('/clarify', async (req, reply) => {
-    const { prompt } = req.body as { prompt?: string }
+    const { prompt, projectId } = req.body as { prompt?: string; projectId?: string }
     if (!prompt?.trim()) {
       return reply.status(400).send({ error: 'prompt is required' })
+    }
+
+    // If the project already exists, ground the model in its stack so it does NOT ask about the
+    // framework/language/styling — those are already decided.
+    let projectContext: string | null = null
+    if (projectId) {
+      const env = await getActiveEnvironment(projectId).catch(() => null)
+      if (env) projectContext = await detectProjectContext(env.id).catch(() => null)
     }
 
     try {
@@ -40,7 +50,7 @@ export const taskRoutes: FastifyPluginAsync = async (app) => {
 
 Only ask questions when the request is ambiguous or missing information that would materially change the implementation.
 If you can proceed safely with reasonable defaults, do NOT ask questions.
-
+${projectContext ? `\n${projectContext}\nBecause the project already exists, NEVER ask about the framework, language, styling library, or project setup — those are fixed. Only ask about genuinely ambiguous product/behavior details.\n` : ''}
 Return ONLY valid JSON — no explanation, in this exact shape:
 {"required": boolean, "questions": ["...", "...", "..."]}
 

@@ -28,7 +28,9 @@ export async function loadRecentTaskContext(
     where: {
       projectId,
       id: { not: currentTaskId },
-      status: { in: ['DONE', 'FAILED'] },
+      // Only successful tasks. FAILED tasks were replayed as "[FAILED] … do not repeat", which
+      // poisoned retries of the same/similar prompt (the model refused to redo the requested work).
+      status: { in: ['DONE'] },
     },
     orderBy: { createdAt: 'desc' },
     take: ORCHESTRATION.MEMORY_TASKS,
@@ -36,15 +38,14 @@ export async function loadRecentTaskContext(
   })
   if (tasks.length === 0) return null
 
-  const lines = ['Recent work on this project (oldest first) — build on this, do not repeat it:']
+  // Framed as neutral context, NOT "do not repeat" — the previous framing made the model think the
+  // work was already done and return no changes, which failed follow-up prompts.
+  const lines = [
+    'Changes already applied to this project (oldest first) — the current files already reflect these. ' +
+      'Use this only as context; your job is to make the NEW change described in the task below:',
+  ]
   for (const t of tasks.reverse()) {
-    if (t.status === 'FAILED') {
-      lines.push(
-        `- [FAILED] "${truncate(t.prompt, 140)}" — error: ${truncate(t.errorMessage ?? 'unknown', 200)}`,
-      )
-    } else {
-      lines.push(`- "${truncate(t.prompt, 140)}" — ${truncate(summaryOf(t.result) ?? 'done', 200)}`)
-    }
+    lines.push(`- "${truncate(t.prompt, 140)}" — ${truncate(summaryOf(t.result) ?? 'done', 200)}`)
   }
   return lines.join('\n')
 }

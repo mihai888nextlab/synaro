@@ -57,13 +57,25 @@ describe("security: dashboard layout input validation (lib)", () => {
     ).toBeNull();
   });
 
-  it("parseDashboardLayout rejects unknown widget types", () => {
-    expect(
-      parseDashboardLayout({
-        version: DASHBOARD_LAYOUT_VERSION,
-        widgets: [{ id: "w1", type: "__proto__", x: 0, y: 0, w: 3, h: 2 }],
-      }),
-    ).toBeNull();
+  it("parseDashboardLayout skips unknown widget types", () => {
+    const parsed = parseDashboardLayout({
+      version: DASHBOARD_LAYOUT_VERSION,
+      widgets: [
+        { id: "w1", type: "__proto__", x: 0, y: 0, w: 3, h: 2 },
+        {
+          id: "w2",
+          type: "page_shortcut",
+          x: 0,
+          y: 0,
+          w: 3,
+          h: 2,
+          config: { route: "logs" },
+        },
+      ],
+    });
+    expect(parsed).not.toBeNull();
+    expect(parsed!.widgets).toHaveLength(1);
+    expect(parsed!.widgets[0]?.id).toBe("w2");
   });
 
   it("validateDashboardLayout rejects negative geometry", () => {

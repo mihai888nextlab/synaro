@@ -470,28 +470,30 @@ function SpotlightTourLayer({
       let el = findVisibleTourTarget(stepSelectors) as HTMLElement | null;
       const openDialog = findOpenAppDialog();
 
-      // If a modal opened over the previous target, spotlight inside it (or the dialog).
-      if (openDialog) {
-        if (el && openDialog.contains(el)) {
-          // keep el
-        } else {
-          const dialogMatch = stepSelectors.some((sel) => {
-            try {
-              return openDialog.matches(sel) || Boolean(openDialog.querySelector(sel));
-            } catch {
-              return false;
-            }
-          });
-          if (dialogMatch) {
-            el = openDialog;
-          } else {
-            clearTargetElevation(elevatedElRef.current);
-            elevatedElRef.current = null;
-            const nextRect = measureElement(openDialog);
-            setTargetRect((prev) => (rectsEqual(prev, nextRect) ? prev : nextRect));
-            return;
+      // Only retarget into a dialog when this step *expects* that dialog (selector match).
+      // Never hijack the spotlight to an unrelated modal (e.g. widget picker during
+      // dashboard-widgets) — that made the tour card jump / "ghost" across the screen.
+      if (openDialog && !(el && openDialog.contains(el))) {
+        const dialogMatch = stepSelectors.some((sel) => {
+          try {
+            return openDialog.matches(sel) || Boolean(openDialog.querySelector(sel));
+          } catch {
+            return false;
           }
+        });
+        if (dialogMatch) {
+          const nested = findVisibleTourTarget(
+            stepSelectors.filter((sel) => {
+              try {
+                return openDialog.matches(sel) || Boolean(openDialog.querySelector(sel));
+              } catch {
+                return false;
+              }
+            }),
+          ) as HTMLElement | null;
+          el = nested ?? openDialog;
         }
+        // else: keep the step's intended target (or null) — ignore the unrelated dialog
       }
 
       if (!el) {

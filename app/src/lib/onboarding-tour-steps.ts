@@ -167,7 +167,12 @@ export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
   {
     id: "dashboard-edit",
     route: "/dashboard",
-    selector: '[data-onboarding="dashboard-edit"]',
+    // Prefer Edit; after click, Add widget mounts in the same toolbar so the
+    // spotlight stays put instead of flashing to a full-screen dim mid-handoff.
+    selectors: [
+      '[data-onboarding="dashboard-edit"]',
+      '[data-onboarding="dashboard-add-widget"]',
+    ],
     title: "Customize your dashboard",
     description:
       "Edit mode lets you rearrange and resize widgets. Changes save automatically while you customize.",
@@ -184,10 +189,9 @@ export const ONBOARDING_TOUR_STEPS: OnboardingTourStep[] = [
   {
     id: "dashboard-widgets",
     route: "/dashboard",
-    selectors: [
-      '[data-onboarding="dashboard-add-widget"]',
-      '[data-onboarding="dashboard-customize"]',
-    ],
+    // Pin to Add widget only — the customize wrapper is a larger rect and caused
+    // the spotlight to oscillate when Add widget briefly failed the visibility check.
+    selector: '[data-onboarding="dashboard-add-widget"]',
     title: "Add and arrange widgets",
     description:
       "Use Add widget to open the gallery. Drag widgets onto the grid, then resize with the corner handle or size chips. Click Done when you're finished.",

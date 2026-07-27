@@ -2,7 +2,7 @@ import type { DashboardLayout, DashboardPageData } from "@/lib/dashboard/layout-
 
 export const MAX_MOBILE_LAST_RUNS = 4;
 
-/** Prefer agents pinned via agent_last_run widgets; otherwise enabled agents. */
+/** Prefer agents pinned via agent_last_run_generated widgets; otherwise enabled agents. */
 export function resolveMobileLastRunAgents(
   layout: DashboardLayout,
   agents: DashboardPageData["agents"],
@@ -12,7 +12,7 @@ export function resolveMobileLastRunAgents(
 
   const ordered = [...layout.widgets].sort((a, b) => a.y - b.y || a.x - b.x);
   for (const widget of ordered) {
-    if (widget.type !== "agent_last_run") continue;
+    if (widget.type !== "agent_last_run_generated") continue;
     const agentId = (widget.config as { agentId?: string } | undefined)?.agentId;
     if (!agentId || fromLayout.includes(agentId) || !agentById.has(agentId)) continue;
     fromLayout.push(agentId);

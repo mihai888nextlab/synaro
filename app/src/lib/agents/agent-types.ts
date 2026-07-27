@@ -68,6 +68,7 @@ export type Agent = {
   model?: string | null;
   mcpServers?: McpServer[] | null;
   createdAt: string;
+  updatedAt?: string;
 };
 
 export type AgentFormValues = {

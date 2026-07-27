@@ -611,12 +611,17 @@ export async function executeTask(
       // can't be applied cleanly do we fall back to a full-file rewrite (correct but slower).
       await progress('Making the change...')
       aiSteps += 1
+      let editFallbackReason: string | null = null
       const edit = await runEditPass({
         envId: env.id,
         prompt: task.prompt,
         paths: triage.files,
         memory,
         onStream: streamOut,
+        onFallback: (reason) => {
+          editFallbackReason = reason
+          console.warn(`[orchestrator] task ${taskId}: diff → full rewrite — ${reason}`)
+        },
       })
       if (edit) {
         totalInputTokens += edit.inputTokens
@@ -624,7 +629,9 @@ export async function executeTask(
         generated = edit.changes
       } else {
         aiSteps += 1
-        await progress('Refining the change...')
+        await progress(
+          editFallbackReason ? `Refining the change (${editFallbackReason})...` : 'Refining the change...',
+        )
         const single = await runWorker(
           env.id,
           { role: 'builder', goal: task.prompt, ownedFiles: [], filesToRead: triage.files },

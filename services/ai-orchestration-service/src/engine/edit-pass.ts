@@ -142,10 +142,20 @@ export async function runEditPass(args: {
   memory: string | null
   /** Live token stream (accumulated) — surfaced in the UI so the user sees the edit being produced. */
   onStream?: (accumulated: string) => void
+  /** Called when the fast diff path gives up (→ full rewrite), with the concrete reason. */
+  onFallback?: (reason: string) => void
 }): Promise<{ changes: FileChange[]; inputTokens: number; outputTokens: number } | null> {
+  // Log every reason the diff path bails to a full rewrite, so "Refining the change..." is explainable
+  // (unmatched snippet vs. no diff produced vs. bad JSON) without eyeballing the token stream.
+  const fallback = (reason: string): null => {
+    console.warn(`[edit-pass] falling back to full rewrite — ${reason}`)
+    args.onFallback?.(reason)
+    return null
+  }
+
   const concrete = args.paths.filter((p) => !p.includes('*') && /\.[a-z0-9]+$/i.test(p))
   const files = await readWorkspaceFilesParallel(args.envId, concrete)
-  if (files.length === 0) return null
+  if (files.length === 0) return fallback('no readable files matched the triaged paths')
 
   const byPath = new Map(files.map((f) => [f.path, f.content]))
   const filesSection = files.map((f) => `### ${f.path}\n\`\`\`\n${f.content}\n\`\`\``).join('\n\n')
@@ -174,14 +184,14 @@ export async function runEditPass(args: {
     inputTokens += r.inputTokens
     outputTokens += r.outputTokens
     parsed = parseEditJson(r.content)
-  } catch {
-    return null
+  } catch (err) {
+    return fallback(`the edit model call failed (${err instanceof Error ? err.message : String(err)})`)
   }
-  if (!parsed) return null
+  if (!parsed) return fallback('the model output was not valid JSON')
 
   const edits = extractEdits(parsed)
   let newFiles = extractNewFiles(parsed)
-  if (edits.length === 0 && newFiles.length === 0) return null
+  if (edits.length === 0 && newFiles.length === 0) return fallback('the model produced no diff (no edits or new files)')
 
   let { updated, unmatched } = attemptApply(edits, byPath)
 
@@ -226,27 +236,34 @@ export async function runEditPass(args: {
       inputTokens += r2.inputTokens
       outputTokens += r2.outputTokens
       const parsed2 = parseEditJson(r2.content)
-      if (!parsed2) return null
+      if (!parsed2) return fallback('the correction output was not valid JSON')
       const corrected = extractEdits(parsed2)
-      if (corrected.length === 0) return null
+      if (corrected.length === 0) return fallback('the correction returned no edits')
       // Re-apply the full set (matched round-1 edits + corrected ones) in order, from the original
       // files, so nothing that already applied is lost and same-file sequencing stays correct.
       ;({ updated, unmatched } = attemptApply([...matchedEdits, ...corrected], byPath))
       // The correction may also introduce new files — prefer them if present.
       const newFiles2 = extractNewFiles(parsed2)
       if (newFiles2.length > 0) newFiles = newFiles2
-    } catch {
-      return null
+    } catch (err) {
+      return fallback(`the correction model call failed (${err instanceof Error ? err.message : String(err)})`)
     }
 
-    if (unmatched.length > 0) return null // still can't match cleanly — fall back to a full rewrite
+    if (unmatched.length > 0) {
+      // Still can't match cleanly after one correction — fall back to a full rewrite.
+      return fallback(
+        `${unmatched.length} snippet(s) still didn't match after correction: ${unmatched
+          .map((e) => e.path)
+          .join(', ')}`,
+      )
+    }
   }
 
   const changes: FileChange[] = [
     ...Array.from(updated.entries()).map(([path, content]) => ({ path, content })),
     ...newFiles,
   ]
-  if (changes.length === 0) return null
+  if (changes.length === 0) return fallback('no changes remained after applying the edit')
 
   return { changes, inputTokens, outputTokens }
 }

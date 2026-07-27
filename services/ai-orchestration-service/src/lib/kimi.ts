@@ -23,40 +23,61 @@ export type StreamChatResult = {
  * → shown in the chat UI). Returns the full content and token usage. Errors propagate to the caller,
  * which decides how to recover (e.g. edit-pass falls back to a full rewrite).
  */
+/** If no token arrives for this long the stream is considered stalled and is aborted. */
+const STREAM_IDLE_TIMEOUT_MS = 60_000
+
 export async function streamChat(
   params: { model: string; max_tokens?: number; messages: OpenAI.Chat.ChatCompletionMessageParam[] },
   requestOpts: { timeout?: number; maxRetries?: number } | undefined,
   onText: (accumulated: string) => void,
 ): Promise<StreamChatResult> {
-  const stream = await kimi.chat.completions.create(
-    {
-      model: params.model,
-      max_tokens: params.max_tokens,
-      messages: params.messages,
-      stream: true,
-      stream_options: { include_usage: true },
-    },
-    requestOpts,
-  )
+  // The SDK `timeout` only bounds the initial connection, NOT gaps BETWEEN streamed chunks — a stall
+  // mid-stream would otherwise hang forever. This watchdog aborts if no chunk arrives for a while.
+  const controller = new AbortController()
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
+  const armIdle = () => {
+    if (idleTimer) clearTimeout(idleTimer)
+    idleTimer = setTimeout(
+      () => controller.abort(new Error(`stream stalled: no data for ${STREAM_IDLE_TIMEOUT_MS / 1000}s`)),
+      STREAM_IDLE_TIMEOUT_MS,
+    )
+  }
 
   let content = ''
   let finishReason: string | null = null
   let inputTokens = 0
   let outputTokens = 0
 
-  for await (const chunk of stream) {
-    const choice = chunk.choices[0]
-    const delta = choice?.delta?.content
-    if (typeof delta === 'string' && delta.length > 0) {
-      content += delta
-      onText(content)
+  try {
+    armIdle()
+    const stream = await kimi.chat.completions.create(
+      {
+        model: params.model,
+        max_tokens: params.max_tokens,
+        messages: params.messages,
+        stream: true,
+        stream_options: { include_usage: true },
+      },
+      { ...requestOpts, signal: controller.signal },
+    )
+
+    for await (const chunk of stream) {
+      armIdle() // a chunk arrived — reset the stall watchdog
+      const choice = chunk.choices[0]
+      const delta = choice?.delta?.content
+      if (typeof delta === 'string' && delta.length > 0) {
+        content += delta
+        onText(content)
+      }
+      if (choice?.finish_reason) finishReason = choice.finish_reason
+      // Usage arrives on the final chunk when stream_options.include_usage is set.
+      if (chunk.usage) {
+        inputTokens = chunk.usage.prompt_tokens ?? inputTokens
+        outputTokens = chunk.usage.completion_tokens ?? outputTokens
+      }
     }
-    if (choice?.finish_reason) finishReason = choice.finish_reason
-    // Usage arrives on the final chunk when stream_options.include_usage is set.
-    if (chunk.usage) {
-      inputTokens = chunk.usage.prompt_tokens ?? inputTokens
-      outputTokens = chunk.usage.completion_tokens ?? outputTokens
-    }
+  } finally {
+    if (idleTimer) clearTimeout(idleTimer)
   }
 
   return { content, inputTokens, outputTokens, finishReason }

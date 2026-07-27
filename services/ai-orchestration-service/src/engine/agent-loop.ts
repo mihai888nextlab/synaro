@@ -13,6 +13,7 @@ Rules:
 - Do NOT ask the user questions — the framework, language, and styling are already fixed (see context). Proceed with sensible defaults.
 - For Next.js: never set distDir in next.config.*; never use output: 'export' or 'standalone'; keep a "next dev" script; the app must bind to process.env.PORT (default 3000).
 - When your files are UI (markup, components, styles), hold them to the design bar below.
+- GO FAST: batch independent tool calls into ONE step (e.g. read several files, or read + list, at once) instead of one per step — each step is a slow round-trip. Don't re-read files already shown to you.
 - VERIFY before finishing: after any change that could break the app (editing code, not just copy/text), run a fast check with run_command — \`npx tsc --noEmit\` for a TypeScript project, otherwise \`npm run build\` — read the output, fix any errors, and re-check until it passes. Skip verification only for trivial content/copy edits.
 - Be efficient — you have a limited number of steps. When the change is complete AND verified, call finish with a one-sentence summary. Do not call finish before the change is done.
 
@@ -71,6 +72,8 @@ export async function runAgentLoop(args: {
   memory: string | null
   /** The workspace is empty/near-empty → scaffold a whole app, with a larger step budget. */
   newProject?: boolean
+  /** Existing file paths, seeded into the opening message so the agent skips an initial list_files. */
+  repoFiles?: string[]
   /** Progress line per tool call (e.g. "Editing src/App.tsx"). */
   onActivity?: (msg: string) => void | Promise<void>
   /** Live assistant text (per step) → Task.streamContent. */
@@ -86,9 +89,17 @@ export async function runAgentLoop(args: {
       'verify it runs before finishing.'
     : ''
   const maxSteps = args.newProject ? ORCHESTRATION.AGENT_MAX_STEPS * 2 : ORCHESTRATION.AGENT_MAX_STEPS
+  // Seed the file list so the agent goes straight to read_file/edit_file instead of spending a
+  // round-trip on list_files. Capped so a huge repo doesn't blow the prompt.
+  const fileListNote =
+    !args.newProject && args.repoFiles && args.repoFiles.length > 0
+      ? `\n\nProject files (open any with read_file — no need to list_files first):\n${args.repoFiles
+          .slice(0, 300)
+          .join('\n')}${args.repoFiles.length > 300 ? '\n… (more — use list_files for the rest)' : ''}`
+      : ''
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: 'system', content: `${AGENT_SYSTEM}${args.memory ? `\n\n${args.memory}` : ''}` },
-    { role: 'user', content: `${args.prompt}${scaffoldNote}` },
+    { role: 'user', content: `${args.prompt}${scaffoldNote}${fileListNote}` },
   ]
 
   const prior = new Map<string, string | null>()
@@ -96,9 +107,13 @@ export async function runAgentLoop(args: {
   let inputTokens = 0
   let outputTokens = 0
   let summary = 'Completed the requested change.'
-  // Self-verify backstop: block the first `finish` if code was edited but never checked.
+  // Self-verify backstop: block the first `finish` if a SUBSTANTIAL code change was never checked.
+  // A single small edit to one existing file skips the forced check (prompt still nudges) — the
+  // mandatory build is the biggest latency cost, so we only pay it when the risk warrants it.
   let codeEditedSinceVerify = false
   let verifyNudged = false
+  const codeFilesTouched = new Set<string>()
+  let createdCodeFile = false
   const deadline = Date.now() + ORCHESTRATION.MAX_TASK_MS
 
   let step = 0
@@ -157,9 +172,10 @@ export async function runAgentLoop(args: {
     for (const tc of resp.toolCalls) {
       await args.onActivity?.(toolActivityLabel(tc.name, tc.arguments))
 
-      // Backstop: refuse the FIRST finish if code was edited but never verified — bounce it back once
-      // to run a check. Prompt-driven verification handles the rest; this just stops silent breakage.
-      if (tc.name === 'finish' && codeEditedSinceVerify && !verifyNudged) {
+      // Backstop: refuse the FIRST finish only when a SUBSTANTIAL code change (new file, multiple
+      // files, or a greenfield build) was never verified. Single small edits rely on the prompt nudge.
+      const substantial = Boolean(args.newProject) || createdCodeFile || codeFilesTouched.size >= 2
+      if (tc.name === 'finish' && codeEditedSinceVerify && substantial && !verifyNudged) {
         verifyNudged = true
         messages.push({
           role: 'tool',
@@ -175,7 +191,11 @@ export async function runAgentLoop(args: {
       if (out.touched) {
         touched.add(out.touched)
         if (!prior.has(out.touched)) prior.set(out.touched, out.prior ?? null)
-        if (CODE_FILE_RE.test(out.touched)) codeEditedSinceVerify = true
+        if (CODE_FILE_RE.test(out.touched)) {
+          codeEditedSinceVerify = true
+          codeFilesTouched.add(out.touched)
+          if (tc.name === 'write_file' && out.prior === null) createdCodeFile = true // brand-new code file
+        }
       }
       if (tc.name === 'run_command' && VERIFY_CMD_RE.test(commandArg(tc.arguments))) {
         codeEditedSinceVerify = false // they ran a verification-like command

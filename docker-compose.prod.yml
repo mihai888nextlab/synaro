@@ -313,6 +313,9 @@ services:
       AI_SERVICE_URL: http://ai-orchestration-service:3003
       AGENT_SERVICE_URL: http://agent-service:3005
       AGENT_SERVICE_KEY: ${AGENT_SERVICE_KEY}
+      # Comma-separated emails allowed into /admin/demo (the demo-account dashboard).
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      DEMO_EMAIL_DOMAIN: ${DEMO_EMAIL_DOMAIN:-synaro.demo}
       NEXT_PUBLIC_PROJECT_SERVICE_URL: http://project-service:3001
       NEXT_PUBLIC_AI_SERVICE_URL: http://ai-orchestration-service:3003
       NEXT_PUBLIC_AGENT_SERVICE_URL: http://agent-service:3005

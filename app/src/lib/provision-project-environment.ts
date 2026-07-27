@@ -94,3 +94,24 @@ export async function uploadWorkspaceTarToEnvironment(environmentId: string, tar
     throw new Error(msg || `Workspace upload failed (${res.status})`);
   }
 }
+
+/**
+ * Download a gzip-tar of an environment's workspace (used to copy files into a demo account's own
+ * container). The environment must be RUNNING. Docker's putArchive accepts the gzip tar as-is, so the
+ * result can be handed straight to uploadWorkspaceTarToEnvironment.
+ */
+export async function downloadWorkspaceTarFromEnvironment(environmentId: string): Promise<Buffer> {
+  const base = environmentServiceBaseUrl();
+  let res: Response;
+  try {
+    res = await fetch(`${base}/api/environments/${encodeURIComponent(environmentId)}/workspace-download`);
+  } catch (err) {
+    throw new Error(formatEnvironmentProvisionFailure(err));
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `Workspace download failed (${res.status})`);
+  }
+  const arrayBuffer = await res.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}

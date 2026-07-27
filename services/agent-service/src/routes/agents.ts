@@ -325,6 +325,78 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     return reply.status(201).send(agent)
   })
 
+  // Clone a user's agents (+ memory + run history) to another user, for demo-account seeding.
+  // Copies project-scoped agents for `fromProjectId` (remapped to `toProjectId`) plus global agents.
+  app.post('/agents/clone', async (req, reply) => {
+    if (!requireServiceKey(req, reply)) return
+    const { fromUserId, toUserId, fromProjectId, toProjectId } = req.body as {
+      fromUserId?: string
+      toUserId?: string
+      fromProjectId?: string
+      toProjectId?: string
+    }
+    if (!fromUserId || !toUserId) {
+      return reply.status(400).send({ error: 'fromUserId and toUserId are required' })
+    }
+
+    const agents = await prisma.agent.findMany({
+      where: {
+        userId: fromUserId,
+        ...(fromProjectId ? { OR: [{ projectId: fromProjectId }, { projectId: null }] } : {}),
+      },
+      include: { memories: true, runs: true },
+    })
+
+    let clonedAgents = 0
+    let clonedRuns = 0
+    for (const a of agents) {
+      const newAgent = await prisma.agent.create({
+        data: {
+          userId: toUserId,
+          // Remap the cloned project's agents to the new project; any other project link becomes global.
+          projectId: a.projectId === fromProjectId ? toProjectId ?? null : null,
+          name: a.name,
+          description: a.description,
+          systemPrompt: a.systemPrompt,
+          tools: a.tools,
+          toolMode: a.toolMode,
+          maxSteps: a.maxSteps,
+          schedule: a.schedule,
+          enabled: a.enabled,
+          emailOnComplete: a.emailOnComplete,
+          model: a.model,
+          ...(a.mcpServers !== null ? { mcpServers: a.mcpServers as object } : {}),
+        },
+      })
+      clonedAgents += 1
+      for (const m of a.memories) {
+        await prisma.agentMemory.create({
+          data: { agentId: newAgent.id, key: m.key, content: m.content, createdAt: m.createdAt },
+        })
+      }
+      for (const r of a.runs) {
+        await prisma.agentRun.create({
+          data: {
+            agentId: newAgent.id,
+            userId: toUserId,
+            status: r.status,
+            trigger: r.trigger,
+            input: r.input,
+            output: r.output,
+            startedAt: r.startedAt,
+            finishedAt: r.finishedAt,
+            createdAt: r.createdAt,
+            ...(r.artifacts !== null ? { artifacts: r.artifacts as object } : {}),
+            ...(r.steps !== null ? { steps: r.steps as object } : {}),
+            ...(r.credentialRequest !== null ? { credentialRequest: r.credentialRequest as object } : {}),
+          },
+        })
+        clonedRuns += 1
+      }
+    }
+    return reply.send({ clonedAgents, clonedRuns })
+  })
+
   // Get single agent
   app.get('/agents/:id', async (req, reply) => {
     if (!requireServiceKey(req, reply)) return

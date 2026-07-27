@@ -15,6 +15,7 @@ import {
   renameWorkspacePath,
   reconcileDeadContainersForProject,
   uploadWorkspaceTar,
+  cloneWorkspaceVolume,
   exportWorkspaceTarGzip,
   execTerminalCommand,
   gitCommitAndPushWorkspace,
@@ -267,6 +268,22 @@ export const environmentRoutes: FastifyPluginAsync = async (app) => {
     const environment = await prisma.environment.findUnique({ where: { id } })
     if (!environment) return reply.status(404).send({ error: 'Environment not found' })
     return reply.send(withPublicUrl(environment))
+  })
+
+  // POST /api/environments/clone-workspace — copy one project's workspace volume into another's.
+  // Static path, so Fastify resolves it before the /:id routes.
+  app.post('/clone-workspace', async (req, reply) => {
+    const { fromProjectId, toProjectId } = req.body as { fromProjectId?: string; toProjectId?: string }
+    if (!fromProjectId || !toProjectId) {
+      return reply.status(400).send({ error: 'fromProjectId and toProjectId are required' })
+    }
+    try {
+      await cloneWorkspaceVolume(fromProjectId, toProjectId)
+      return reply.status(204).send()
+    } catch (err) {
+      app.log.error(err)
+      return reply.status(500).send({ error: 'Failed to clone workspace', detail: String(err) })
+    }
   })
 
   // POST /api/environments — create and start a new environment

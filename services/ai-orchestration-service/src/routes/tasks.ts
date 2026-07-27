@@ -81,6 +81,38 @@ Rules:
     }
   })
 
+  // POST /api/tasks/clone — copy all Task rows from one project to another (demo account seeding).
+  // Defined before /:id so Fastify resolves the literal path first.
+  app.post('/clone', async (req, reply) => {
+    const { fromProjectId, toProjectId } = req.body as { fromProjectId?: string; toProjectId?: string }
+    if (!fromProjectId || !toProjectId) {
+      return reply.status(400).send({ error: 'fromProjectId and toProjectId are required' })
+    }
+    const tasks = await prisma.task.findMany({
+      where: { projectId: fromProjectId },
+      orderBy: { createdAt: 'asc' },
+    })
+    let cloned = 0
+    for (const t of tasks) {
+      await prisma.task.create({
+        data: {
+          projectId: toProjectId,
+          prompt: t.prompt,
+          status: t.status,
+          progress: t.progress,
+          streamContent: t.streamContent,
+          errorMessage: t.errorMessage,
+          inputTokens: t.inputTokens,
+          outputTokens: t.outputTokens,
+          createdAt: t.createdAt,
+          ...(t.result !== null ? { result: t.result as object } : {}),
+        },
+      })
+      cloned += 1
+    }
+    return reply.send({ cloned })
+  })
+
   // GET /api/tasks?projectId=xxx
   app.get('/', async (req, reply) => {
     const { projectId } = req.query as { projectId?: string }

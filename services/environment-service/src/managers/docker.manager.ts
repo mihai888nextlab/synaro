@@ -378,6 +378,35 @@ export async function createEnvironment(
 }
 
 /**
+ * Copy one project's workspace volume into another's (for seeding demo accounts with the same files).
+ * Operates on the named volumes directly via a short-lived helper container, so neither project's
+ * container needs to be running. The destination volume is created on demand and fully replaced.
+ */
+export async function cloneWorkspaceVolume(fromProjectId: string, toProjectId: string): Promise<void> {
+  const src = workspaceVolumeName(fromProjectId)
+  const dst = workspaceVolumeName(toProjectId)
+  await new Promise<void>((resolve, reject) => {
+    docker.pull('node:20-alpine', (err: Error, stream: NodeJS.ReadableStream) => {
+      if (err) return reject(err)
+      docker.modem.followProgress(stream, (e: unknown) => (e ? reject(e) : resolve()))
+    })
+  })
+  const container = await docker.createContainer({
+    Image: 'node:20-alpine',
+    Cmd: ['sh', '-c', 'rm -rf /dst/* /dst/.[!.]* 2>/dev/null || true; cp -a /src/. /dst/ 2>/dev/null || true'],
+    HostConfig: { Binds: [`${src}:/src:ro`, `${dst}:/dst`] },
+    Tty: true,
+  })
+  await container.start()
+  await container.wait()
+  try {
+    await container.remove({ force: true })
+  } catch {
+    // best effort
+  }
+}
+
+/**
  * Extract a tar archive into the project workspace directory inside the container.
  */
 export async function uploadWorkspaceTar(environmentId: string, tar: Buffer): Promise<void> {

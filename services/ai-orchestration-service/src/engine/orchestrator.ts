@@ -608,6 +608,7 @@ export async function executeTask(
         prompt: task.prompt,
         memory,
         newProject,
+        repoFiles: allPaths,
         onActivity: progress,
         onStream: streamOut,
         assertNotCancelled: () => assertNotCancelled(taskId),

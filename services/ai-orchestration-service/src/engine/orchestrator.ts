@@ -21,6 +21,7 @@ import { loadRecentTaskContext } from '../lib/memory.js'
 import { triageTask } from './triage.js'
 import { planFiles } from './file-planner.js'
 import { generateFilesInParallel } from './file-generator.js'
+import { runEditPass } from './edit-pass.js'
 import { runWorker, runFixPass } from './worker.js'
 import { runHealthCheck } from './health-check.js'
 import { mergeChanges } from './parse-changes.js'
@@ -576,18 +577,32 @@ export async function executeTask(
     let filesFailed: string[] = []
 
     if (isSimple) {
-      // Fast path: one targeted edit pass over the likely files — no manifest, no per-file fan-out.
+      // Fast path. First try a targeted search/replace edit (tiny output → quick); only if that
+      // can't be applied cleanly do we fall back to a full-file rewrite (correct but slower).
       await progress('Making the change...')
       aiSteps += 1
-      const single = await runWorker(
-        env.id,
-        { role: 'builder', goal: task.prompt, ownedFiles: [], filesToRead: triage.files },
-        task.prompt,
+      const edit = await runEditPass({
+        envId: env.id,
+        prompt: task.prompt,
+        paths: triage.files,
         memory,
-      )
-      totalInputTokens += single.inputTokens
-      totalOutputTokens += single.outputTokens
-      generated = single.changes
+      })
+      if (edit) {
+        totalInputTokens += edit.inputTokens
+        totalOutputTokens += edit.outputTokens
+        generated = edit.changes
+      } else {
+        aiSteps += 1
+        const single = await runWorker(
+          env.id,
+          { role: 'builder', goal: task.prompt, ownedFiles: [], filesToRead: triage.files },
+          task.prompt,
+          memory,
+        )
+        totalInputTokens += single.inputTokens
+        totalOutputTokens += single.outputTokens
+        generated = single.changes
+      }
       summary = 'Implement the requested change.'
     } else {
       // Robust path: plan a file manifest, then generate each file on its own — small, validated,

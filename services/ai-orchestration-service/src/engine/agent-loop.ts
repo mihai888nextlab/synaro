@@ -78,10 +78,12 @@ export async function runAgentLoop(args: {
   assertNotCancelled?: () => Promise<void>
 }): Promise<AgentLoopResult> {
   const scaffoldNote = args.newProject
-    ? '\n\nThe workspace is EMPTY — scaffold a COMPLETE, runnable project from scratch for this request: ' +
-      'create package.json (with a working dev/start script), the entry/config files, and the source. ' +
-      'If the request does not name a stack, default to Next.js (Pages Router) + TypeScript + Tailwind. ' +
-      'Install dependencies and verify it starts before finishing.'
+    ? '\n\nThe workspace is EMPTY — scaffold a COMPLETE, runnable project from scratch that MATCHES THE REQUEST. ' +
+      'Use the language and kind the request implies: a Python script → a .py file (plus requirements.txt only if needed); ' +
+      'a CLI/tool/script → the minimal single-language setup for it; a WEB APP or UI with no stack named → Next.js ' +
+      '(Pages Router) + TypeScript + Tailwind. Do NOT create a package.json or a web/Next.js scaffold for a non-web ' +
+      'request. Include whatever file makes it runnable, install dependencies only if the project needs them, and ' +
+      'verify it runs before finishing.'
     : ''
   const maxSteps = args.newProject ? ORCHESTRATION.AGENT_MAX_STEPS * 2 : ORCHESTRATION.AGENT_MAX_STEPS
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [

@@ -131,7 +131,9 @@ export async function executeAgentTool(envId: string, name: string, rawArgs: str
   try {
     switch (name) {
       case 'list_files': {
-        const dir = typeof args.dir === 'string' ? args.dir.replace(/^\/+/, '') : ''
+        // Normalize to a clean relative prefix; ".", "./", "/" and "" all mean the project root.
+        let dir = typeof args.dir === 'string' ? args.dir.trim().replace(/^\.?\/+/, '').replace(/\/+$/, '') : ''
+        if (dir === '.') dir = ''
         const all = await listContainerFiles(envId)
         const filtered = dir ? all.filter((p) => p === dir || p.startsWith(`${dir}/`)) : all
         const shown = filtered.slice(0, MAX_LIST)
@@ -200,8 +202,10 @@ export async function executeAgentTool(envId: string, name: string, rawArgs: str
 export function toolActivityLabel(name: string, rawArgs: string): string {
   const args = parseArgs(rawArgs) ?? {}
   switch (name) {
-    case 'list_files':
-      return args.dir ? `Listing ${String(args.dir)}` : 'Listing files'
+    case 'list_files': {
+      const d = typeof args.dir === 'string' ? args.dir.trim().replace(/^\.?\/+/, '').replace(/\/+$/, '') : ''
+      return d && d !== '.' ? `Listing ${d}` : 'Listing files'
+    }
     case 'read_file':
       return `Reading ${String(args.path ?? '')}`
     case 'edit_file':

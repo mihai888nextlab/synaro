@@ -10,6 +10,58 @@ export const kimi = new OpenAI({
   maxRetries: 1,
 })
 
+export type StreamChatResult = {
+  content: string
+  inputTokens: number
+  outputTokens: number
+  finishReason: string | null
+}
+
+/**
+ * Streaming chat completion. Invokes `onText` with the ACCUMULATED content as tokens arrive, so
+ * callers can surface a live view of exactly what the model is producing (piped into Task.streamContent
+ * → shown in the chat UI). Returns the full content and token usage. Errors propagate to the caller,
+ * which decides how to recover (e.g. edit-pass falls back to a full rewrite).
+ */
+export async function streamChat(
+  params: { model: string; max_tokens?: number; messages: OpenAI.Chat.ChatCompletionMessageParam[] },
+  requestOpts: { timeout?: number; maxRetries?: number } | undefined,
+  onText: (accumulated: string) => void,
+): Promise<StreamChatResult> {
+  const stream = await kimi.chat.completions.create(
+    {
+      model: params.model,
+      max_tokens: params.max_tokens,
+      messages: params.messages,
+      stream: true,
+      stream_options: { include_usage: true },
+    },
+    requestOpts,
+  )
+
+  let content = ''
+  let finishReason: string | null = null
+  let inputTokens = 0
+  let outputTokens = 0
+
+  for await (const chunk of stream) {
+    const choice = chunk.choices[0]
+    const delta = choice?.delta?.content
+    if (typeof delta === 'string' && delta.length > 0) {
+      content += delta
+      onText(content)
+    }
+    if (choice?.finish_reason) finishReason = choice.finish_reason
+    // Usage arrives on the final chunk when stream_options.include_usage is set.
+    if (chunk.usage) {
+      inputTokens = chunk.usage.prompt_tokens ?? inputTokens
+      outputTokens = chunk.usage.completion_tokens ?? outputTokens
+    }
+  }
+
+  return { content, inputTokens, outputTokens, finishReason }
+}
+
 export const MODELS = {
   // Fast model for file analysis (repo scanning, relevance filtering)
   ANALYZE: 'moonshot-v1-8k',

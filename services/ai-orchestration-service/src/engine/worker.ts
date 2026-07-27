@@ -1,4 +1,4 @@
-import { kimi, MODELS, ORCHESTRATION } from '../lib/kimi.js'
+import { streamChat, MODELS, ORCHESTRATION } from '../lib/kimi.js'
 import { readWorkspaceFilesParallel } from '../lib/read-workspace-files.js'
 import { parseChangesResponse } from './parse-changes.js'
 import { isOwned } from './ownership.js'
@@ -32,6 +32,8 @@ async function generateScopedChanges(args: {
   userPrompt: string
   readPaths: string[]
   ownedFiles: string[]
+  /** Live token stream (accumulated across continuations) for the UI. */
+  onStream?: (accumulated: string) => void
 }): Promise<WorkerOutput> {
   const files = await readWorkspaceFilesParallel(args.envId, concretePaths(args.readPaths))
   const filesSection =
@@ -53,17 +55,20 @@ async function generateScopedChanges(args: {
   let finishReason: string | null | undefined
 
   for (let attempt = 0; attempt <= ORCHESTRATION.MAX_CONTINUATIONS; attempt++) {
-    const response = await kimi.chat.completions.create({
-      model: MODELS.GENERATE,
-      max_tokens: ORCHESTRATION.WORKER_MAX_OUTPUT,
-      messages,
-    })
+    // Report the running total (already-accumulated pieces + the current stream) so the UI shows a
+    // single continuous output even across continuation requests.
+    const prior = accumulated
+    const response = await streamChat(
+      { model: MODELS.GENERATE, max_tokens: ORCHESTRATION.WORKER_MAX_OUTPUT, messages },
+      undefined,
+      (acc) => args.onStream?.(prior + acc),
+    )
 
-    const piece = response.choices[0]?.message?.content ?? ''
-    finishReason = response.choices[0]?.finish_reason
+    const piece = response.content
+    finishReason = response.finishReason
     accumulated += piece
-    inputTokens += response.usage?.prompt_tokens ?? 0
-    outputTokens += response.usage?.completion_tokens ?? 0
+    inputTokens += response.inputTokens
+    outputTokens += response.outputTokens
 
     if (finishReason !== 'length') break
 
@@ -120,6 +125,7 @@ export async function runWorker(
   worker: WorkerSpec,
   prompt: string,
   memory: string | null,
+  onStream?: (accumulated: string) => void,
 ): Promise<WorkerOutput> {
   const ownership =
     worker.ownedFiles.length > 0
@@ -143,6 +149,7 @@ export async function runWorker(
     userPrompt,
     readPaths: [...worker.filesToRead, ...worker.ownedFiles],
     ownedFiles: worker.ownedFiles,
+    onStream,
   })
 }
 

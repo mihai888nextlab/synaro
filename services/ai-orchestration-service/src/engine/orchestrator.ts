@@ -110,6 +110,26 @@ async function updateProgress(id: string, progress: string) {
   return prisma.task.update({ where: { id }, data: { progress } })
 }
 
+/**
+ * A throttled writer that pipes the model's live output into Task.streamContent so the chat UI can
+ * show exactly what the AI is producing in real time. Writes are rate-limited (the model emits tokens
+ * far faster than we want DB round-trips) and the payload is capped to the tail — enough to see it
+ * working without bloating the row.
+ */
+function makeStreamWriter(taskId: string): (accumulated: string) => void {
+  let lastWrite = 0
+  const MIN_INTERVAL_MS = 400
+  const TAIL_CHARS = 6_000
+  return (accumulated: string) => {
+    const now = Date.now()
+    if (now - lastWrite < MIN_INTERVAL_MS) return
+    lastWrite = now
+    void prisma.task
+      .update({ where: { id: taskId }, data: { streamContent: accumulated.slice(-TAIL_CHARS) } })
+      .catch(() => {})
+  }
+}
+
 // Step 1 — cheap call to identify which files are relevant
 async function analyzeRelevantFiles(
   prompt: string,
@@ -583,6 +603,9 @@ export async function executeTask(
     let generated: FileChange[]
     let filesFailed: string[] = []
 
+    // Live "what the AI is producing" stream → Task.streamContent → chat UI.
+    const streamOut = makeStreamWriter(taskId)
+
     if (isSimple) {
       // Fast path. First try a targeted search/replace edit (tiny output → quick); only if that
       // can't be applied cleanly do we fall back to a full-file rewrite (correct but slower).
@@ -593,6 +616,7 @@ export async function executeTask(
         prompt: task.prompt,
         paths: triage.files,
         memory,
+        onStream: streamOut,
       })
       if (edit) {
         totalInputTokens += edit.inputTokens
@@ -600,11 +624,13 @@ export async function executeTask(
         generated = edit.changes
       } else {
         aiSteps += 1
+        await progress('Refining the change...')
         const single = await runWorker(
           env.id,
           { role: 'builder', goal: task.prompt, ownedFiles: [], filesToRead: triage.files },
           task.prompt,
           memory,
+          streamOut,
         )
         totalInputTokens += single.inputTokens
         totalOutputTokens += single.outputTokens
@@ -631,6 +657,7 @@ export async function executeTask(
           { role: 'builder', goal: task.prompt, ownedFiles: [], filesToRead: triage.files },
           task.prompt,
           memory,
+          streamOut,
         )
         totalInputTokens += single.inputTokens
         totalOutputTokens += single.outputTokens

@@ -226,7 +226,7 @@ export const roAppExt: Messages = {
     scheduleEnabledHint: "Declanșează automat acest agent după un program recurent. Orele folosesc {timezone}.",
     emailOnComplete: "Trimite-mi email când un run se termină",
     emailOnCompleteHint:
-      "Trimite rezultatul complet pe emailul contului tău când un run reușește sau eșuează.",
+      "Trimite vizualele run-ului (grafice, KPI-uri, tabele) și un scurt rezumat pe emailul contului când un run reușește sau eșuează.",
     scheduleFrequencyDaily: "Zilnic",
     scheduleFrequencyWeekly: "Săptămânal",
     scheduleFrequencyMonthly: "Lunar",

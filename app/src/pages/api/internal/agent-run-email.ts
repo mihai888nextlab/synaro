@@ -11,6 +11,7 @@ const PayloadSchema = z.object({
   status: z.enum(["DONE", "FAILED"]),
   trigger: z.string(),
   output: z.string().nullable(),
+  artifacts: z.unknown().optional(),
   finishedAt: z.string().min(1),
 });
 

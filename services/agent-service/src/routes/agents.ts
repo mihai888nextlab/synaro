@@ -99,6 +99,7 @@ async function notifyRunCompleteEmail(
     status: 'DONE' | 'FAILED'
     trigger: string
     output: string | null
+    artifacts?: unknown
     finishedAt: string
   },
   log: { error: (obj: object, msg: string) => void },
@@ -722,6 +723,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
             status,
             trigger: existing.trigger,
             output: output ?? null,
+            artifacts: artifacts ?? existing.artifacts ?? null,
             finishedAt: finishedAt.toISOString(),
           },
           req.log,

@@ -7,6 +7,8 @@ export type SynaroEmailLayoutProps = {
   buttonLabel: string;
   buttonHref: string;
   footerNote?: string;
+  /** Wider content for rich run emails (artifacts). Default 480. */
+  contentMaxWidthPx?: number;
 };
 
 export function buildSynaroEmailHtml({
@@ -16,8 +18,10 @@ export function buildSynaroEmailHtml({
   buttonLabel,
   buttonHref,
   footerNote,
+  contentMaxWidthPx = 480,
 }: SynaroEmailLayoutProps): string {
   const safeHref = buttonHref.replace(/"/g, "&quot;");
+  const maxWidth = Math.min(Math.max(contentMaxWidthPx, 320), 720);
   const footer = footerNote
     ? `<p style="margin:28px 0 0;font-size:12px;line-height:1.6;color:#71717a;">${footerNote}</p>`
     : "";
@@ -34,7 +38,7 @@ export function buildSynaroEmailHtml({
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#0a0a0a;padding:40px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:480px;background-color:#111111;border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:32px 28px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:${maxWidth}px;background-color:#111111;border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:32px 28px;">
           <tr>
             <td style="font-size:18px;font-weight:600;letter-spacing:-0.02em;color:#ffffff;">Synaro</td>
           </tr>

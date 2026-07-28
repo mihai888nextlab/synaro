@@ -226,7 +226,7 @@ export const enAppExt: Messages = {
     scheduleEnabledHint: "Automatically trigger this agent on a recurring schedule. Times use {timezone}.",
     emailOnComplete: "Email me when a run finishes",
     emailOnCompleteHint:
-      "Sends the full result to your account email when a run succeeds or fails.",
+      "Sends run visuals (charts, KPIs, tables) and a short summary to your account email when a run succeeds or fails.",
     scheduleFrequencyDaily: "Daily",
     scheduleFrequencyWeekly: "Weekly",
     scheduleFrequencyMonthly: "Monthly",

@@ -161,10 +161,17 @@ export async function recordAgentActivityLog(input: {
   runId?: string | null;
 }): Promise<void> {
   await purgeActivityLogsFromPreviousDays();
+  // Agents live in a separate DB, so their projectId can reference a project that no longer exists in
+  // the app DB. ActivityLog.projectId is a real FK, so a dangling id would violate it (→ 500). Drop it.
+  let projectId = input.projectId?.trim() || null;
+  if (projectId) {
+    const exists = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+    if (!exists) projectId = null;
+  }
   await prisma.activityLog.create({
     data: {
       userId: input.userId,
-      projectId: input.projectId ?? null,
+      projectId,
       entityName: input.agentName.trim() || "Agent",
       agentId: input.agentId?.trim() || null,
       runId: input.runId?.trim() || null,

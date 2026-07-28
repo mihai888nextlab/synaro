@@ -89,7 +89,14 @@ export async function sendAgentRunCompleteEmail(
       : `${payload.agentName} run failed`;
   const greeting = user.name?.trim() ? `Hi ${user.name.trim()},` : "Hi,";
   const meta = `Agent: <strong style="color:#ffffff;">${escapeHtml(payload.agentName)}</strong><br />Status: ${escapeHtml(statusLabel)}<br />Trigger: ${escapeHtml(payload.trigger)}<br />Finished: ${escapeHtml(formatFinishedAt(payload.finishedAt))}`;
-  const artifactsBlock = renderArtifactsForEmail(payload.artifacts);
+  // Never let artifact rendering sink the whole email — send it without artifacts if this throws.
+  let artifactsBlock: { html: string; text: string };
+  try {
+    artifactsBlock = renderArtifactsForEmail(payload.artifacts);
+  } catch (err) {
+    console.error("[agents] artifact render failed — sending email without artifacts:", err);
+    artifactsBlock = { html: "", text: "" };
+  }
   const outputBlock = formatOutputForEmail(payload.output);
   const hasArtifacts = Boolean(artifactsBlock.html);
   const emptyNote =

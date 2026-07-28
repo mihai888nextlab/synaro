@@ -7,6 +7,31 @@ import { requireAdmin } from "@/lib/require-admin";
 
 const DEMO_DOMAIN = process.env.DEMO_EMAIL_DOMAIN?.trim() || "synaro.demo";
 
+type AgentSummary = { id: string; name: string; enabled: boolean };
+
+function agentServiceUrl(): string {
+  return process.env.AGENT_SERVICE_URL?.trim() || "http://localhost:3007";
+}
+
+/** List a user's agents from the agent service (best-effort — empty on any failure). */
+async function fetchAgentsForUser(userId: string): Promise<AgentSummary[]> {
+  try {
+    const res = await fetch(`${agentServiceUrl()}/api/agents?userId=${encodeURIComponent(userId)}`, {
+      headers: { "X-Service-Key": process.env.AGENT_SERVICE_KEY?.trim() ?? "" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return [];
+    const list = (await res.json()) as Array<{ id?: string; name?: string; enabled?: boolean }>;
+    return Array.isArray(list)
+      ? list
+          .filter((a): a is { id: string } & typeof a => typeof a.id === "string")
+          .map((a) => ({ id: a.id, name: a.name ?? "Agent", enabled: a.enabled ?? false }))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 function genPassword(): string {
   // Readable-ish 12-char password to hand to a jury member.
   return `Demo-${randomBytes(6).toString("base64url").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8)}`;
@@ -32,7 +57,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
       },
     });
-    return res.json({ accounts: users, demoDomain: DEMO_DOMAIN });
+    // Enrich each account with its agents, and include the admin's agents as the clone source.
+    const [accounts, sourceAgents] = await Promise.all([
+      Promise.all(users.map(async (u) => ({ ...u, agents: await fetchAgentsForUser(u.id) }))),
+      fetchAgentsForUser(adminId),
+    ]);
+    return res.json({ accounts, sourceAgents, demoDomain: DEMO_DOMAIN });
   }
 
   // POST — create a demo account. Returns the plaintext password ONCE.

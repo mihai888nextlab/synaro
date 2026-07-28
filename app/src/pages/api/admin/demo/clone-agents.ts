@@ -22,8 +22,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).end();
   }
 
-  const body = req.body as { targetUserId?: string };
+  const body = req.body as { targetUserId?: string; agentIds?: string[] };
   if (!body.targetUserId) return res.status(400).json({ error: "targetUserId is required" });
+  const agentIds = Array.isArray(body.agentIds) ? body.agentIds.filter((x) => typeof x === "string") : undefined;
 
   const target = await prisma.user.findUnique({
     where: { id: body.targetUserId },
@@ -41,7 +42,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         "Content-Type": "application/json",
         "X-Service-Key": process.env.AGENT_SERVICE_KEY?.trim() ?? "",
       },
-      body: JSON.stringify({ fromUserId: adminId, toUserId: body.targetUserId }),
+      body: JSON.stringify({
+        fromUserId: adminId,
+        toUserId: body.targetUserId,
+        ...(agentIds && agentIds.length > 0 ? { agentIds } : {}),
+      }),
       signal: AbortSignal.timeout(60_000),
     });
     if (!upstream.ok) {

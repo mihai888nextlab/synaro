@@ -330,11 +330,12 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
   // Copies project-scoped agents for `fromProjectId` (remapped to `toProjectId`) plus global agents.
   app.post('/agents/clone', async (req, reply) => {
     if (!requireServiceKey(req, reply)) return
-    const { fromUserId, toUserId, fromProjectId, toProjectId } = req.body as {
+    const { fromUserId, toUserId, fromProjectId, toProjectId, agentIds } = req.body as {
       fromUserId?: string
       toUserId?: string
       fromProjectId?: string
       toProjectId?: string
+      agentIds?: string[]
     }
     if (!fromUserId || !toUserId) {
       return reply.status(400).send({ error: 'fromUserId and toUserId are required' })
@@ -342,7 +343,8 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
 
     const agents = await prisma.agent.findMany({
       where: {
-        userId: fromUserId,
+        userId: fromUserId, // always scoped to the source user — never clone someone else's agents
+        ...(Array.isArray(agentIds) && agentIds.length > 0 ? { id: { in: agentIds } } : {}),
         ...(fromProjectId ? { OR: [{ projectId: fromProjectId }, { projectId: null }] } : {}),
       },
       include: { memories: true, runs: true },

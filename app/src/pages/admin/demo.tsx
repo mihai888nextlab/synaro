@@ -7,7 +7,8 @@ import { prisma } from "@/lib/prisma";
 import { isAdminEmail } from "@/lib/admin";
 
 type DemoProject = { id: string; name: string; slug: string; environmentStatus: string };
-type DemoAccount = { id: string; name: string; email: string; projects: DemoProject[] };
+type AgentSummary = { id: string; name: string; enabled: boolean };
+type DemoAccount = { id: string; name: string; email: string; projects: DemoProject[]; agents: AgentSummary[] };
 type SourceProject = { id: string; title: string };
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
@@ -39,10 +40,25 @@ export default function DemoAdminPage() {
   const [busy, setBusy] = React.useState<string | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
   const [creds, setCreds] = React.useState<{ email: string; password: string }[]>([]);
+  const [sourceAgents, setSourceAgents] = React.useState<AgentSummary[]>([]);
+  const [selectedAgentIds, setSelectedAgentIds] = React.useState<Set<string>>(new Set());
 
   const loadAccounts = React.useCallback(async () => {
     const res = await fetch("/api/admin/demo");
-    if (res.ok) setAccounts((await res.json()).accounts ?? []);
+    if (res.ok) {
+      const data = await res.json();
+      setAccounts(data.accounts ?? []);
+      setSourceAgents(data.sourceAgents ?? []);
+    }
+  }, []);
+
+  const toggleAgent = React.useCallback((id: string) => {
+    setSelectedAgentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }, []);
 
   React.useEffect(() => {
@@ -108,14 +124,17 @@ export default function DemoAdminPage() {
     setBusy(`agents-${accountId}`);
     setMessage(null);
     try {
+      const agentIds = [...selectedAgentIds];
       const res = await fetch("/api/admin/demo/clone-agents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetUserId: accountId }),
+        // No selection → clone all; otherwise just the picked ones.
+        body: JSON.stringify({ targetUserId: accountId, ...(agentIds.length > 0 ? { agentIds } : {}) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Clone agents failed");
       setMessage(`Cloned ${data.clonedAgents ?? 0} agent(s) (${data.clonedRuns ?? 0} run(s)) into this account.`);
+      await loadAccounts();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
     } finally {
@@ -224,6 +243,58 @@ export default function DemoAdminPage() {
           </select>
         </div>
 
+        {/* Source agents picker */}
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium">
+              Agents to clone{" "}
+              <span className="text-zinc-500">
+                {selectedAgentIds.size > 0 ? `(${selectedAgentIds.size} selected)` : "(none selected → all)"}
+              </span>
+            </h2>
+            {sourceAgents.length > 0 ? (
+              <button
+                onClick={() =>
+                  setSelectedAgentIds(
+                    selectedAgentIds.size === sourceAgents.length
+                      ? new Set()
+                      : new Set(sourceAgents.map((a) => a.id)),
+                  )
+                }
+                className="text-xs text-zinc-400 hover:text-zinc-200"
+              >
+                {selectedAgentIds.size === sourceAgents.length ? "Clear all" : "Select all"}
+              </button>
+            ) : null}
+          </div>
+          {sourceAgents.length === 0 ? (
+            <p className="mt-2 text-xs text-zinc-500">You have no agents to clone.</p>
+          ) : (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {sourceAgents.map((a) => {
+                const on = selectedAgentIds.has(a.id);
+                return (
+                  <button
+                    key={a.id}
+                    onClick={() => toggleAgent(a.id)}
+                    className={`rounded-lg border px-3 py-1.5 text-xs transition ${
+                      on
+                        ? "border-violet-500/60 bg-violet-500/15 text-violet-200"
+                        : "border-zinc-700 bg-zinc-950 text-zinc-300 hover:bg-zinc-800"
+                    }`}
+                  >
+                    {on ? "✓ " : ""}
+                    {a.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <p className="mt-2 text-xs text-zinc-500">
+            Pick specific agents, or leave none selected to clone all of them.
+          </p>
+        </div>
+
         {/* Accounts */}
         <div className="space-y-3">
           <h2 className="text-sm font-medium text-zinc-300">Accounts ({accounts.length})</h2>
@@ -248,7 +319,11 @@ export default function DemoAdminPage() {
                     disabled={busy === `agents-${acc.id}`}
                     className="h-8 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-xs hover:bg-zinc-800 disabled:opacity-50"
                   >
-                    {busy === `agents-${acc.id}` ? "Cloning…" : "Clone agents"}
+                    {busy === `agents-${acc.id}`
+                      ? "Cloning…"
+                      : selectedAgentIds.size > 0
+                        ? `Clone ${selectedAgentIds.size} agent(s)`
+                        : "Clone all agents"}
                   </button>
                   <button
                     onClick={() => void deleteAccount(acc.id, acc.email)}
@@ -294,6 +369,25 @@ export default function DemoAdminPage() {
               ) : (
                 <p className="mt-3 text-xs text-zinc-600">No projects yet — clone one in.</p>
               )}
+
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-zinc-500">Agents:</span>
+                {acc.agents.length === 0 ? (
+                  <span className="text-xs text-zinc-600">none</span>
+                ) : (
+                  acc.agents.map((a) => (
+                    <span
+                      key={a.id}
+                      className={`rounded-full px-2 py-0.5 text-[0.7rem] ${
+                        a.enabled ? "bg-violet-500/15 text-violet-300" : "bg-zinc-500/15 text-zinc-400"
+                      }`}
+                      title={a.enabled ? "enabled" : "disabled"}
+                    >
+                      {a.name}
+                    </span>
+                  ))
+                )}
+              </div>
             </div>
           ))}
         </div>

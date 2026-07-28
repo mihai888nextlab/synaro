@@ -6,6 +6,7 @@ import { docker } from '../lib/docker.js'
 import {
   buildWorkspaceFindPruneExpr,
   filterWorkspaceTreePaths,
+  WORKSPACE_TREE_PRUNE_DIR_NAMES,
 } from '../lib/workspace-tree-filter.js'
 import { prisma } from '../lib/prisma.js'
 import { toGithubAuthenticatedCloneUrl, toPublicGitCloneUrl } from '../lib/git-clone.js'
@@ -439,7 +440,8 @@ export async function uploadWorkspaceTar(environmentId: string, tar: Buffer): Pr
 const MAX_WORKSPACE_EXPORT_BYTES = 100 * 1024 * 1024
 
 /**
- * Stream a gzip-compressed tar of the project workspace directory from the running container.
+ * Stream a gzip-compressed tar of the project workspace directory from the running container,
+ * excluding dependency/cache directories (node_modules, .next, dist, etc.).
  */
 export async function exportWorkspaceTarGzip(environmentId: string): Promise<Readable> {
   const environment = await prisma.environment.findUnique({ where: { id: environmentId } })
@@ -460,9 +462,11 @@ export async function exportWorkspaceTarGzip(environmentId: string): Promise<Rea
   }
 
   const workspaceDir = await resolveTerminalWorkspaceDir(environment.containerId)
+
+  const pruneExpr = buildWorkspaceFindPruneExpr()
   const sizeRaw = await execShellInContainer(
     environment.containerId,
-    `du -sb "${workspaceDir}" 2>/dev/null | awk '{print $1}'`,
+    `find "${workspaceDir}" \\( ${pruneExpr} \\) -prune -o -type f -print0 2>/dev/null | xargs -0 -r wc -c 2>/dev/null | tail -1 | awk '{print $1}'`,
   )
   const bytes = parseInt(sizeRaw.trim(), 10)
   if (Number.isFinite(bytes) && bytes > MAX_WORKSPACE_EXPORT_BYTES) {
@@ -471,7 +475,18 @@ export async function exportWorkspaceTarGzip(environmentId: string): Promise<Rea
     )
   }
 
-  const tarStream = await container.getArchive({ path: workspaceDir })
+  const excludeArgs = WORKSPACE_TREE_PRUNE_DIR_NAMES.map(
+    (name) => `--exclude=${name}`,
+  ).join(' ')
+
+  const exec = await container.exec({
+    Cmd: ['sh', '-c', `tar cf - ${excludeArgs} -C "${workspaceDir}" .`],
+    AttachStdout: true,
+    AttachStderr: false,
+  })
+
+  const tarStream = await exec.start({ Detach: false, Tty: false })
+
   const gzip = createGzip()
   tarStream.on('error', (err: Error) => gzip.destroy(err))
   tarStream.pipe(gzip)

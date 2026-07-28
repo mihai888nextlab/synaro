@@ -778,6 +778,40 @@ export function AnimatedAIChat({
             }
           })();
         }
+      } else {
+        // localStorage empty (a different browser, or a freshly-cloned demo account): rebuild the
+        // conversation from the server's task history so chat history is portable across accounts/devices.
+        void (async () => {
+          try {
+            const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/ai-task`, {
+              cache: "no-store",
+            });
+            if (!res.ok) return;
+            const raw = (await res.json()) as unknown;
+            const tasks = Array.isArray(raw) ? (raw as Array<RemoteTask & { prompt?: string }>) : [];
+            if (tasks.length === 0) return;
+            const ordered = [...tasks].reverse(); // API returns newest-first; chat needs oldest-first
+            const hydrated: Message[] = [];
+            for (const task of ordered) {
+              if (typeof task.prompt === "string" && task.prompt.trim()) {
+                hydrated.push({ id: `${task.id}-u`, role: "user", content: task.prompt });
+              }
+              hydrated.push({
+                id: `${task.id}-a`,
+                role: "assistant",
+                content: resolveTaskAnswerContent(task, "") ?? "",
+                taskId: task.id,
+                taskStatus: task.status,
+                taskResult: (task.result as TaskResult | null) ?? null,
+                taskError: task.errorMessage ?? null,
+                playbackComplete: true,
+              });
+            }
+            if (hydrated.length) setMessages(hydrated);
+          } catch {
+            /* ignore — chat simply starts empty */
+          }
+        })();
       }
     } catch {}
     setChatHydrated(true);

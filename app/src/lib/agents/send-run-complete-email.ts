@@ -75,9 +75,13 @@ export async function sendAgentRunCompleteEmail(
     select: { email: true, name: true },
   });
 
-  if (!user) return { ok: true, skipped: true, reason: "no_user" };
+  if (!user) {
+    console.warn(`[agents] run email skipped — no app user for id ${payload.userId} (DBs: app=synaro_frontend, agents=synaro)`);
+    return { ok: true, skipped: true, reason: "no_user" };
+  }
   const email = user.email.trim().toLowerCase();
   if (!email) return { ok: true, skipped: true, reason: "no_email" };
+  console.info(`[agents] run email recipient: ${email} (run ${payload.runId})`);
 
   const runUrl = absoluteUrl(
     `/agents/${encodeURIComponent(payload.agentId)}/runs/${encodeURIComponent(payload.runId)}`,

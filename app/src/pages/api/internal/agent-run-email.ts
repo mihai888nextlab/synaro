@@ -40,9 +40,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const result = await sendAgentRunCompleteEmail(parsed.data);
     if (!result.ok) {
+      console.warn(`[agents] run email NOT sent — ${result.reason} (user ${parsed.data.userId}, run ${parsed.data.runId})`);
       return res.status(503).json({ error: result.reason });
     }
-    return res.status(200).json({ ok: true, skipped: "skipped" in result ? result.skipped : false });
+    const skipped = "skipped" in result && result.skipped === true;
+    console.info(
+      `[agents] run email ${skipped ? `SKIPPED (${(result as { reason?: string }).reason})` : "sent"} — user ${parsed.data.userId}, run ${parsed.data.runId}`,
+    );
+    return res.status(200).json({ ok: true, skipped });
   } catch (err) {
     // Without this, a throw here returns Next's HTML _error page and the email is lost silently.
     console.error("[agents] agent-run-email route failed:", err);

@@ -717,8 +717,17 @@ export function AnimatedAIChat({
     if (!projectId) return;
     try {
       const saved = localStorage.getItem(`synaro:chat:${projectId}`);
+      let restored: Message[] = [];
       if (saved) {
-        const restored = JSON.parse(saved) as Message[];
+        try {
+          restored = JSON.parse(saved) as Message[];
+        } catch {
+          restored = [];
+        }
+      }
+      // Treat an empty saved array the same as no history → fall through to server hydration below,
+      // instead of "restoring" nothing (which permanently blocked hydration once "[]" was persisted).
+      if (Array.isArray(restored) && restored.length > 0) {
         setMessages(
           restored.map((m) => {
             let content = m.content;

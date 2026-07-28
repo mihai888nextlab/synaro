@@ -689,6 +689,11 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       })
       if (!existing) return reply.status(404).send({ error: 'Run not found' })
 
+      req.log.info(
+        { runId, status, emailOnComplete: existing.agent.emailOnComplete },
+        'run-complete webhook received',
+      )
+
       await prisma.agentRun.update({
         where: { id: runId },
         data: {
@@ -716,6 +721,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         existing.agent.emailOnComplete &&
         (status === 'DONE' || status === 'FAILED')
       ) {
+        req.log.info({ runId }, 'run-complete: firing completion email')
         void notifyRunCompleteEmail(
           {
             runId,
@@ -729,6 +735,11 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
             finishedAt: finishedAt.toISOString(),
           },
           req.log,
+        )
+      } else {
+        req.log.info(
+          { runId, emailOnComplete: existing.agent.emailOnComplete, status },
+          'run-complete: not firing email',
         )
       }
 

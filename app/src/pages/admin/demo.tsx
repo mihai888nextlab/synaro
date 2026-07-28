@@ -93,9 +93,30 @@ export default function DemoAdminPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Clone failed");
-      if (Array.isArray(data.warnings) && data.warnings.length) {
-        setMessage(`Cloned with warnings: ${data.warnings.join("; ")}`);
+      const counts = `copied ${data.chatCloned ?? 0} chat message(s), ${data.agentsCloned ?? 0} agent(s)`;
+      const warn = Array.isArray(data.warnings) && data.warnings.length ? ` — warnings: ${data.warnings.join("; ")}` : "";
+      setMessage(`Cloned "${data.name}" — ${counts}${warn}`);
+      await loadAccounts();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function deleteAccount(accountId: string, email: string) {
+    if (!window.confirm(`Delete demo account ${email} and all its projects, containers, chat and agents? This cannot be undone.`)) {
+      return;
+    }
+    setBusy(`del-${accountId}`);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/admin/demo/${encodeURIComponent(accountId)}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `Delete failed (${res.status})`);
       }
+      setMessage(`Deleted ${email}.`);
       await loadAccounts();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
@@ -195,13 +216,22 @@ export default function DemoAdminPage() {
                   <p className="text-sm font-medium">{acc.name}</p>
                   <p className="font-mono text-xs text-zinc-500">{acc.email}</p>
                 </div>
-                <button
-                  onClick={() => void cloneInto(acc.id)}
-                  disabled={busy === `clone-${acc.id}` || !sourceId}
-                  className="h-8 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-xs hover:bg-zinc-800 disabled:opacity-50"
-                >
-                  {busy === `clone-${acc.id}` ? "Cloning…" : "Clone selected project here"}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => void cloneInto(acc.id)}
+                    disabled={busy === `clone-${acc.id}` || !sourceId}
+                    className="h-8 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-xs hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    {busy === `clone-${acc.id}` ? "Cloning…" : "Clone selected project here"}
+                  </button>
+                  <button
+                    onClick={() => void deleteAccount(acc.id, acc.email)}
+                    disabled={busy === `del-${acc.id}`}
+                    className="h-8 rounded-lg border border-red-500/40 px-3 text-xs text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+                  >
+                    {busy === `del-${acc.id}` ? "Deleting…" : "Delete"}
+                  </button>
+                </div>
               </div>
 
               {acc.projects.length ? (

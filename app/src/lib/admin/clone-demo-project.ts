@@ -25,8 +25,8 @@ async function cloneWorkspaceVolume(fromProjectId: string, toProjectId: string):
   }
 }
 
-/** Copy the source project's AI chat history (Task rows) to the new project. */
-async function cloneChatHistory(fromProjectId: string, toProjectId: string): Promise<void> {
+/** Copy the source project's AI chat history (Task rows) to the new project. Returns rows copied. */
+async function cloneChatHistory(fromProjectId: string, toProjectId: string): Promise<number> {
   const res = await fetch(`${aiServiceBaseUrl()}/api/tasks/clone`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -34,6 +34,8 @@ async function cloneChatHistory(fromProjectId: string, toProjectId: string): Pro
     signal: AbortSignal.timeout(60_000),
   });
   if (!res.ok) throw new Error((await res.text().catch(() => "")) || `tasks/clone failed (${res.status})`);
+  const data = (await res.json().catch(() => ({}))) as { cloned?: number };
+  return typeof data.cloned === "number" ? data.cloned : 0;
 }
 
 /** Copy the source user's agents (+ memory + runs) to the demo user, remapping the cloned project. */
@@ -42,7 +44,7 @@ async function cloneAgents(
   toUserId: string,
   fromProjectId: string,
   toProjectId: string,
-): Promise<void> {
+): Promise<number> {
   const res = await fetch(`${agentServiceUrl()}/api/agents/clone`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Service-Key": process.env.AGENT_SERVICE_KEY?.trim() ?? "" },
@@ -50,12 +52,16 @@ async function cloneAgents(
     signal: AbortSignal.timeout(60_000),
   });
   if (!res.ok) throw new Error((await res.text().catch(() => "")) || `agents/clone failed (${res.status})`);
+  const data = (await res.json().catch(() => ({}))) as { clonedAgents?: number };
+  return typeof data.clonedAgents === "number" ? data.clonedAgents : 0;
 }
 
 export type CloneDemoResult = {
   projectId: string;
   slug: string;
   name: string;
+  chatCloned: number;
+  agentsCloned: number;
   warnings: string[];
 };
 
@@ -85,6 +91,8 @@ export async function cloneDemoProject(args: {
   });
 
   const warnings: string[] = [];
+  let chatCloned = 0;
+  let agentsCloned = 0;
 
   // Files — copy the workspace volume. Without this the demo project is empty.
   try {
@@ -95,7 +103,7 @@ export async function cloneDemoProject(args: {
 
   // Chat history.
   try {
-    await cloneChatHistory(source.id, target.id);
+    chatCloned = await cloneChatHistory(source.id, target.id);
   } catch (e) {
     warnings.push(`Chat history copy failed: ${msg(e)}`);
   }
@@ -103,11 +111,11 @@ export async function cloneDemoProject(args: {
   // Agents (optional).
   if (args.cloneAgents !== false) {
     try {
-      await cloneAgents(source.userId, args.targetUserId, source.id, target.id);
+      agentsCloned = await cloneAgents(source.userId, args.targetUserId, source.id, target.id);
     } catch (e) {
       warnings.push(`Agent copy failed: ${msg(e)}`);
     }
   }
 
-  return { projectId: target.id, slug, name: target.name, warnings };
+  return { projectId: target.id, slug, name: target.name, chatCloned, agentsCloned, warnings };
 }

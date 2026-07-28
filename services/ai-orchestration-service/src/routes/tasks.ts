@@ -123,6 +123,14 @@ Rules:
     return reply.send(tasks)
   })
 
+  // DELETE /api/tasks?projectId=xxx — remove a project's chat history (demo-account teardown).
+  app.delete('/', async (req, reply) => {
+    const { projectId } = req.query as { projectId?: string }
+    if (!projectId) return reply.status(400).send({ error: 'projectId query param required' })
+    const { count } = await prisma.task.deleteMany({ where: { projectId } })
+    return reply.send({ deleted: count })
+  })
+
   // GET /api/tasks/:id
   app.get('/:id', async (req, reply) => {
     const { id } = req.params as { id: string }

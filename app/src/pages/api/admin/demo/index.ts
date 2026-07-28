@@ -42,8 +42,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     let email = typeof body.email === "string" && body.email.trim() ? body.email.trim().toLowerCase() : "";
     if (!email) {
-      const count = await prisma.user.count({ where: { email: { endsWith: `@${DEMO_DOMAIN}` } } });
-      email = `demo-${count + 1}@${DEMO_DOMAIN}`;
+      // Reuse the lowest free number so deleting demo-1 frees "1" for the next create.
+      const existing = await prisma.user.findMany({
+        where: { email: { endsWith: `@${DEMO_DOMAIN}` } },
+        select: { email: true },
+      });
+      const used = new Set<number>();
+      for (const u of existing) {
+        const m = u.email.match(/^demo-(\d+)@/);
+        if (m) used.add(Number(m[1]));
+      }
+      let n = 1;
+      while (used.has(n)) n += 1;
+      email = `demo-${n}@${DEMO_DOMAIN}`;
     }
     if (!email.includes("@")) return res.status(400).json({ error: "Invalid email" });
 

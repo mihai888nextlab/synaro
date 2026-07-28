@@ -98,6 +98,30 @@ export const AGENT_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   },
 ]
 
+/** Read-only subset given to exploration sub-agents — no writes, no shell, can't change anything. */
+export const EXPLORE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = AGENT_TOOLS.filter(
+  (t) => t.type === 'function' && ['list_files', 'read_file', 'finish'].includes(t.function.name),
+)
+
+/** Tool the main agent uses to hand a bounded, read-only investigation to a sub-agent. */
+export const DELEGATE_TOOL: OpenAI.Chat.ChatCompletionTool = {
+  type: 'function',
+  function: {
+    name: 'delegate',
+    description:
+      'Delegate a READ-ONLY investigation to a sub-agent that explores the codebase in its own context ' +
+      'and returns a concise report. Use for "where is X handled?" / "find everything related to Y" on a ' +
+      'large or unfamiliar project, instead of reading many files yourself. The sub-agent cannot modify anything.',
+    parameters: {
+      type: 'object',
+      properties: {
+        instruction: { type: 'string', description: 'What to investigate and report back on.' },
+      },
+      required: ['instruction'],
+    },
+  },
+}
+
 export type ToolExecResult = {
   /** Text fed back to the model as the tool result. */
   result: string

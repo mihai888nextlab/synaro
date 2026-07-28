@@ -193,6 +193,8 @@ export const ORCHESTRATION = {
   MAX_CONTINUATIONS: 2,
   /** Agentic tool-loop: max model steps (tool round-trips) before the loop stops. */
   AGENT_MAX_STEPS: 24,
+  /** Read-only exploration sub-agent: smaller budget, it only reads and reports. */
+  AGENT_SUBAGENT_MAX_STEPS: 12,
   /** Agentic tool-loop: per-step model output budget (tool args can include full file contents). */
   AGENT_MAX_OUTPUT: 16_000,
 } as const

@@ -1,7 +1,99 @@
 import type OpenAI from 'openai'
 import { chatWithTools, MODELS, ORCHESTRATION } from '../lib/kimi.js'
-import { AGENT_TOOLS, executeAgentTool, toolActivityLabel } from './agent-tools.js'
+import {
+  AGENT_TOOLS,
+  EXPLORE_TOOLS,
+  DELEGATE_TOOL,
+  executeAgentTool,
+  toolActivityLabel,
+} from './agent-tools.js'
 import { DESIGN_GUIDE } from './design-guide.js'
+
+/** Off by default. When AGENT_SUBAGENTS=true the main agent can delegate read-only exploration. */
+const SUBAGENTS_ENABLED = process.env.AGENT_SUBAGENTS === 'true'
+
+/** Tools an exploration sub-agent is ever allowed to run (belt-and-suspenders read-only enforcement). */
+const EXPLORE_TOOL_NAMES = new Set(['list_files', 'read_file', 'finish'])
+
+const EXPLORE_SYSTEM = `You are a READ-ONLY exploration assistant. Another agent has asked you to investigate this project's code and report back.
+
+- Use ONLY list_files and read_file. You CANNOT modify anything.
+- Find what was asked: the relevant files, where the logic lives, key snippets, how things connect.
+- Be efficient — batch reads, don't wander.
+- When done, call finish with a CONCISE, actionable report (file paths + the specific facts/snippets the other agent needs). Do not dump whole files; summarize.`
+
+/**
+ * Read-only exploration sub-agent: runs its own small loop in a fresh context (list/read/finish only)
+ * and returns a concise report. Isolating exploration here keeps the main agent's context lean.
+ */
+async function runExploreSubAgent(
+  envId: string,
+  instruction: string,
+  onActivity?: (msg: string) => void | Promise<void>,
+): Promise<{ report: string; inputTokens: number; outputTokens: number }> {
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    { role: 'system', content: EXPLORE_SYSTEM },
+    { role: 'user', content: instruction },
+  ]
+  let inputTokens = 0
+  let outputTokens = 0
+  let report = '(the sub-agent returned no findings)'
+  const deadline = Date.now() + ORCHESTRATION.MAX_TASK_MS
+
+  for (let step = 0; step < ORCHESTRATION.AGENT_SUBAGENT_MAX_STEPS; step++) {
+    if (Date.now() > deadline) break
+    pruneToolHistory(messages)
+    let resp
+    try {
+      resp = await chatWithTools(
+        { model: MODELS.GENERATE, max_tokens: ORCHESTRATION.AGENT_MAX_OUTPUT, messages, tools: EXPLORE_TOOLS },
+        { timeout: 120_000, maxRetries: 0 },
+      )
+    } catch {
+      break
+    }
+    inputTokens += resp.inputTokens
+    outputTokens += resp.outputTokens
+    messages.push({
+      role: 'assistant',
+      content: resp.content || null,
+      ...(resp.toolCalls.length > 0
+        ? {
+            tool_calls: resp.toolCalls.map((tc) => ({
+              id: tc.id,
+              type: 'function' as const,
+              function: { name: tc.name, arguments: tc.arguments },
+            })),
+          }
+        : {}),
+    })
+    if (resp.toolCalls.length === 0) {
+      if (resp.content.trim()) report = resp.content.trim()
+      break
+    }
+    let done = false
+    for (const tc of resp.toolCalls) {
+      await onActivity?.(`↳ ${toolActivityLabel(tc.name, tc.arguments)}`)
+      // Hard read-only guard: refuse any tool outside the explore set, even if the model invents one.
+      if (!EXPLORE_TOOL_NAMES.has(tc.name)) {
+        messages.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: `Error: "${tc.name}" is not available — you are READ-ONLY. Use list_files / read_file, then finish.`,
+        })
+        continue
+      }
+      const out = await executeAgentTool(envId, tc.name, tc.arguments)
+      messages.push({ role: 'tool', tool_call_id: tc.id, content: out.result })
+      if (out.done) {
+        report = out.summary ?? report
+        done = true
+      }
+    }
+    if (done) break
+  }
+  return { report, inputTokens, outputTokens }
+}
 
 const AGENT_SYSTEM = `You are an autonomous coding agent working directly inside a project's live workspace using tools.
 
@@ -97,9 +189,14 @@ export async function runAgentLoop(args: {
           .slice(0, 300)
           .join('\n')}${args.repoFiles.length > 300 ? '\n… (more — use list_files for the rest)' : ''}`
       : ''
+  const delegateNote = SUBAGENTS_ENABLED
+    ? '\n\nFor a large or unfamiliar codebase, you can call `delegate` to have a sub-agent investigate ' +
+      '(read-only) and report back, instead of reading many files yourself.'
+    : ''
+  const tools = SUBAGENTS_ENABLED ? [...AGENT_TOOLS, DELEGATE_TOOL] : AGENT_TOOLS
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: 'system', content: `${AGENT_SYSTEM}${args.memory ? `\n\n${args.memory}` : ''}` },
-    { role: 'user', content: `${args.prompt}${scaffoldNote}${fileListNote}` },
+    { role: 'user', content: `${args.prompt}${scaffoldNote}${fileListNote}${delegateNote}` },
   ]
 
   const prior = new Map<string, string | null>()
@@ -129,7 +226,7 @@ export async function runAgentLoop(args: {
     let resp
     try {
       resp = await chatWithTools(
-        { model: MODELS.GENERATE, max_tokens: ORCHESTRATION.AGENT_MAX_OUTPUT, messages, tools: AGENT_TOOLS },
+        { model: MODELS.GENERATE, max_tokens: ORCHESTRATION.AGENT_MAX_OUTPUT, messages, tools },
         // No SDK auto-retry: a retried timeout doubles the wait before failing. One slow step must not
         // kill the whole task — we catch below and keep whatever was already applied.
         { timeout: 180_000, maxRetries: 0 },
@@ -171,6 +268,28 @@ export async function runAgentLoop(args: {
     let finished = false
     for (const tc of resp.toolCalls) {
       await args.onActivity?.(toolActivityLabel(tc.name, tc.arguments))
+
+      // Delegation: run a read-only exploration sub-agent and hand its concise report back as the
+      // tool result. Kept out of executeAgentTool because it recurses into the loop machinery here.
+      if (tc.name === 'delegate') {
+        let report: string
+        try {
+          const d = JSON.parse(tc.arguments || '{}') as { instruction?: unknown }
+          const instruction = typeof d.instruction === 'string' ? d.instruction.trim() : ''
+          if (!instruction) {
+            report = 'Error: delegate requires an "instruction".'
+          } else {
+            const sub = await runExploreSubAgent(args.envId, instruction, args.onActivity)
+            inputTokens += sub.inputTokens
+            outputTokens += sub.outputTokens
+            report = sub.report
+          }
+        } catch (e) {
+          report = `Delegation failed: ${e instanceof Error ? e.message : String(e)}`
+        }
+        messages.push({ role: 'tool', tool_call_id: tc.id, content: report })
+        continue
+      }
 
       // Backstop: refuse the FIRST finish only when a SUBSTANTIAL code change (new file, multiple
       // files, or a greenfield build) was never verified. Single small edits rely on the prompt nudge.

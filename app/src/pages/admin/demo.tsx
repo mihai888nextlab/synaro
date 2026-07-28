@@ -104,6 +104,25 @@ export default function DemoAdminPage() {
     }
   }
 
+  async function cloneAgents(accountId: string) {
+    setBusy(`agents-${accountId}`);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/demo/clone-agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUserId: accountId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Clone agents failed");
+      setMessage(`Cloned ${data.clonedAgents ?? 0} agent(s) (${data.clonedRuns ?? 0} run(s)) into this account.`);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function deleteAccount(accountId: string, email: string) {
     if (!window.confirm(`Delete demo account ${email} and all its projects, containers, chat and agents? This cannot be undone.`)) {
       return;
@@ -223,6 +242,13 @@ export default function DemoAdminPage() {
                     className="h-8 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-xs hover:bg-zinc-800 disabled:opacity-50"
                   >
                     {busy === `clone-${acc.id}` ? "Cloning…" : "Clone selected project here"}
+                  </button>
+                  <button
+                    onClick={() => void cloneAgents(acc.id)}
+                    disabled={busy === `agents-${acc.id}`}
+                    className="h-8 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-xs hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    {busy === `agents-${acc.id}` ? "Cloning…" : "Clone agents"}
                   </button>
                   <button
                     onClick={() => void deleteAccount(acc.id, acc.email)}

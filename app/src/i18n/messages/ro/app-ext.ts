@@ -158,7 +158,6 @@ export const roAppExt: Messages = {
     dockerAriaLabel: "{action}. Stare curentă: {status}.",
     open: "deschide",
     updatedRelative: "{stack} · actualizat {relative}",
-    analytics: "Analitice",
     deleteProject: "Șterge proiect",
     deleteConfirm:
       'Ștergi „{title}"? Aceasta elimină proiectul și mediile Docker asociate. Acțiunea nu poate fi anulată.',
@@ -371,7 +370,6 @@ export const roAppExt: Messages = {
   workspace: {
     home: "Acasă",
     page: "Pagină",
-    analytics: "Analitice",
     openSidebar: "Deschide bara laterală",
     closeSidebar: "Închide bara laterală",
     expandSidebar: "Extinde bara laterală",
@@ -914,10 +912,6 @@ export const roAppExt: Messages = {
     openSearch: "Deschide căutarea",
     closeDialog: "Închide dialogul",
     refreshPreview: "Reîmprospătează previzualizarea",
-    aboutCampaignData: "Despre datele campaniei",
-    chartScale: "Scara graficului",
-    projectAnalytics: "Analitice proiect",
-    keyMetrics: "Indicatori cheie",
     listening: "Ascult",
     showLogs: "Afișează jurnalele",
     hideLogs: "Ascunde jurnalele",

@@ -95,17 +95,6 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
       return [{ label: t("workspace.home"), href: "/dashboard" }, { label: t("nav.logs") }];
     }
 
-    if (path === "/projects/[projectSlug]/analytics") {
-      const raw = q.projectSlug;
-      const slug = typeof raw === "string" ? raw : Array.isArray(raw) ? (raw[0] ?? "") : "";
-      return [
-        { label: t("workspace.home"), href: "/dashboard" },
-        { label: t("nav.projects"), href: "/projects" },
-        { label: humanizeProjectSlug(slug), href: `/projects/${encodeURIComponent(slug)}` },
-        { label: t("workspace.analytics") },
-      ];
-    }
-
     if (path === "/projects/[projectSlug]") {
       const raw = q.projectSlug;
       const slug = typeof raw === "string" ? raw : Array.isArray(raw) ? (raw[0] ?? "") : "";
@@ -146,9 +135,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
   const isHome = breadcrumbs.length === 1 && breadcrumbs[0]?.label === t("workspace.home");
 
-  const isProjectWorkspace =
-    router.pathname === "/projects/[projectSlug]" ||
-    router.pathname === "/projects/[projectSlug]/analytics";
+  const isProjectWorkspace = router.pathname === "/projects/[projectSlug]";
 
   return (
     <div className="min-h-screen bg-background text-foreground [scrollbar-gutter:stable]">

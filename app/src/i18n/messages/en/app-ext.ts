@@ -158,7 +158,6 @@ export const enAppExt: Messages = {
     dockerAriaLabel: "{action}. Current state: {status}.",
     open: "open",
     updatedRelative: "{stack} · updated {relative}",
-    analytics: "Analytics",
     deleteProject: "Delete project",
     deleteConfirm:
       'Delete "{title}"? This removes the project and its Docker environments. This cannot be undone.',
@@ -370,7 +369,6 @@ export const enAppExt: Messages = {
   workspace: {
     home: "Home",
     page: "Page",
-    analytics: "Analytics",
     openSidebar: "Open sidebar",
     closeSidebar: "Close sidebar",
     expandSidebar: "Expand sidebar",
@@ -906,10 +904,6 @@ export const enAppExt: Messages = {
     openSearch: "Open search",
     closeDialog: "Close dialog",
     refreshPreview: "Refresh preview",
-    aboutCampaignData: "About campaign data",
-    chartScale: "Chart scale",
-    projectAnalytics: "Project analytics",
-    keyMetrics: "Key metrics",
     listening: "Listening",
     showLogs: "Show logs",
     hideLogs: "Hide logs",

@@ -46,12 +46,14 @@ import {
 } from "@/components/ui/project-cards-grid";
 import { Tree, TreeItem, TreeItemLabel } from "@/components/ui/tree";
 import {
+  PREVIEW_PANEL_MIN_PX,
   readProjectTab,
   readWorkspaceTreeExpanded,
   writeProjectTab,
   writeWorkspaceTreeExpanded,
   type ProjectWorkspaceTab,
 } from "@/lib/dashboard-workflow-storage";
+import { useHorizontalPanelResize } from "@/hooks/use-horizontal-panel-resize";
 import { humanizeProjectSlug } from "@/lib/project-slug";
 import { dispatchWorkspaceTab } from "@/lib/onboarding-tour-steps";
 import {
@@ -1217,6 +1219,16 @@ export function ProjectWorkspace({
   }, [tab, deployStatus, refreshDeployment]);
 
   const showPreviewPanel = runStatus === "running" && Boolean(previewUrl);
+  const previewSplitRef = React.useRef<HTMLDivElement>(null);
+  const {
+    widthPx: previewWidthPx,
+    isDragging: previewResizing,
+    onHandlePointerDown: onPreviewResizePointerDown,
+  } = useHorizontalPanelResize({
+    projectId,
+    enabled: showPreviewPanel,
+    containerRef: previewSplitRef,
+  });
 
   React.useEffect(() => {
     if (environmentStatus === "RUNNING") return;
@@ -1240,17 +1252,23 @@ export function ProjectWorkspace({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div
+        ref={previewSplitRef}
         className={cn(
           "flex min-h-0 flex-1 flex-col gap-3",
           showPreviewPanel &&
-            "xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(280px,38%)] xl:grid-rows-1 xl:gap-0",
+            "xl:grid xl:h-full xl:min-h-0 xl:grid-cols-[minmax(0,1fr)_6px_minmax(280px,var(--preview-panel-w,38%))] xl:grid-rows-1 xl:gap-0",
         )}
+        style={
+          showPreviewPanel && previewWidthPx != null
+            ? ({ ["--preview-panel-w" as string]: `${previewWidthPx}px` } as React.CSSProperties)
+            : undefined
+        }
       >
         <div
           className={cn(
             "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-background/40",
             showPreviewPanel
-              ? "flex-[1_1_75vh] max-xl:min-h-[min(78vh,100%)] xl:min-h-0 xl:h-full xl:flex-none"
+              ? "flex-[1_1_75vh] max-xl:min-h-[min(78vh,100%)] xl:h-full xl:min-h-0 xl:flex-none"
               : "min-h-0 flex-1",
           )}
         >
@@ -1814,15 +1832,41 @@ export function ProjectWorkspace({
         </div>
 
         {showPreviewPanel ? (
-          <ProjectIframePreview
-            className="order-last max-xl:max-h-[28vh] max-xl:min-h-[11rem] max-xl:shrink-0 xl:order-none xl:h-full xl:max-h-none xl:min-h-0"
-            title={
-              projectSlug
-                ? t("workspace.previewTitle", { name: humanizeProjectSlug(projectSlug) })
-                : t("workspace.preview")
-            }
-            previewUrl={previewUrl}
-          />
+          <>
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t("workspace.preview")}
+              aria-valuenow={previewWidthPx ?? undefined}
+              aria-valuemin={PREVIEW_PANEL_MIN_PX}
+              tabIndex={0}
+              onPointerDown={onPreviewResizePointerDown}
+              className={cn(
+                "relative z-20 hidden w-1.5 cursor-col-resize touch-none xl:block xl:h-full xl:w-full",
+                "before:absolute before:inset-y-0 before:-left-1 before:-right-1 before:content-['']",
+                previewResizing ? "bg-primary/50" : "bg-transparent hover:bg-border/80",
+              )}
+            />
+            <div
+              className={cn(
+                "relative order-last max-xl:max-h-[28vh] max-xl:min-h-[11rem] max-xl:w-full max-xl:shrink-0",
+                "xl:order-none xl:h-full xl:max-h-none xl:min-h-0 xl:min-w-0 xl:w-full",
+              )}
+            >
+              {previewResizing ? (
+                <div className="absolute inset-0 z-30 cursor-col-resize" aria-hidden />
+              ) : null}
+              <ProjectIframePreview
+                className="h-full min-h-0"
+                title={
+                  projectSlug
+                    ? t("workspace.previewTitle", { name: humanizeProjectSlug(projectSlug) })
+                    : t("workspace.preview")
+                }
+                previewUrl={previewUrl}
+              />
+            </div>
+          </>
         ) : null}
       </div>
     </div>

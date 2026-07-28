@@ -1,6 +1,6 @@
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { BarChart2, Brain, MoreVertical, Sparkles, Trash2, Zap } from "lucide-react";
+import { Brain, MoreVertical, Sparkles, Trash2, Zap } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -247,7 +246,7 @@ export function SynaroProjectCard({
   /** Project id currently performing a Docker action (shows spinner on that pill). */
   dockerBusyId?: string | null;
   onDockerClick?: (projectId: string, action: "start" | "stop") => void;
-  /** Kebab menu (analytics, delete for owners) — used on `/projects`. */
+  /** Kebab menu (delete for owners) — used on `/projects`. */
   cardMoreMenu?: boolean;
   onDeleteProject?: (projectId: string) => void | Promise<void>;
   /** `embedded` = lighter surface for dashboard / nested layouts (no “card on card”). */
@@ -255,9 +254,9 @@ export function SynaroProjectCard({
 }) {
   const { t } = useTranslation();
   const href = `/projects/${encodeURIComponent(project.slug)}`;
-  const analyticsHref = `/projects/${encodeURIComponent(project.slug)}/analytics`;
   const Icon = SYNARO_PROJECT_CARD_ICONS[project.icon] ?? Brain;
   const busy = dockerBusyId === project.id;
+  const showDeleteMenu = Boolean(cardMoreMenu && project.viewerCanDelete && onDeleteProject);
 
   return (
     <div
@@ -294,7 +293,7 @@ export function SynaroProjectCard({
               }
             />
           </div>
-          {cardMoreMenu ? (
+          {showDeleteMenu ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -308,36 +307,25 @@ export function SynaroProjectCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48 rounded-xl border-border/70 p-1" sideOffset={6}>
-                <DropdownMenuItem asChild className="cursor-pointer rounded-lg">
-                  <Link href={analyticsHref} className="flex items-center gap-2">
-                    <BarChart2 className="size-4 shrink-0" aria-hidden />
-                    {t("projects.analytics")}
-                  </Link>
+                <DropdownMenuItem
+                  className="cursor-pointer rounded-lg text-destructive focus:bg-destructive/10 focus:text-destructive"
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    if (
+                      !window.confirm(
+                        t("projects.deleteConfirm", { title: project.title }),
+                      )
+                    ) {
+                      return;
+                    }
+                    void onDeleteProject?.(project.id);
+                  }}
+                >
+                  <span className="flex items-center gap-2">
+                    <Trash2 className="size-4 shrink-0" aria-hidden />
+                    {t("projects.deleteProject")}
+                  </span>
                 </DropdownMenuItem>
-                {project.viewerCanDelete && onDeleteProject ? (
-                  <>
-                    <DropdownMenuSeparator className="bg-border/60" />
-                    <DropdownMenuItem
-                      className="cursor-pointer rounded-lg text-destructive focus:bg-destructive/10 focus:text-destructive"
-                      onSelect={(e) => {
-                        e.preventDefault();
-                        if (
-                          !window.confirm(
-                            t("projects.deleteConfirm", { title: project.title }),
-                          )
-                        ) {
-                          return;
-                        }
-                        void onDeleteProject(project.id);
-                      }}
-                    >
-                      <span className="flex items-center gap-2">
-                        <Trash2 className="size-4 shrink-0" aria-hidden />
-                        {t("projects.deleteProject")}
-                      </span>
-                    </DropdownMenuItem>
-                  </>
-                ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}

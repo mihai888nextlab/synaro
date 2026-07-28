@@ -10,6 +10,8 @@ export const WORKFLOW_STORAGE_KEYS = {
   terminalScrollback: (projectId: string) => `${PREFIX}terminal.${projectId}`,
   /** Expanded headless-tree item ids for the project workspace file explorer. */
   workspaceTreeExpanded: (projectId: string) => `${PREFIX}treeExpanded.${projectId}`,
+  /** Live iframe preview panel width in pixels (xl+ split). */
+  previewPanelWidthPx: (projectId: string) => `${PREFIX}previewWidthPx.${projectId}`,
 } as const;
 
 export type ProjectWorkspaceTab = "tree" | "chat" | "terminal" | "deployments";
@@ -20,12 +22,17 @@ function canUseStorage(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }
 
-/** Allowed projects-area paths for sidebar restore (list, workspace, analytics, etc.). */
+/** Allowed projects-area paths for sidebar restore (list, workspace, etc.). */
 export function normalizeProjectsPath(path: string): string | null {
   const pathname = path.split("?")[0]?.split("#")[0]?.trim() ?? "";
   if (!pathname) return null;
   if (pathname === "/projects") return "/projects";
   if (pathname.startsWith("/projects/invite/")) return null;
+  // Legacy analytics URLs → project workspace
+  const analyticsMatch = pathname.match(/^\/projects\/([^/]+)\/analytics\/?$/);
+  if (analyticsMatch?.[1]) {
+    return `/projects/${analyticsMatch[1]}`;
+  }
   if (/^\/projects\/[^/]+(\/.*)?$/.test(pathname)) return pathname;
   return null;
 }
@@ -149,5 +156,54 @@ export function clearTerminalScrollback(projectId: string): void {
     window.localStorage.removeItem(WORKFLOW_STORAGE_KEYS.terminalScrollback(projectId));
   } catch {
     /* ignore */
+  }
+}
+
+/** Minimum preview column width (matches previous grid minmax floor). */
+export const PREVIEW_PANEL_MIN_PX = 280;
+/** Cap so the chat/workspace column stays usable. */
+export const PREVIEW_PANEL_MAX_RATIO = 0.7;
+/** Default share of the split container (matches previous 38% grid column). */
+export const PREVIEW_PANEL_DEFAULT_RATIO = 0.38;
+
+export function clampPreviewPanelWidthPx(widthPx: number, containerWidthPx: number): number {
+  if (!Number.isFinite(widthPx)) return PREVIEW_PANEL_MIN_PX;
+  if (!Number.isFinite(containerWidthPx) || containerWidthPx < 1) {
+    return Math.max(PREVIEW_PANEL_MIN_PX, Math.round(widthPx));
+  }
+  const max = Math.max(PREVIEW_PANEL_MIN_PX, Math.floor(containerWidthPx * PREVIEW_PANEL_MAX_RATIO));
+  return Math.min(max, Math.max(PREVIEW_PANEL_MIN_PX, Math.round(widthPx)));
+}
+
+export function defaultPreviewPanelWidthPx(containerWidthPx: number): number {
+  return clampPreviewPanelWidthPx(
+    Math.round(containerWidthPx * PREVIEW_PANEL_DEFAULT_RATIO),
+    containerWidthPx,
+  );
+}
+
+export function readPreviewPanelWidthPx(projectId: string): number | null {
+  if (!canUseStorage() || !projectId.trim()) return null;
+  try {
+    const raw = window.localStorage.getItem(WORKFLOW_STORAGE_KEYS.previewPanelWidthPx(projectId.trim()));
+    if (!raw) return null;
+    const n = Number.parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 1) return null;
+    return Math.round(n);
+  } catch {
+    return null;
+  }
+}
+
+export function writePreviewPanelWidthPx(projectId: string, widthPx: number): void {
+  if (!canUseStorage() || !projectId.trim()) return;
+  if (!Number.isFinite(widthPx) || widthPx < 1) return;
+  try {
+    window.localStorage.setItem(
+      WORKFLOW_STORAGE_KEYS.previewPanelWidthPx(projectId.trim()),
+      String(Math.round(widthPx)),
+    );
+  } catch {
+    /* quota / private mode */
   }
 }

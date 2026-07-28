@@ -33,7 +33,7 @@ export type OnboardingTourStep = {
 
 export function routeMatches(pathname: string, route: string): boolean {
   if (route === "/projects/") {
-    return pathname.startsWith("/projects/") && !pathname.endsWith("/analytics");
+    return pathname.startsWith("/projects/");
   }
   if (route === "/projects") {
     return pathname === "/projects";

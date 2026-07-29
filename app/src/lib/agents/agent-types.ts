@@ -9,6 +9,7 @@ export type McpServer = {
 
 export const MODEL_OPTIONS = [
   "kimi-k2.7-code",
+  "kimi-k2.6",
   "moonshot-v1-8k",
   "moonshot-v1-32k",
   "moonshot-v1-128k",

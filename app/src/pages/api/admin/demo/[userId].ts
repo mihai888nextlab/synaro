@@ -77,11 +77,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await remoteDestroyDeployment(p.id).catch(() => {});
     await deleteProjectTasks(p.id);
   }
+  // Delete projects from the app DB — the Project->User relation has no onDelete: Cascade,
+  // so user.delete would fail with a foreign key violation if projects remain.
+  await prisma.project.deleteMany({ where: { userId } });
 
   // Agents live in the agent service, keyed by userId.
   await deleteUserAgents(userId);
 
-  // Cascades projects, members, activity logs, api keys, sessions in the app DB.
+  // Cascades members, activity logs, api keys, sessions in the app DB.
   await prisma.user.delete({ where: { id: userId } });
 
   return res.status(200).json({ ok: true });

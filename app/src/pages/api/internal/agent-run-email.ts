@@ -3,6 +3,12 @@ import { z } from "zod";
 
 import { sendAgentRunCompleteEmail } from "@/lib/agents/send-run-complete-email";
 
+// Agent runs carry full output + artifacts; the default 1mb body cap rejects large
+// runs *before* the handler runs, surfacing as a silent 500 _error page. Give it room.
+export const config = {
+  api: { bodyParser: { sizeLimit: "10mb" } },
+};
+
 const PayloadSchema = z.object({
   runId: z.string().min(1),
   agentId: z.string().min(1),
@@ -32,12 +38,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (!requireServiceKey(req, res)) return;
 
-  const parsed = PayloadSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-
   try {
+    // Access req.body inside the try: an oversized body throws here (before the handler
+    // could otherwise catch it), which previously bubbled up as a silent HTML _error page.
+    const parsed = PayloadSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
     const result = await sendAgentRunCompleteEmail(parsed.data);
     if (!result.ok) {
       console.warn(`[agents] run email NOT sent — ${result.reason} (user ${parsed.data.userId}, run ${parsed.data.runId})`);

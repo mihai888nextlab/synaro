@@ -107,7 +107,7 @@ export default function DemoAdminPage() {
       const res = await fetch("/api/admin/demo/clone", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceProjectId: sourceId, targetUserId: accountId }),
+        body: JSON.stringify({ sourceProjectId: sourceId, targetUserId: accountId, cloneAgents: false }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Clone failed");
@@ -136,6 +136,26 @@ export default function DemoAdminPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Clone agents failed");
       setMessage(`Cloned ${data.clonedAgents ?? 0} agent(s) (${data.clonedRuns ?? 0} run(s)) into this account.`);
+      await loadAccounts();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function removeAgents(accountId: string) {
+    setBusy(`rm-agents-${accountId}`);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/demo/delete-agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: accountId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to remove agents");
+      setMessage(`Removed ${data.deleted ?? 0} agent(s) from this account.`);
       await loadAccounts();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
@@ -386,17 +406,26 @@ export default function DemoAdminPage() {
                 {acc.agents.length === 0 ? (
                   <span className="text-xs text-zinc-600">none</span>
                 ) : (
-                  acc.agents.map((a) => (
-                    <span
-                      key={a.id}
-                      className={`rounded-full px-2 py-0.5 text-[0.7rem] ${
-                        a.enabled ? "bg-violet-500/15 text-violet-300" : "bg-zinc-500/15 text-zinc-400"
-                      }`}
-                      title={a.enabled ? "enabled" : "disabled"}
+                  <>
+                    {acc.agents.map((a) => (
+                      <span
+                        key={a.id}
+                        className={`rounded-full px-2 py-0.5 text-[0.7rem] ${
+                          a.enabled ? "bg-violet-500/15 text-violet-300" : "bg-zinc-500/15 text-zinc-400"
+                        }`}
+                        title={a.enabled ? "enabled" : "disabled"}
+                      >
+                        {a.name}
+                      </span>
+                    ))}
+                    <button
+                      onClick={() => void removeAgents(acc.id)}
+                      disabled={busy === `rm-agents-${acc.id}`}
+                      className="ml-2 h-6 rounded-md border border-red-500/30 px-2 text-[0.65rem] text-red-400 hover:bg-red-500/10 disabled:opacity-50"
                     >
-                      {a.name}
-                    </span>
-                  ))
+                      {busy === `rm-agents-${acc.id}` ? "…" : "Remove all"}
+                    </button>
+                  </>
                 )}
               </div>
             </div>

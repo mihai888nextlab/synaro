@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/router";
 import { useSession } from "next-auth/react";
 import { ArrowRight, Bot, Loader2 } from "lucide-react";
@@ -35,7 +34,6 @@ export function AgentSharePageClient({
 
   const callbackPath = `/a/${encodeURIComponent(agentId)}`;
   const loginHref = `/login?callbackUrl=${encodeURIComponent(callbackPath)}`;
-  const signupHref = `/signup?callbackUrl=${encodeURIComponent(callbackPath)}`;
 
   const importAgent = useCallback(async () => {
     setImporting(true);
@@ -165,23 +163,6 @@ export function AgentSharePageClient({
             </div>
           ) : null}
 
-          {!busy && !error && status === "unauthenticated" ? (
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-              <Link
-                href={loginHref}
-                className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
-              >
-                {t("agentShare.signInToAdd")}
-                <ArrowRight className="size-4" aria-hidden />
-              </Link>
-              <Link
-                href={signupHref}
-                className="rounded-full border border-white/20 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-              >
-                {t("agentShare.createAccount")}
-              </Link>
-            </div>
-          ) : null}
         </section>
       </div>
     </main>

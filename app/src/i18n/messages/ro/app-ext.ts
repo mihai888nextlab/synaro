@@ -164,6 +164,8 @@ export const roAppExt: Messages = {
     moreOptionsFor: "Mai multe opțiuni pentru {title}",
     openProject: "Deschide proiectul: {title}",
     invalidGithubUrl: "Introdu un URL GitHub valid (https://github.com/owner/repo).",
+    editProject: "Editează proiect",
+    editProjectDescription: "Actualizează titlul și descrierea proiectului.",
     runtimeAutomatic: "Automat (recomandat)",
     runtimeNode22: "Node.js 22 (Debian slim)",
     runtimePython312: "Python 3.12 (slim)",

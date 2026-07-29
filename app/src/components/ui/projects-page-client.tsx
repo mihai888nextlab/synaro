@@ -188,6 +188,12 @@ export function ProjectsPageClient({
   );
   const [dockerBusyId, setDockerBusyId] = React.useState<string | null>(null);
 
+  const [editingProject, setEditingProject] = React.useState<SynaroProjectCardModel | null>(null);
+  const [editTitle, setEditTitle] = React.useState("");
+  const [editDescription, setEditDescription] = React.useState("");
+  const [editSubmitting, setEditSubmitting] = React.useState(false);
+  const [editError, setEditError] = React.useState<string | null>(null);
+
   const folderInputRef = React.useRef<HTMLInputElement>(null);
   /** Mirrors latest `projects` for optimistic delete revert without stale closures. */
   const projectsRef = React.useRef(initialProjects);
@@ -574,6 +580,60 @@ export function ProjectsPageClient({
     }
   }
 
+  const handleProjectEdit = React.useCallback((project: SynaroProjectCardModel) => {
+    setEditingProject(project);
+    setEditTitle(project.title);
+    setEditDescription(project.description);
+    setEditError(null);
+  }, []);
+
+  async function handleEditSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingProject) return;
+    const trimmedTitle = editTitle.trim();
+    if (!trimmedTitle) return;
+    setEditSubmitting(true);
+    setEditError(null);
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(editingProject.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmedTitle, description: editDescription.trim() || undefined }),
+      });
+      const raw = await res.text();
+      let data: { error?: string; project?: { id: string; name: string; description: string | null } } = {};
+      if (raw) {
+        try {
+          data = JSON.parse(raw) as typeof data;
+        } catch {
+          setEditError("Unexpected response from server.");
+          return;
+        }
+      }
+      if (!res.ok) {
+        setEditError(data.error ?? `Failed to update project (${res.status})`);
+        return;
+      }
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === editingProject.id
+            ? { ...p, title: data.project?.name ?? p.title, description: data.project?.description ?? p.description }
+            : p,
+        ),
+      );
+      setEditingProject(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setEditError(
+        /failed to fetch|fetch failed|networkerror/i.test(msg)
+          ? "Could not reach the app (network error)."
+          : msg || "Update failed.",
+      );
+    } finally {
+      setEditSubmitting(false);
+    }
+  }
+
   const handleDockerClick = React.useCallback(async (projectId: string, action: "start" | "stop") => {
     setDockerBusyId(projectId);
     setSubmitError(null);
@@ -647,6 +707,7 @@ export function ProjectsPageClient({
           dockerBusyId={dockerBusyId}
           onDockerClick={handleDockerClick}
           cardMoreMenu
+          onProjectEdit={handleProjectEdit}
           onProjectDelete={handleProjectDelete}
           onNewProjectClick={() => {
             setTab("create");
@@ -1091,6 +1152,98 @@ export function ProjectsPageClient({
                 </div>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={editingProject !== null} onOpenChange={(next) => { if (!next) setEditingProject(null); }}>
+          <DialogContent
+            className={cn(
+              "max-h-[min(90vh,560px)] w-[min(calc(100vw-1.5rem),32rem)] max-w-none overflow-y-auto rounded-2xl border-2 border-border bg-card p-0 shadow-2xl sm:w-[min(100%,32rem)]",
+            )}
+          >
+            <div className="flex flex-col gap-0 border-b border-border/70 px-4 pb-3 pt-4 sm:px-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <DialogTitle className="text-lg font-semibold tracking-tight text-foreground">
+                    {t("projects.editProject")}
+                  </DialogTitle>
+                  <DialogDescription className="mt-1 text-sm text-muted-foreground">
+                    {t("projects.editProjectDescription")}
+                  </DialogDescription>
+                </div>
+                <DialogClose asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 rounded-xl border-border/70 bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label={t("projects.close")}
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </DialogClose>
+              </div>
+            </div>
+
+            <form onSubmit={(e) => void handleEditSubmit(e)} className="flex flex-col gap-4 px-4 py-4 sm:px-5 sm:py-5">
+              {editError ? (
+                <p role="alert" className="text-sm text-destructive">{editError}</p>
+              ) : null}
+
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="edit-project-title"
+                  className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80"
+                >
+                  {t("projects.projectName")}
+                </label>
+                <Input
+                  id="edit-project-title"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  placeholder={t("projects.projectNamePlaceholder")}
+                  required
+                  autoComplete="off"
+                  disabled={editSubmitting}
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="edit-project-description"
+                  className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80"
+                >
+                  {t("projects.description")}
+                </label>
+                <textarea
+                  id="edit-project-description"
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder={t("projects.descriptionPlaceholder")}
+                  rows={4}
+                  disabled={editSubmitting}
+                  className={cn(
+                    "min-h-[96px] w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm shadow-black/5 transition-shadow placeholder:text-muted-foreground/70 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/20",
+                  )}
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border/70 pt-4">
+                <DialogClose asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full border-border/70"
+                    disabled={editSubmitting}
+                  >
+                    {t("common.cancel")}
+                  </Button>
+                </DialogClose>
+                <Button type="submit" className="rounded-full" disabled={editSubmitting || !editTitle.trim()}>
+                  {editSubmitting ? t("common.saving") : t("common.save")}
+                </Button>
+              </div>
+            </form>
           </DialogContent>
         </Dialog>
       </div>

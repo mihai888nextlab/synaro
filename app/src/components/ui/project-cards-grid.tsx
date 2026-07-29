@@ -1,6 +1,6 @@
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Brain, MoreVertical, Sparkles, Trash2, Zap } from "lucide-react";
+import { Brain, MoreVertical, PenSquare, Sparkles, Trash2, Zap } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -237,6 +237,7 @@ export function SynaroProjectCard({
   dockerBusyId = null,
   onDockerClick,
   cardMoreMenu = false,
+  onEditProject,
   onDeleteProject,
   variant = "default",
 }: {
@@ -248,6 +249,7 @@ export function SynaroProjectCard({
   onDockerClick?: (projectId: string, action: "start" | "stop") => void;
   /** Kebab menu (delete for owners) — used on `/projects`. */
   cardMoreMenu?: boolean;
+  onEditProject?: (project: SynaroProjectCardModel) => void;
   onDeleteProject?: (projectId: string) => void | Promise<void>;
   /** `embedded` = lighter surface for dashboard / nested layouts (no “card on card”). */
   variant?: "default" | "embedded";
@@ -256,7 +258,7 @@ export function SynaroProjectCard({
   const href = `/projects/${encodeURIComponent(project.slug)}`;
   const Icon = SYNARO_PROJECT_CARD_ICONS[project.icon] ?? Brain;
   const busy = dockerBusyId === project.id;
-  const showDeleteMenu = Boolean(cardMoreMenu && project.viewerCanDelete && onDeleteProject);
+  const showCardMenu = cardMoreMenu;
 
   return (
     <div
@@ -293,7 +295,7 @@ export function SynaroProjectCard({
               }
             />
           </div>
-          {showDeleteMenu ? (
+          {showCardMenu ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -307,25 +309,41 @@ export function SynaroProjectCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48 rounded-xl border-border/70 p-1" sideOffset={6}>
-                <DropdownMenuItem
-                  className="cursor-pointer rounded-lg text-destructive focus:bg-destructive/10 focus:text-destructive"
-                  onSelect={(e) => {
-                    e.preventDefault();
-                    if (
-                      !window.confirm(
-                        t("projects.deleteConfirm", { title: project.title }),
-                      )
-                    ) {
-                      return;
-                    }
-                    void onDeleteProject?.(project.id);
-                  }}
-                >
-                  <span className="flex items-center gap-2">
-                    <Trash2 className="size-4 shrink-0" aria-hidden />
-                    {t("projects.deleteProject")}
-                  </span>
-                </DropdownMenuItem>
+                {onEditProject ? (
+                  <DropdownMenuItem
+                    className="cursor-pointer rounded-lg focus:bg-muted"
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      onEditProject(project);
+                    }}
+                  >
+                    <span className="flex items-center gap-2">
+                      <PenSquare className="size-4 shrink-0" aria-hidden />
+                      {t("projects.editProject")}
+                    </span>
+                  </DropdownMenuItem>
+                ) : null}
+                {project.viewerCanDelete && onDeleteProject ? (
+                  <DropdownMenuItem
+                    className="cursor-pointer rounded-lg text-destructive focus:bg-destructive/10 focus:text-destructive"
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      if (
+                        !window.confirm(
+                          t("projects.deleteConfirm", { title: project.title }),
+                        )
+                      ) {
+                        return;
+                      }
+                      void onDeleteProject?.(project.id);
+                    }}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Trash2 className="size-4 shrink-0" aria-hidden />
+                      {t("projects.deleteProject")}
+                    </span>
+                  </DropdownMenuItem>
+                ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
@@ -434,6 +452,7 @@ export function SynaroProjectsCardsGrid({
   dockerBusyId = null,
   onDockerClick,
   cardMoreMenu = false,
+  onProjectEdit,
   onProjectDelete,
   cardVariant = "default",
   className,
@@ -447,6 +466,7 @@ export function SynaroProjectsCardsGrid({
   dockerBusyId?: string | null;
   onDockerClick?: (projectId: string, action: "start" | "stop") => void;
   cardMoreMenu?: boolean;
+  onProjectEdit?: (project: SynaroProjectCardModel) => void;
   onProjectDelete?: (projectId: string) => void | Promise<void>;
   /** Lighter project tiles for dashboard-style panels. */
   cardVariant?: "default" | "embedded";
@@ -489,6 +509,7 @@ export function SynaroProjectsCardsGrid({
               dockerBusyId={dockerBusyId}
               onDockerClick={onDockerClick}
               cardMoreMenu={cardMoreMenu}
+              onEditProject={onProjectEdit}
               onDeleteProject={onProjectDelete}
             />
           </motion.div>

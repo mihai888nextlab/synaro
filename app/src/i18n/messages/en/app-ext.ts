@@ -164,6 +164,8 @@ export const enAppExt: Messages = {
     moreOptionsFor: "More options for {title}",
     openProject: "Open project: {title}",
     invalidGithubUrl: "Enter a valid GitHub repository URL (https://github.com/owner/repo).",
+    editProject: "Edit project",
+    editProjectDescription: "Update the project title and description.",
     runtimeAutomatic: "Automatic (recommended)",
     runtimeNode22: "Node.js 22 (Debian slim)",
     runtimePython312: "Python 3.12 (slim)",

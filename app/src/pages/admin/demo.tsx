@@ -37,6 +37,7 @@ export default function DemoAdminPage() {
   const [sources, setSources] = React.useState<SourceProject[]>([]);
   const [sourceId, setSourceId] = React.useState("");
   const [newName, setNewName] = React.useState("");
+  const [newPassword, setNewPassword] = React.useState("");
   const [busy, setBusy] = React.useState<string | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
   const [creds, setCreds] = React.useState<{ email: string; password: string }[]>([]);
@@ -80,12 +81,13 @@ export default function DemoAdminPage() {
       const res = await fetch("/api/admin/demo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName || undefined }),
+        body: JSON.stringify({ name: newName || undefined, password: newPassword || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Create failed");
       setCreds((c) => [{ email: data.user.email, password: data.password }, ...c]);
       setNewName("");
+      setNewPassword("");
       await loadAccounts();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
@@ -210,13 +212,22 @@ export default function DemoAdminPage() {
         {/* Create account */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
           <h2 className="text-sm font-medium">Create demo account</h2>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Display name (e.g. Jury 1)"
-              className="h-9 w-56 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm outline-none focus:border-zinc-500"
-            />
+          <div className="mt-3 flex flex-wrap items-start gap-3">
+            <div className="flex flex-col gap-2">
+              <input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Display name (e.g. Jury 1)"
+                className="h-9 w-56 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm outline-none focus:border-zinc-500"
+              />
+              <input
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Custom password (optional)"
+                type="text"
+                className="h-9 w-56 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm outline-none focus:border-zinc-500"
+              />
+            </div>
             <button
               onClick={() => void createAccount()}
               disabled={busy === "create"}
@@ -224,7 +235,7 @@ export default function DemoAdminPage() {
             >
               {busy === "create" ? "Creating…" : "Create"}
             </button>
-            <span className="text-xs text-zinc-500">Email + password auto-generated.</span>
+            <span className="text-xs text-zinc-500">Email auto-generated. Password auto-generated if left blank (min 6 chars for custom).</span>
           </div>
         </div>
 

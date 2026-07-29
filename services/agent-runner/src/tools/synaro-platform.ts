@@ -95,7 +95,7 @@ export const synaroPlatformTools: AgentTool[] = [
             SELECT 1 FROM "ProjectMember" m
             WHERE m."projectId" = p.id AND m."userId" = ${ctx.userId}
           )
-        ORDER BY p."lastActivityAt" DESC NULLS LAST, p."createdAt" DESC
+        ORDER BY p."createdAt" DESC
         LIMIT 50
       `
       if (rows.length === 0) return 'You have no projects.'

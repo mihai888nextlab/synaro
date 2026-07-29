@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, ChevronDown, Plus, X } from "lucide-react";
+import { CalendarClock, Plus, X } from "lucide-react";
 
 import { useTranslation } from "@/components/ui/locale-provider";
 import {
   cronStringToScheduleUi,
+  DEFAULT_HOURLY_TIME,
   DEFAULT_SCHEDULE_TIME,
   formatNextScheduledRun,
+  formatScheduleMinute,
   formatScheduleTime,
   scheduleUiToCronString,
   type ScheduleFrequency,
@@ -40,7 +42,9 @@ const DAY_LABEL_KEY: Record<number, (typeof WEEK_DAY_KEYS)[number]> = {
   0: "agents.scheduleDaySun",
 };
 
-const FREQUENCIES: ScheduleFrequency[] = ["daily", "weekly", "monthly"];
+const FREQUENCIES: ScheduleFrequency[] = ["hourly", "daily", "weekly", "monthly"];
+
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => i);
 
 function timeToInputValue(time: ScheduleTime): string {
   return `${String(time.hour).padStart(2, "0")}:${String(time.minute).padStart(2, "0")}`;
@@ -52,6 +56,15 @@ function inputValueToTime(value: string): ScheduleTime {
     hour: Number.parseInt(h ?? "9", 10) || 0,
     minute: Number.parseInt(m ?? "0", 10) || 0,
   };
+}
+
+function timesForFrequency(frequency: ScheduleFrequency, current: ScheduleTime[]): ScheduleTime[] {
+  if (frequency === "hourly") {
+    if (current.length === 0) return [DEFAULT_HOURLY_TIME];
+    return current.map((t) => ({ hour: 0, minute: t.minute }));
+  }
+  if (current.length === 0) return [DEFAULT_SCHEDULE_TIME];
+  return current;
 }
 
 type AgentSchedulePickerProps = {
@@ -108,7 +121,13 @@ export function AgentSchedulePicker({
   };
 
   const setFrequency = (frequency: ScheduleFrequency) => {
-    applyUi({ ...ui, enabled: true, frequency, useCustomCron: false });
+    applyUi({
+      ...ui,
+      enabled: true,
+      frequency,
+      times: timesForFrequency(frequency, ui.times),
+      useCustomCron: false,
+    });
   };
 
   const toggleWeekDay = (day: number) => {
@@ -131,11 +150,17 @@ export function AgentSchedulePicker({
     applyUi({ ...ui, enabled: true, times, useCustomCron: false });
   };
 
+  const updateMinute = (index: number, minute: number) => {
+    const times = [...ui.times];
+    times[index] = { hour: 0, minute };
+    applyUi({ ...ui, enabled: true, times, useCustomCron: false });
+  };
+
   const addTime = () => {
     applyUi({
       ...ui,
       enabled: true,
-      times: [...ui.times, { hour: 17, minute: 0 }],
+      times: [...ui.times, ui.frequency === "hourly" ? { hour: 0, minute: 30 } : { hour: 17, minute: 0 }],
       useCustomCron: false,
     });
   };
@@ -245,25 +270,48 @@ export function AgentSchedulePicker({
               ) : null}
 
               <div className="flex flex-col gap-2">
-                <span className="text-xs font-medium text-muted-foreground">{t("agents.scheduleAtTimes")}</span>
+                <span className="text-xs font-medium text-muted-foreground">
+                  {t(ui.frequency === "hourly" ? "agents.scheduleAtMinutes" : "agents.scheduleAtTimes")}
+                </span>
                 <div className="flex flex-col gap-2">
                   {ui.times.map((time, index) => (
                     <div key={`${index}-${time.hour}-${time.minute}`} className="flex items-center gap-2">
-                      <input
-                        type="time"
-                        value={timeToInputValue(time)}
-                        onChange={(e) => updateTime(index, e.target.value)}
-                        className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-                      />
-                      <span className="text-xs text-muted-foreground">
-                        {formatScheduleTime(time, locale)}
-                      </span>
+                      {ui.frequency === "hourly" ? (
+                        <>
+                          <select
+                            value={time.minute}
+                            onChange={(e) => updateMinute(index, Number.parseInt(e.target.value, 10) || 0)}
+                            className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          >
+                            {MINUTE_OPTIONS.map((minute) => (
+                              <option key={minute} value={minute}>
+                                {formatScheduleMinute(minute)}
+                              </option>
+                            ))}
+                          </select>
+                          <span className="text-xs text-muted-foreground">{formatScheduleMinute(time.minute)}</span>
+                        </>
+                      ) : (
+                        <>
+                          <input
+                            type="time"
+                            value={timeToInputValue(time)}
+                            onChange={(e) => updateTime(index, e.target.value)}
+                            className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          />
+                          <span className="text-xs text-muted-foreground">
+                            {formatScheduleTime(time, locale)}
+                          </span>
+                        </>
+                      )}
                       {ui.times.length > 1 ? (
                         <button
                           type="button"
                           onClick={() => removeTime(index)}
                           className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                          aria-label={t("agents.scheduleRemoveTime")}
+                          aria-label={t(
+                            ui.frequency === "hourly" ? "agents.scheduleRemoveMinute" : "agents.scheduleRemoveTime",
+                          )}
                         >
                           <X className="size-3.5" />
                         </button>
@@ -277,7 +325,7 @@ export function AgentSchedulePicker({
                   className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-dashed border-border/70 px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-border hover:bg-muted/40 hover:text-foreground"
                 >
                   <Plus className="size-3.5" />
-                  {t("agents.scheduleAddTime")}
+                  {t(ui.frequency === "hourly" ? "agents.scheduleAddMinute" : "agents.scheduleAddTime")}
                 </button>
               </div>
             </>
@@ -342,6 +390,9 @@ export function AgentScheduleSummary({
   let label = "";
   if (summary.useCustomCron) {
     label = summary.customCron.trim() || schedule!.trim();
+  } else if (summary.frequency === "hourly") {
+    const minutes = summary.times.map((time) => formatScheduleMinute(time.minute)).join(", ");
+    label = t("agents.scheduleSummaryHourly", { minutes });
   } else if (summary.frequency === "daily") {
     label = t("agents.scheduleSummaryDaily", { times: timesLabel });
   } else if (summary.frequency === "weekly") {

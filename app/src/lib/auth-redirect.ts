@@ -4,6 +4,17 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/next-auth-options";
 import { isUserEmailVerified } from "@/lib/auth/verification";
 
+/** Allow only same-origin relative paths (blocks open redirects). */
+export function getSafeCallbackUrl(raw: unknown, fallback = "/dashboard"): string {
+  const value = typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : undefined;
+  if (!value || typeof value !== "string") return fallback;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//") || trimmed.includes("\\")) {
+    return fallback;
+  }
+  return trimmed;
+}
+
 export async function requireAuth<P extends Record<string, unknown> = Record<string, never>>(
   ctx: GetServerSidePropsContext,
   props?: P,

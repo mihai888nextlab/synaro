@@ -80,6 +80,34 @@ describe("agent-schedule", () => {
     expect(ui.customCron).toBe("*/15 * * * *");
   });
 
+  it("converts and round-trips hourly schedule", () => {
+    const cron = scheduleUiToCronString({
+      enabled: true,
+      frequency: "hourly",
+      times: [
+        { hour: 0, minute: 0 },
+        { hour: 0, minute: 30 },
+      ],
+      weekDays: [1],
+      monthDays: [1],
+      useCustomCron: false,
+      customCron: "",
+    });
+    expect(cron).toBe("0,30 * * * *");
+    const ui = cronStringToScheduleUi(cron);
+    expect(ui.enabled).toBe(true);
+    expect(ui.frequency).toBe("hourly");
+    expect(ui.useCustomCron).toBe(false);
+    expect(ui.times.map((t) => t.minute)).toEqual([0, 30]);
+  });
+
+  it("parses single-minute hourly cron", () => {
+    const ui = cronStringToScheduleUi("0 * * * *");
+    expect(ui.frequency).toBe("hourly");
+    expect(ui.useCustomCron).toBe(false);
+    expect(ui.times).toEqual([{ hour: 0, minute: 0 }]);
+  });
+
   it("computes next daily run in the future", () => {
     const now = new Date("2026-07-15T08:00:00Z");
     const next = getNextScheduledRun("0 9 * * *", now, "Europe/Bucharest");
@@ -92,5 +120,17 @@ describe("agent-schedule", () => {
       hour12: false,
     });
     expect(label).toContain("9:00");
+  });
+
+  it("computes next hourly run in the future", () => {
+    const now = new Date("2026-07-15T08:10:00Z");
+    const next = getNextScheduledRun("0 * * * *", now, "Europe/Bucharest");
+    expect(next).not.toBeNull();
+    expect(next!.getTime()).toBeGreaterThan(now.getTime());
+    const parts = new Intl.DateTimeFormat("en", {
+      timeZone: "Europe/Bucharest",
+      minute: "numeric",
+    }).formatToParts(next!);
+    expect(parts.find((p) => p.type === "minute")?.value).toBe("0");
   });
 });

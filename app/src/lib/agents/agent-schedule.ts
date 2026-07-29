@@ -1,6 +1,7 @@
 /**
  * Friendly schedule UI ↔ cron conversion for agent scheduling.
  * Multiple times per day use pipe-separated cron expressions (e.g. `0 9 * * *|30 17 * * *`).
+ * Hourly uses minute-of-hour (e.g. `0 * * * *` or `0,30 * * * *`).
  * Cron times are interpreted in the agent-runner timezone (see agent-cron-timezone.ts).
  */
 
@@ -10,7 +11,7 @@ import {
   zonedTimeToUtc,
 } from "@/lib/agents/agent-cron-timezone";
 
-export type ScheduleFrequency = "daily" | "weekly" | "monthly";
+export type ScheduleFrequency = "hourly" | "daily" | "weekly" | "monthly";
 
 export type ScheduleTime = {
   hour: number;
@@ -32,6 +33,9 @@ export type ScheduleUiState = {
 export const SCHEDULE_CRON_SEPARATOR = "|";
 
 export const DEFAULT_SCHEDULE_TIME: ScheduleTime = { hour: 9, minute: 0 };
+
+/** Default minute-of-hour for hourly schedules (stored in `times[].minute`). */
+export const DEFAULT_HOURLY_TIME: ScheduleTime = { hour: 0, minute: 0 };
 
 export const DEFAULT_SCHEDULE_UI: ScheduleUiState = {
   enabled: false,
@@ -72,6 +76,10 @@ function uniqueTimes(times: ScheduleTime[]): ScheduleTime[] {
   return out;
 }
 
+function uniqueMinutes(times: ScheduleTime[]): number[] {
+  return [...new Set(times.map((t) => normalizeTime(t).minute))].sort((a, b) => a - b);
+}
+
 export function splitScheduleCrons(schedule: string | null | undefined): string[] {
   if (!schedule?.trim()) return [];
   return schedule
@@ -93,7 +101,8 @@ function parseCronPart(part: string): number[] {
 
 type ParsedCron = {
   minute: number[];
-  hour: number[];
+  /** Concrete hours, or `"any"` for hourly (`*`). */
+  hour: number[] | "any";
   dayOfMonth: string;
   month: string;
   dayOfWeek: string;
@@ -106,15 +115,26 @@ function parseSingleCron(cron: string): ParsedCron | null {
   if (!minute || !hour || !dayOfMonth || !month || !dayOfWeek) return null;
 
   const minuteNums = parseCronPart(minute);
-  const hourNums = parseCronPart(hour);
-  if (minuteNums.length === 0 || hourNums.length === 0) return null;
+  if (minuteNums.length === 0) return null;
   if (minuteNums.some((m) => m < 0 || m > 59)) return null;
-  if (hourNums.some((h) => h < 0 || h > 23)) return null;
 
-  return { minute: minuteNums, hour: hourNums, dayOfMonth, month, dayOfWeek };
+  let hourField: number[] | "any";
+  if (hour === "*") {
+    hourField = "any";
+  } else {
+    const hourNums = parseCronPart(hour);
+    if (hourNums.length === 0) return null;
+    if (hourNums.some((h) => h < 0 || h > 23)) return null;
+    hourField = hourNums;
+  }
+
+  return { minute: minuteNums, hour: hourField, dayOfMonth, month, dayOfWeek };
 }
 
 function timesFromParsed(parsed: ParsedCron): ScheduleTime[] {
+  if (parsed.hour === "any") {
+    return uniqueTimes(parsed.minute.map((minute) => ({ hour: 0, minute })));
+  }
   const times: ScheduleTime[] = [];
   for (const minute of parsed.minute) {
     for (const hour of parsed.hour) {
@@ -124,16 +144,40 @@ function timesFromParsed(parsed: ParsedCron): ScheduleTime[] {
   return uniqueTimes(times);
 }
 
+function isHourly(parsed: ParsedCron): boolean {
+  return (
+    parsed.hour === "any" &&
+    parsed.dayOfMonth === "*" &&
+    parsed.month === "*" &&
+    parsed.dayOfWeek === "*"
+  );
+}
+
 function isDaily(parsed: ParsedCron): boolean {
-  return parsed.dayOfMonth === "*" && parsed.month === "*" && parsed.dayOfWeek === "*";
+  return (
+    parsed.hour !== "any" &&
+    parsed.dayOfMonth === "*" &&
+    parsed.month === "*" &&
+    parsed.dayOfWeek === "*"
+  );
 }
 
 function isWeekly(parsed: ParsedCron): boolean {
-  return parsed.dayOfMonth === "*" && parsed.month === "*" && parsed.dayOfWeek !== "*";
+  return (
+    parsed.hour !== "any" &&
+    parsed.dayOfMonth === "*" &&
+    parsed.month === "*" &&
+    parsed.dayOfWeek !== "*"
+  );
 }
 
 function isMonthly(parsed: ParsedCron): boolean {
-  return parsed.dayOfMonth !== "*" && parsed.month === "*" && parsed.dayOfWeek === "*";
+  return (
+    parsed.hour !== "any" &&
+    parsed.dayOfMonth !== "*" &&
+    parsed.month === "*" &&
+    parsed.dayOfWeek === "*"
+  );
 }
 
 /** Convert UI state to one or more cron expressions. */
@@ -144,7 +188,18 @@ export function scheduleUiToCrons(state: ScheduleUiState): string[] {
     return splitScheduleCrons(state.customCron);
   }
 
-  const times = uniqueTimes(state.times.length > 0 ? state.times : [DEFAULT_SCHEDULE_TIME]);
+  const times = uniqueTimes(
+    state.times.length > 0
+      ? state.times
+      : [state.frequency === "hourly" ? DEFAULT_HOURLY_TIME : DEFAULT_SCHEDULE_TIME],
+  );
+
+  if (state.frequency === "hourly") {
+    const minutes = uniqueMinutes(times);
+    if (minutes.length === 0) return ["0 * * * *"];
+    return [`${minutes.join(",")} * * * *`];
+  }
+
   const byMinute = new Map<number, number[]>();
 
   for (const time of times) {
@@ -197,11 +252,12 @@ export function cronStringToScheduleUi(schedule: string | null | undefined): Sch
   }
 
   const parsed = parsedList as ParsedCron[];
+  const allHourly = parsed.every(isHourly);
   const allDaily = parsed.every(isDaily);
   const allWeekly = parsed.every(isWeekly);
   const allMonthly = parsed.every(isMonthly);
 
-  if (!allDaily && !allWeekly && !allMonthly) {
+  if (!allHourly && !allDaily && !allWeekly && !allMonthly) {
     return {
       ...DEFAULT_SCHEDULE_UI,
       enabled: true,
@@ -210,7 +266,13 @@ export function cronStringToScheduleUi(schedule: string | null | undefined): Sch
     };
   }
 
-  const frequency: ScheduleFrequency = allDaily ? "daily" : allWeekly ? "weekly" : "monthly";
+  const frequency: ScheduleFrequency = allHourly
+    ? "hourly"
+    : allDaily
+      ? "daily"
+      : allWeekly
+        ? "weekly"
+        : "monthly";
   const times = uniqueTimes(parsed.flatMap((p) => timesFromParsed(p)));
 
   let weekDays = [1];
@@ -226,7 +288,7 @@ export function cronStringToScheduleUi(schedule: string | null | undefined): Sch
   return {
     enabled: true,
     frequency,
-    times: times.length > 0 ? times : [DEFAULT_SCHEDULE_TIME],
+    times: times.length > 0 ? times : [frequency === "hourly" ? DEFAULT_HOURLY_TIME : DEFAULT_SCHEDULE_TIME],
     weekDays,
     monthDays,
     useCustomCron: false,
@@ -240,7 +302,12 @@ export function formatScheduleTime(time: ScheduleTime, locale?: string): string 
   return date.toLocaleTimeString(locale ?? undefined, { hour: "numeric", minute: "2-digit" });
 }
 
+export function formatScheduleMinute(minute: number): string {
+  return `:${String(clamp(Math.floor(minute), 0, 59)).padStart(2, "0")}`;
+}
+
 export type ScheduleSummary =
+  | { kind: "hourly"; minutes: number[] }
   | { kind: "daily"; times: ScheduleTime[] }
   | { kind: "weekly"; times: ScheduleTime[]; weekDays: number[] }
   | { kind: "monthly"; times: ScheduleTime[]; monthDays: number[] }
@@ -251,6 +318,7 @@ export function getScheduleSummary(schedule: string | null | undefined): Schedul
   const ui = cronStringToScheduleUi(schedule);
   if (!ui.enabled) return null;
   if (ui.useCustomCron) return { kind: "custom", cron: ui.customCron.trim() || schedule.trim() };
+  if (ui.frequency === "hourly") return { kind: "hourly", minutes: uniqueMinutes(ui.times) };
   if (ui.frequency === "daily") return { kind: "daily", times: ui.times };
   if (ui.frequency === "weekly") return { kind: "weekly", times: ui.times, weekDays: ui.weekDays };
   return { kind: "monthly", times: ui.times, monthDays: ui.monthDays };
@@ -265,6 +333,17 @@ function nextDailyRun(time: ScheduleTime, now: Date, timeZone: string): Date {
     candidate = zonedTimeToUtc(tParts.year, tParts.month, tParts.day, time.hour, time.minute, timeZone);
   }
   return candidate;
+}
+
+function nextHourlyRun(minute: number, now: Date, timeZone: string): Date {
+  const m = clamp(Math.floor(minute), 0, 59);
+  for (let offsetHours = 0; offsetHours < 48; offsetHours += 1) {
+    const probe = new Date(now.getTime() + offsetHours * 3_600_000);
+    const parts = getZonedParts(probe, timeZone);
+    const candidate = zonedTimeToUtc(parts.year, parts.month, parts.day, parts.hour, m, timeZone);
+    if (candidate.getTime() > now.getTime()) return candidate;
+  }
+  return nextDailyRun({ hour: 0, minute: m }, now, timeZone);
 }
 
 function nextWeeklyRun(time: ScheduleTime, weekDays: number[], now: Date, timeZone: string): Date {
@@ -327,7 +406,9 @@ function nextRunForSingleCron(cron: string, now: Date, timeZone: string): Date |
   const candidates: Date[] = [];
 
   for (const time of times) {
-    if (isDaily(parsed)) {
+    if (isHourly(parsed)) {
+      candidates.push(nextHourlyRun(time.minute, now, timeZone));
+    } else if (isDaily(parsed)) {
       candidates.push(nextDailyRun(time, now, timeZone));
     } else if (isWeekly(parsed)) {
       const days = parseCronPart(parsed.dayOfWeek);
@@ -384,7 +465,9 @@ export function validateScheduleUi(state: ScheduleUiState): string | null {
     if (crons.length === 0) return "scheduleCustomRequired";
     return null;
   }
-  if (state.times.length === 0) return "scheduleTimeRequired";
+  if (state.times.length === 0) {
+    return state.frequency === "hourly" ? "scheduleMinuteRequired" : "scheduleTimeRequired";
+  }
   if (state.frequency === "weekly" && state.weekDays.length === 0) return "scheduleWeekDayRequired";
   if (state.frequency === "monthly" && state.monthDays.length === 0) return "scheduleMonthDayRequired";
   return null;

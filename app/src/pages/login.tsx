@@ -9,7 +9,7 @@ import { SignInPage } from "@/components/ui/sign-in";
 import { useTranslation } from "@/components/ui/locale-provider";
 import { oauthErrorMessage } from "@/lib/auth-oauth-errors";
 import { setLastLoginMethod } from "@/lib/last-login-storage";
-import { redirectIfAuthed } from "@/lib/auth-redirect";
+import { getSafeCallbackUrl, redirectIfAuthed } from "@/lib/auth-redirect";
 import { loginPageSeo, type PageSeoProps } from "@/lib/seo/page-seo";
 
 export default function LoginPage() {
@@ -20,11 +20,13 @@ export default function LoginPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const callbackUrl = getSafeCallbackUrl(router.query.callbackUrl);
+
   useEffect(() => {
     if (session) {
-      router.push("/dashboard");
+      void router.push(callbackUrl);
     }
-  }, [session, router]);
+  }, [session, router, callbackUrl]);
 
   useEffect(() => {
     const rawError = router.query.error;
@@ -33,7 +35,11 @@ export default function LoginPage() {
     if (code) {
       setError(oauthErrorMessage(code, t));
       setSuccess(null);
-      void router.replace("/login", undefined, { shallow: true });
+      void router.replace(
+        { pathname: "/login", query: callbackUrl !== "/dashboard" ? { callbackUrl } : {} },
+        undefined,
+        { shallow: true },
+      );
       return;
     }
 
@@ -43,9 +49,13 @@ export default function LoginPage() {
     if (verified === "1") {
       setSuccess(t("auth.emailVerifiedBody"));
       setError(null);
-      void router.replace("/login", undefined, { shallow: true });
+      void router.replace(
+        { pathname: "/login", query: callbackUrl !== "/dashboard" ? { callbackUrl } : {} },
+        undefined,
+        { shallow: true },
+      );
     }
-  }, [router, t]);
+  }, [router, t, callbackUrl]);
 
   const handleSignIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -68,7 +78,7 @@ export default function LoginPage() {
         setError(oauthErrorMessage(result.error, t));
       } else if (result?.ok) {
         setLastLoginMethod("email");
-        router.push("/dashboard");
+        void router.push(callbackUrl);
       }
     } catch {
       setError(t("auth.unexpectedError"));
@@ -76,6 +86,11 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  const signupHref =
+    callbackUrl !== "/dashboard"
+      ? `/signup?callbackUrl=${encodeURIComponent(callbackUrl)}`
+      : "/signup";
 
   return (
     <main id="main-content" className="relative min-h-screen overflow-hidden bg-black text-white">
@@ -99,8 +114,9 @@ export default function LoginPage() {
           submitLabel={t("auth.signIn")}
           footerPrompt={t("auth.newToSynaro")}
           footerActionLabel={t("auth.createAccount")}
-          footerActionHref="/signup"
+          footerActionHref={signupHref}
           resetPasswordHref="/forgot-password"
+          oauthCallbackUrl={callbackUrl}
           error={error}
           success={success}
           isSubmitting={loading}
@@ -112,5 +128,7 @@ export default function LoginPage() {
   );
 }
 
-export const getServerSideProps: GetServerSideProps<{ seo: PageSeoProps }> = async (ctx) =>
-  redirectIfAuthed(ctx, "/dashboard", { seo: loginPageSeo() });
+export const getServerSideProps: GetServerSideProps<{ seo: PageSeoProps }> = async (ctx) => {
+  const callbackUrl = getSafeCallbackUrl(ctx.query.callbackUrl);
+  return redirectIfAuthed(ctx, callbackUrl, { seo: loginPageSeo() });
+};

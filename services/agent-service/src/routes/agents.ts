@@ -326,6 +326,46 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     return reply.status(201).send(agent)
   })
 
+  // Copy one shared agent into another user's account (config only — no runs/memory/schedule).
+  app.post('/agents/:id/copy', async (req, reply) => {
+    if (!requireServiceKey(req, reply)) return
+    const { id } = req.params as { id: string }
+    const { toUserId } = (req.body ?? {}) as { toUserId?: string }
+    if (!toUserId?.trim()) {
+      return reply.status(400).send({ error: 'toUserId is required' })
+    }
+
+    const source = await prisma.agent.findUnique({ where: { id } })
+    if (!source) return reply.status(404).send({ error: 'Agent not found' })
+
+    if (source.userId === toUserId) {
+      return reply.send({ agent: source, alreadyOwned: true })
+    }
+
+    const parsedMcp = z.array(McpServerSchema).safeParse(source.mcpServers)
+    const mcpServers = parsedMcp.success ? sanitizeMcpServers(parsedMcp.data) : undefined
+
+    const agent = await prisma.agent.create({
+      data: {
+        userId: toUserId,
+        projectId: null,
+        name: source.name,
+        description: source.description,
+        systemPrompt: source.systemPrompt,
+        tools: source.tools,
+        toolMode: source.toolMode,
+        maxSteps: source.maxSteps,
+        schedule: null,
+        enabled: source.enabled,
+        emailOnComplete: false,
+        model: source.model,
+        ...(mcpServers ? { mcpServers } : {}),
+      },
+    })
+
+    return reply.status(201).send({ agent, alreadyOwned: false })
+  })
+
   // Clone a user's agents (+ memory + run history) to another user, for demo-account seeding.
   // Copies project-scoped agents for `fromProjectId` (remapped to `toProjectId`) plus global agents.
   app.post('/agents/clone', async (req, reply) => {

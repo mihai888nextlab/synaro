@@ -1,7 +1,10 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Bot } from "lucide-react";
+import { useRouter } from "next/router";
+import { useSession } from "next-auth/react";
+import { ArrowRight, Bot, Loader2 } from "lucide-react";
 
 import { PageBackgroundPattern } from "@/components/ui/page-background-pattern";
 import { SiteHeader } from "@/components/ui/site-header";
@@ -24,6 +27,74 @@ export function AgentSharePageClient({
   agentEnabled,
 }: AgentSharePageClientProps) {
   const { t } = useTranslation();
+  const router = useRouter();
+  const { status } = useSession();
+  const startedRef = useRef(false);
+  const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  const callbackPath = `/a/${encodeURIComponent(agentId)}`;
+  const loginHref = `/login?callbackUrl=${encodeURIComponent(callbackPath)}`;
+  const signupHref = `/signup?callbackUrl=${encodeURIComponent(callbackPath)}`;
+
+  const importAgent = useCallback(async () => {
+    setImporting(true);
+    setError(null);
+    try {
+      const storageKey = `synaro.agentImport.${agentId}`;
+      try {
+        const existingId = sessionStorage.getItem(storageKey);
+        if (existingId) {
+          await router.replace(`/agents?highlight=${encodeURIComponent(existingId)}`);
+          return;
+        }
+      } catch {
+        // sessionStorage may be unavailable
+      }
+
+      const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/import`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const raw = await res.text();
+      let data: { id?: string; error?: string; alreadyOwned?: boolean } = {};
+      if (raw) {
+        try {
+          data = JSON.parse(raw) as typeof data;
+        } catch {
+          setError(t("agentShare.importFailed"));
+          setImporting(false);
+          return;
+        }
+      }
+      if (!res.ok || !data.id) {
+        setError(data.error ?? t("agentShare.importFailed"));
+        setImporting(false);
+        return;
+      }
+      try {
+        sessionStorage.setItem(storageKey, data.id);
+      } catch {
+        // ignore
+      }
+      await router.replace(`/agents?highlight=${encodeURIComponent(data.id)}`);
+    } catch {
+      setError(t("agentShare.importFailed"));
+      setImporting(false);
+    }
+  }, [agentId, router, t]);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      void router.replace(loginHref);
+      return;
+    }
+    if (status !== "authenticated" || startedRef.current) return;
+    startedRef.current = true;
+    void importAgent();
+  }, [importAgent, loginHref, router, status]);
+
+  const busy = status === "loading" || status === "unauthenticated" || importing;
 
   return (
     <main className="relative min-h-dvh bg-black text-white">
@@ -70,21 +141,47 @@ export function AgentSharePageClient({
           ) : (
             <p className="mt-6 text-sm text-zinc-500">{t("agentShare.noTools")}</p>
           )}
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-            <Link
-              href={`/agents?highlight=${encodeURIComponent(agentId)}`}
-              className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
-            >
-              {t("agentShare.openAgent")}
-              <ArrowRight className="size-4" aria-hidden />
-            </Link>
-            <Link
-              href="/signup"
-              className="rounded-full border border-white/20 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-            >
-              {t("agentShare.createAccount")}
-            </Link>
-          </div>
+
+          {busy && !error ? (
+            <p className="mt-10 inline-flex items-center gap-2 text-sm text-zinc-300">
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+              {status === "unauthenticated"
+                ? t("agentShare.redirectingToSignIn")
+                : t("agentShare.addingToAgents")}
+            </p>
+          ) : null}
+
+          {error ? (
+            <div className="mt-10 flex flex-col items-center gap-3">
+              <p className="text-sm text-red-400">{error}</p>
+              <button
+                type="button"
+                onClick={() => void importAgent()}
+                className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
+              >
+                {t("agentShare.addToMyAgents")}
+                <ArrowRight className="size-4" aria-hidden />
+              </button>
+            </div>
+          ) : null}
+
+          {!busy && !error && status === "unauthenticated" ? (
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                href={loginHref}
+                className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
+              >
+                {t("agentShare.signInToAdd")}
+                <ArrowRight className="size-4" aria-hidden />
+              </Link>
+              <Link
+                href={signupHref}
+                className="rounded-full border border-white/20 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                {t("agentShare.createAccount")}
+              </Link>
+            </div>
+          ) : null}
         </section>
       </div>
     </main>

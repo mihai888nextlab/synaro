@@ -9,13 +9,18 @@ import { AuthEmailStatusPage } from "@/components/ui/auth/auth-email-status-page
 import { SignInPage } from "@/components/ui/sign-in";
 import { useTranslation } from "@/components/ui/locale-provider";
 
-export function SignupPageClient() {
+export function SignupPageClient({ callbackUrl = "/dashboard" }: { callbackUrl?: string }) {
   const { t } = useTranslation();
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [signedUpEmail, setSignedUpEmail] = useState<string | null>(null);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendError, setResendError] = useState<string | null>(null);
+
+  const loginHref =
+    callbackUrl !== "/dashboard"
+      ? `/login?callbackUrl=${encodeURIComponent(callbackUrl)}`
+      : "/login";
 
   const handleSignUp = async (event: FormEvent<HTMLFormElement>) => {
     setFormError(null);
@@ -114,7 +119,8 @@ export function SignupPageClient() {
           submitLabel={t("auth.createAccount")}
           footerPrompt={t("auth.alreadyHaveAccount")}
           footerActionLabel={t("auth.signIn")}
-          footerActionHref="/login"
+          footerActionHref={loginHref}
+          oauthCallbackUrl={callbackUrl}
           onSignIn={handleSignUp}
           onCreateAccount={() => {}}
           formError={formError}

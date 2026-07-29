@@ -88,6 +88,7 @@ export function AgentShareLink({
               {copied ? <Check className="size-4" /> : <Link2 className="size-4" />}
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">{t("agentShare.shareHint")}</p>
         </div>
       </DialogContent>
     </Dialog>

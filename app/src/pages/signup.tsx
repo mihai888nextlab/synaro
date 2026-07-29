@@ -1,12 +1,17 @@
 import type { GetServerSideProps } from "next";
+import { useRouter } from "next/router";
 
 import { SignupPageClient } from "@/components/ui/signup-page-client";
-import { redirectIfAuthed } from "@/lib/auth-redirect";
+import { getSafeCallbackUrl, redirectIfAuthed } from "@/lib/auth-redirect";
 import { signupPageSeo, type PageSeoProps } from "@/lib/seo/page-seo";
 
 export default function SignupPage() {
-  return <SignupPageClient />;
+  const router = useRouter();
+  const callbackUrl = getSafeCallbackUrl(router.query.callbackUrl);
+  return <SignupPageClient callbackUrl={callbackUrl} />;
 }
 
-export const getServerSideProps: GetServerSideProps<{ seo: PageSeoProps }> = async (ctx) =>
-  redirectIfAuthed(ctx, "/dashboard", { seo: signupPageSeo() });
+export const getServerSideProps: GetServerSideProps<{ seo: PageSeoProps }> = async (ctx) => {
+  const callbackUrl = getSafeCallbackUrl(ctx.query.callbackUrl);
+  return redirectIfAuthed(ctx, callbackUrl, { seo: signupPageSeo() });
+};

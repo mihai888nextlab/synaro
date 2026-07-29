@@ -65,7 +65,7 @@ export function makeAutoAgent(overrides: Partial<E2EAgentRecord> = {}): E2EAgent
     maxSteps: 20,
     schedule: null,
     enabled: true,
-    model: "kimi-k2.6",
+    model: "kimi-k2.7-code",
     mcpServers: null,
     createdAt: now(),
     ...overrides,

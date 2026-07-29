@@ -11,7 +11,7 @@ import {
 describe("user-workspace-settings", () => {
   it("parses defaults when user fields are null", () => {
     const settings = parseWorkspaceSettingsFromUser({});
-    expect(settings.defaultAgentModel).toBe("kimi-k2.6");
+    expect(settings.defaultAgentModel).toBe("kimi-k2.7-code");
     expect(settings.defaultAgentMaxSteps).toBe(20);
     expect(settings.defaultAgentToolMode).toBe("auto");
     expect(settings.idleStopMinutes).toBe(30);

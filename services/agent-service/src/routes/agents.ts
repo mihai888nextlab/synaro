@@ -29,7 +29,7 @@ const VALID_TOOLS = [
   'recall',
 ] as const
 
-const VALID_MODELS = ['kimi-k2.6', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'] as const
+const VALID_MODELS = ['kimi-k2.7-code', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'] as const
 
 /** Keep list/poll payloads small — full HTML observations freeze the dashboard. */
 const COMPACT_OBSERVATION_MAX = 4_000

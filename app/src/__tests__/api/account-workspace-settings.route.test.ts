@@ -49,7 +49,7 @@ describe("API /api/account/workspace-settings", () => {
     expect(res.statusCode).toBe(200);
     expect(res._getJSONData()).toMatchObject({
       idleStopMinutes: 30,
-      defaultAgentModel: "kimi-k2.6",
+      defaultAgentModel: "kimi-k2.7-code",
       defaultAgentMaxSteps: 20,
       defaultAgentToolMode: "auto",
     });

@@ -137,7 +137,7 @@ export const MODELS = {
   // Fast model for planning / ownership partitioning (cheap triage)
   PLAN: 'moonshot-v1-8k',
   // Capable model for code generation (workers, integrator, fix passes)
-  GENERATE: 'kimi-k2.6',
+  GENERATE: 'kimi-k2.7-code',
 } as const
 
 export const TOKEN_BUDGETS = {

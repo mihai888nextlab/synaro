@@ -24,7 +24,7 @@ const PREVIEW_AGENT: Agent = {
   schedule: null,
   enabled: true,
   emailOnComplete: false,
-  model: "kimi-k2.6",
+  model: "kimi-k2.7-code",
   createdAt: new Date().toISOString(),
 };
 
